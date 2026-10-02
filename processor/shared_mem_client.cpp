@@ -34,13 +34,14 @@ class RingBuffer {
             uint32_t head = this->ring->head.load(std::memory_order_relaxed);
             // Need to wait for acquiring tail lock from shared process, head doesn't matter
             uint32_t tail = this->ring->tail.load(std::memory_order_acquire);
-            if (head == tail || data.size() > SLOT_SIZE) return false;   // full: caller drops
+            uint32_t next = (head + 1) % RING_SIZE;
+            if (next == tail || data.size() > SLOT_SIZE) return false;   // full: caller drops
 
             Slot &slot = this->ring->buff[head];
             slot.size = data.size();
             memcpy(slot.bytes, data.data(), data.size());
 
-            this->ring->head.store(head + 1, std::memory_order_release);
+            this->ring->head.store(next, std::memory_order_release);
             
             #if defined(_WIN32) || defined(_WIN64)
             SetEvent(this->ev); 
