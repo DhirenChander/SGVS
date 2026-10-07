@@ -8,6 +8,7 @@
 #include "shared_mem_client.cpp"
 
 #include <cstdio>
+#include <atomic>
 
 static int failures = 0;
 
@@ -21,25 +22,29 @@ static int failures = 0;
 
 // Read (consume) one slot. Returns false when the ring is empty.
 bool read(Ring *r, std::vector<uint8_t> &out) {
-    uint32_t tail = r->tail.load(std::memory_order_relaxed);
-    // Acquire pairs with the producer's release store to head, so the slot
-    // contents written before the store are visible here.
-    uint32_t head = r->head.load(std::memory_order_acquire);
-    if (tail == head) return false;   // empty
+    const uint32_t head = r->head.load();
+    const uint32_t tail = r->tail.load();
 
-    Slot &slot = r->buff[tail];
+    if (head == tail) {
+        out.clear();
+        return false;
+    }
+
+    const Slot &slot = r->buff[tail];
+    if (slot.size > SLOT_SIZE) {
+        out.clear();
+        return false;
+    }
+
     out.assign(slot.bytes, slot.bytes + slot.size);
 
+    // Publish the new tail only after the payload is copied out.
     r->tail.store((tail + 1) % RING_SIZE, std::memory_order_release);
-
     return true;
 }
 
 int main() {
-    // Make the first ring's id deterministic so the test knows the mapping name.
-    nextId.store(0, std::memory_order_relaxed);
-
-    RingBuffer writer;
+    SharedMemoryRingWriter writer(0);
     CHECK(writer.open_ring());
 
     std::vector<uint8_t> payload {1, 2, 3, 4, 5};
