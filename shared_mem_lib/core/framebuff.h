@@ -10,7 +10,9 @@
 #define FRAMEBUFF_H
 
 typedef struct {
-    RingBuffer **rings;
+    uint8_t ring_count;
+    RingBuffer *rings;
+    // TODO: Add config type for more type-safe config handling
     RingBuffer config; // Used to hold data about active encodings
 } FrameBuffer;
 
