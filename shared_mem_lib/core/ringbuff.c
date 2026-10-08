@@ -3,9 +3,37 @@
 #include <stdatomic.h>
 #include <inttypes.h>
 #include <wchar.h>
-#include "ring.h"
+#include "ringbuff.h"
+
+bool pop(RingBuffer *rb, uint8_t* out, size_t size) {
+    if (rb == nullptr || out == nullptr || size == 0) {
+        return false;
+    }
+
+    uint32_t head = atomic_load(&rb->ring->head);
+    uint32_t tail = atomic_load(&rb->ring->tail);
+    uint32_t next = (tail + 1) % RING_SIZE;
+    if(head == tail) return false;
+
+    Slot *slot = &rb->ring->buff[tail];
+    uint8_t cpy_size = max(size, slot->size);
+
+    memcpy(out, slot->bytes, cpy_size);
+
+    atomic_store(&rb->ring->tail, next);
+
+    #if defined(_WIN32) || defined(_WIN64)
+    SetEvent(rb->ev); 
+    #endif
+
+    return true;
+}
 
 bool push(RingBuffer *rb, uint8_t* data, size_t size) {
+    if (rb == nullptr || data == nullptr || size == 0) {
+        return false;
+    }
+
     uint32_t head = atomic_load(&rb->ring->head);
     // Need to wait for acquiring tail lock from shared process, head doesn't matter
     uint32_t tail = atomic_load(&rb->ring->tail);

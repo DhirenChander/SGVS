@@ -4,7 +4,7 @@
 #include <cstdlib>
 #include <vector>
 
-#include "../core/ring.h"
+#include "../core/ringbuff.h"
 
 class SharedMemoryRingWriter {
 public:
