@@ -12,9 +12,9 @@ bool push(RingBuffer *rb, uint8_t* data, size_t size) {
     uint32_t next = (head + 1) % RING_SIZE;
     if (next == tail || size > SLOT_SIZE) return false;   // full: caller drops
 
-    Slot slot = rb->ring->buff[head];
-    slot.size = size;
-    memcpy(slot.bytes, data, size);
+    Slot *slot = &rb->ring->buff[head];
+    slot->size = size;
+    memcpy(slot->bytes, data, size);
 
     atomic_store(&rb->ring->head, next);
     
