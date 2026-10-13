@@ -9,17 +9,18 @@
 
 #define RINGBUFF_H
 
-typedef struct {
+typedef struct
+{
     Ring *ring;
-    uint32_t id;
-    #if defined(_WIN32) || defined(_WIN64)
+    uint64_t id;
+#if defined(_WIN32) || defined(_WIN64)
     HANDLE map;
     HANDLE ev;
-    #endif
+#endif
 } RingBuffer;
 
-bool push(RingBuffer *rb, uint8_t* data, size_t size);
+bool push(RingBuffer *rb, uint8_t *data, size_t size);
 bool open_ring(RingBuffer *rb);
-bool pop(RingBuffer *rb, uint8_t* out, size_t size);
+bool pop(RingBuffer *rb, uint8_t *out, size_t size);
 
 #endif

@@ -6,26 +6,43 @@
 #include <inttypes.h>
 #include <wchar.h>
 #include "ringbuff.h"
- 
+
 #define FRAMEBUFF_H
 
-typedef struct {
+#define ENC_SIZE 5
+#define MAX_ENCODINGS 10
+
+typedef struct
+{
+    uint16_t height;
+    uint16_t width;
+    uint8_t frame_rate;
+} Encoding;
+
+typedef struct
+{
+    Encoding encodings[MAX_ENCODINGS];
+} Config;
+
+typedef struct
+{
     uint8_t ring_count;
     RingBuffer *rings;
-    // TODO: Add config type for more type-safe config handling
-    RingBuffer config; // Used to hold data about active encodings
+    Config config; // Used to hold data about active encodings
+    HANDLE conf_ev, conf_map;
 } FrameBuffer;
 
-typedef struct {
-    uint8_t encoding;
+typedef struct
+{
+    Encoding encoding;
     uint8_t size;
     uint8_t *data;
 } Frame;
 
 bool push_frame(FrameBuffer *fb, Frame *f);
-bool pop_frame(FrameBuffer *fb, uint8_t encoding, uint8_t* out, size_t size);
-bool request_encoding(FrameBuffer *fb, uint8_t encoding);
-bool remove_encoding(FrameBuffer *fb, uint8_t encoding);
-bool read_encodings(FrameBuffer *fb, uint8_t* out, size_t size);
+bool pop_frame(FrameBuffer *fb, Encoding encoding, uint8_t *out, size_t size);
+bool request_encoding(FrameBuffer *fb, Encoding encoding);
+bool remove_encoding(FrameBuffer *fb, Encoding encoding);
+bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t len);
 
 #endif
