@@ -24,6 +24,12 @@ bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t size, uint32_t max_timeou
     // Block on the event
     if (head == tail)
     {
+        if (max_timeout == 0)
+        {
+            printf("Buffer was empty, could not complete immediate pop.\n");
+            return false;
+        }
+
         DWORD waitResult = WaitForSingleObject(rb->ev, (DWORD)max_timeout);
 
         switch (waitResult)
