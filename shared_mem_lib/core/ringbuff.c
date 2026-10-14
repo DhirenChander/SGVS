@@ -5,7 +5,12 @@
 #include <wchar.h>
 #include "ringbuff.h"
 
-bool pop(RingBuffer *rb, uint8_t *out, size_t size)
+bool try_pop(RingBuffer *rb, uint8_t *out, size_t size)
+{
+    return blocking_pop(rb, out, size, 0x0);
+}
+
+bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t size, uint32_t max_timeout)
 {
     if (rb == nullptr || out == nullptr || size == 0)
     {
@@ -15,8 +20,30 @@ bool pop(RingBuffer *rb, uint8_t *out, size_t size)
     uint32_t head = atomic_load(&rb->ring->head);
     uint32_t tail = atomic_load(&rb->ring->tail);
     uint32_t next = (tail + 1) % RING_SIZE;
+
+    // Block on the event
     if (head == tail)
-        return false;
+    {
+        DWORD waitResult = WaitForSingleObject(rb->ev, (DWORD)max_timeout);
+
+        switch (waitResult)
+        {
+        case WAIT_OBJECT_0:
+            break;
+
+        case WAIT_TIMEOUT:
+            printf("The wait operation timed out, buffer was not filled in the requested timeout.\n");
+            return false;
+
+        case WAIT_FAILED:
+            printf("WaitForSingleObject failed with error (%lu)\n", GetLastError());
+            return false;
+
+        default:
+            printf("Unexpected wait result: %lu\n", waitResult);
+            return false;
+        }
+    }
 
     Slot *slot = &rb->ring->buff[tail];
     uint8_t cpy_size = max(size, slot->size);
