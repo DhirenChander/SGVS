@@ -19,7 +19,7 @@ bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t size, uint32_t max_timeou
 
     uint32_t head = atomic_load(&rb->ring->head);
     uint32_t tail = atomic_load(&rb->ring->tail);
-    uint32_t next = (tail + 1) % RING_SIZE;
+    int32_t next = (tail + 1) % RING_SIZE;
 
     // Block on the event
     if (head == tail)
@@ -47,6 +47,16 @@ bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t size, uint32_t max_timeou
 
         default:
             printf("Unexpected wait result: %lu\n", waitResult);
+            return false;
+        }
+
+        uint32_t head = atomic_load(&rb->ring->head);
+        uint32_t tail = atomic_load(&rb->ring->tail);
+
+        // Shouldn't happen in an spsc scenario, but still need to check
+        if (head == tail)
+        {
+            printf("Buffer was empty after timeout.\n");
             return false;
         }
     }
@@ -132,4 +142,15 @@ bool open_ring(RingBuffer *rb)
     rb->ring = ring;
 
     return true;
+}
+
+void free_ringbuffer(RingBuffer *rb)
+{
+#if defined(_WIN32) || defined(_WIN64)
+    UnmapViewOfFile2(rb->map, rb->ring, 0x0);
+    CloseHandle(rb->map);
+    CloseHandle(rb->ev);
+#endif
+
+    free(rb);
 }

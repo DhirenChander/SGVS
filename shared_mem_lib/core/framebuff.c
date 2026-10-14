@@ -61,6 +61,23 @@ bool add_ring(FrameBuffer *fb, Encoding enc)
     return open_ring(&fb->rings[fb->ring_count - 1]);
 }
 
+bool remove_ring(FrameBuffer *fb, Encoding enc)
+{
+    int rb_ind = ringbuff_by_encoding(fb, enc);
+
+    if (rb_ind == -1)
+    {
+        return true;
+    }
+
+    free_ringbuffer(&fb->rings[rb_ind]);
+    memcpy(&fb->rings[rb_ind], &fb->rings[rb_ind + 1], (fb->ring_count - rb_ind - 1) * sizeof(RingBuffer));
+    fb->ring_count -= 1;
+    fb->rings = (RingBuffer *)realloc(fb->rings, fb->ring_count * sizeof(RingBuffer));
+
+    return true;
+}
+
 bool request_encoding(FrameBuffer *fb, Encoding enc)
 {
     if (config_has_encoding(&fb->config, enc))
@@ -78,7 +95,16 @@ bool request_encoding(FrameBuffer *fb, Encoding enc)
 #if defined(_WIN32) || defined(_WIN64)
             SetEvent(fb->conf_ev);
 #endif
-            add_ring(fb, enc);
+
+            if (!add_ring(fb, enc))
+            {
+                // Clean up if ring creation fails
+                fb->config.encodings[i] = nil;
+#if defined(_WIN32) || defined(_WIN64)
+                SetEvent(fb->conf_ev);
+#endif
+                return false;
+            }
 
             return true;
         }
@@ -114,6 +140,16 @@ bool remove_encoding(FrameBuffer *fb, Encoding enc)
 #if defined(_WIN32) || defined(_WIN64)
             SetEvent(fb->conf_ev);
 #endif
+            if (!remove_ring(fb, enc))
+            {
+                // Clean-up if ring removal fails
+                fb->config.encodings[i] = enc;
+#if defined(_WIN32) || defined(_WIN64)
+                SetEvent(fb->conf_ev);
+#endif
+                return false;
+            }
+
             return true;
         }
     }
@@ -121,7 +157,7 @@ bool remove_encoding(FrameBuffer *fb, Encoding enc)
     return true;
 }
 
-RingBuffer *ringbuff_by_encoding(FrameBuffer *fb, Encoding enc)
+int ringbuff_by_encoding(FrameBuffer *fb, Encoding enc)
 {
     uint64_t id = encoding_to_int(enc);
 
@@ -129,11 +165,11 @@ RingBuffer *ringbuff_by_encoding(FrameBuffer *fb, Encoding enc)
     {
         if (fb->rings[i].id == id)
         {
-            return &fb->rings[i];
+            return i;
         }
     }
 
-    return nullptr;
+    return -1;
 }
 
 bool try_pop_frame(FrameBuffer *fb, Encoding enc, Frame *out)
@@ -143,9 +179,9 @@ bool try_pop_frame(FrameBuffer *fb, Encoding enc, Frame *out)
 
 bool blocking_pop_frame(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max_timeout)
 {
-    RingBuffer *rb = ringbuff_by_encoding(fb, enc);
+    int rb_ind = ringbuff_by_encoding(fb, enc);
 
-    if (rb == nullptr)
+    if (rb_ind == -1)
     {
         printf("No ring buffer present for this encoding.");
         return false;
@@ -153,5 +189,5 @@ bool blocking_pop_frame(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max_
 
     out->encoding = enc;
 
-    return blocking_pop(rb, out->data, out->size, max_timeout);
+    return blocking_pop(&fb->rings[rb_ind], out->data, out->size, max_timeout);
 }
