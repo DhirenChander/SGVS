@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include "framebuff.h"
 #include "ring.h"
+#include "ringbuff.h"
 
 Encoding nil_encoding()
 {
@@ -43,6 +44,23 @@ bool config_has_encoding(Config *conf, Encoding enc)
     return false;
 }
 
+bool add_ring(FrameBuffer *fb, Encoding enc)
+{
+    uint64_t id = encoding_to_int(enc);
+
+    fb->ring_count += 1;
+    fb->rings = (RingBuffer *)realloc(fb->rings, fb->ring_count * sizeof(RingBuffer));
+
+    if (fb->rings == nullptr)
+    {
+        printf("Unable to allocate new ring for encoding: %lu", id);
+        return false;
+    }
+
+    fb->rings[fb->ring_count - 1].id = id;
+    return open_ring(&fb->rings[fb->ring_count - 1]);
+}
+
 bool request_encoding(FrameBuffer *fb, Encoding enc)
 {
     if (config_has_encoding(&fb->config, enc))
@@ -60,6 +78,7 @@ bool request_encoding(FrameBuffer *fb, Encoding enc)
 #if defined(_WIN32) || defined(_WIN64)
             SetEvent(fb->conf_ev);
 #endif
+            add_ring(fb, enc);
 
             return true;
         }
@@ -100,4 +119,39 @@ bool remove_encoding(FrameBuffer *fb, Encoding enc)
     }
 
     return true;
+}
+
+RingBuffer *ringbuff_by_encoding(FrameBuffer *fb, Encoding enc)
+{
+    uint64_t id = encoding_to_int(enc);
+
+    for (int i = 0; i < fb->ring_count; i++)
+    {
+        if (fb->rings[i].id == id)
+        {
+            return &fb->rings[i];
+        }
+    }
+
+    return nullptr;
+}
+
+bool try_pop_frame(FrameBuffer *fb, Encoding enc, Frame *out)
+{
+    return blocking_pop_frame(fb, enc, out, 0x0);
+}
+
+bool blocking_pop_frame(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max_timeout)
+{
+    RingBuffer *rb = ringbuff_by_encoding(fb, enc);
+
+    if (rb == nullptr)
+    {
+        printf("No ring buffer present for this encoding.");
+        return false;
+    }
+
+    out->encoding = enc;
+
+    return blocking_pop(rb, out->data, out->size, max_timeout);
 }

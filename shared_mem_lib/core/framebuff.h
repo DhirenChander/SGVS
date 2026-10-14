@@ -40,7 +40,8 @@ typedef struct
 } Frame;
 
 bool push_frame(FrameBuffer *fb, Frame *f);
-bool pop_frame(FrameBuffer *fb, Encoding encoding, uint8_t *out, size_t size);
+bool try_pop_frame(FrameBuffer *fb, Encoding encoding, Frame *out);
+bool blocking_pop_frame(FrameBuffer *fb, Encoding encoding, Frame *out, uint32_t max_timeout);
 bool request_encoding(FrameBuffer *fb, Encoding encoding);
 bool remove_encoding(FrameBuffer *fb, Encoding encoding);
 bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t len);
