@@ -16,6 +16,7 @@ typedef struct
 } Encoding;
 
 Encoding nil_encoding();
+Encoding new_encoding();
 bool enc_eq(Encoding a, Encoding b);
 
 #endif
