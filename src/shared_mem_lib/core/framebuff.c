@@ -100,6 +100,7 @@ bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t len)
     return true;
 }
 
+#if defined(_WIN32) || defined(_WIN64)
 bool poll_encodings(FrameBuffer *fb, Encoding *out, uint8_t len, DWORD *out_err, uint32_t max_timeout)
 {
     DWORD waitResult = WaitForSingleObject(fb->conf_ev, (DWORD)max_timeout);
@@ -134,6 +135,7 @@ bool poll_encodings(FrameBuffer *fb, Encoding *out, uint8_t len, DWORD *out_err,
 
     return read_encodings(fb, out, len);
 }
+#endif
 
 bool remove_encoding(FrameBuffer *fb, Encoding enc)
 {

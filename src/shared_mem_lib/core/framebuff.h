@@ -38,6 +38,8 @@ bool blocking_pop_frame(FrameBuffer *fb, Encoding encoding, Frame *out, uint32_t
 bool request_encoding(FrameBuffer *fb, Encoding encoding);
 bool remove_encoding(FrameBuffer *fb, Encoding encoding);
 bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t len);
+#if defined(_WIN32) || defined(_WIN64)
 bool poll_encodings(FrameBuffer *fb, Encoding *out, uint8_t len, DWORD *out_err, uint32_t max_timeout);
+#endif
 
 #endif
