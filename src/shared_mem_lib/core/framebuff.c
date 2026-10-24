@@ -3,34 +3,6 @@
 #include "ring.h"
 #include "ringbuff.h"
 
-Encoding nil_encoding()
-{
-    Encoding enc;
-    enc.frame_rate = 0;
-    enc.height = 0;
-    enc.width = 0;
-    return enc;
-}
-
-uint64_t encoding_to_int(Encoding enc)
-{
-    return (enc.frame_rate << 32) | (enc.width << 16) | enc.height;
-}
-
-Encoding int_to_encoding(uint64_t val)
-{
-    Encoding enc;
-    enc.frame_rate = (val >> 32) & ((0b1 << 8) - 1);
-    enc.width = (val >> 16) & ((0b1 << 16) - 1);
-    enc.height = val & ((0b1 << 16) - 1);
-    return enc;
-}
-
-bool enc_eq(Encoding a, Encoding b)
-{
-    return a.frame_rate == b.frame_rate && a.height == b.height && a.width == b.width;
-}
-
 bool config_has_encoding(Config *conf, Encoding enc)
 {
     for (int i = 0; i < MAX_ENCODINGS; i++)
@@ -46,18 +18,16 @@ bool config_has_encoding(Config *conf, Encoding enc)
 
 bool add_ring(FrameBuffer *fb, Encoding enc)
 {
-    uint64_t id = encoding_to_int(enc);
-
     fb->ring_count += 1;
     fb->rings = (RingBuffer *)realloc(fb->rings, fb->ring_count * sizeof(RingBuffer));
 
     if (fb->rings == nullptr)
     {
-        printf("Unable to allocate new ring for encoding: %lu", id);
+        printf("Unable to allocate new ring for encoding: %lu", enc.id);
         return false;
     }
 
-    fb->rings[fb->ring_count - 1].id = id;
+    fb->rings[fb->ring_count - 1].id = enc.id;
     return open_ring(&fb->rings[fb->ring_count - 1]);
 }
 
@@ -128,6 +98,41 @@ bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t len)
     }
 
     return true;
+}
+
+bool poll_encodings(FrameBuffer *fb, Encoding *out, uint8_t len, DWORD *out_err, uint32_t max_timeout)
+{
+    DWORD waitResult = WaitForSingleObject(fb->conf_ev, (DWORD)max_timeout);
+
+    switch (waitResult)
+    {
+    case WAIT_OBJECT_0:
+        break;
+
+    case WAIT_TIMEOUT:
+        printf("No updates within the timeout, returning.\n");
+        break;
+
+    case WAIT_FAILED:
+        printf("WaitForSingleObject failed with error (%lu)\n", GetLastError());
+        break;
+
+    default:
+        printf("Unexpected wait result: %lu\n", waitResult);
+        break;
+    }
+
+    if (out_err != nullptr)
+    {
+        *out_err = waitResult;
+    }
+
+    if (waitResult != WAIT_OBJECT_0)
+    {
+        return false;
+    }
+
+    return read_encodings(fb, out, len);
 }
 
 bool remove_encoding(FrameBuffer *fb, Encoding enc)

@@ -6,18 +6,11 @@
 #include <inttypes.h>
 #include <wchar.h>
 #include "ringbuff.h"
+#include "encoding.h"
 
 #define FRAMEBUFF_H
 
-#define ENC_SIZE 5
 #define MAX_ENCODINGS 10
-
-typedef struct
-{
-    uint16_t height;
-    uint16_t width;
-    uint8_t frame_rate;
-} Encoding;
 
 typedef struct
 {
@@ -45,5 +38,6 @@ bool blocking_pop_frame(FrameBuffer *fb, Encoding encoding, Frame *out, uint32_t
 bool request_encoding(FrameBuffer *fb, Encoding encoding);
 bool remove_encoding(FrameBuffer *fb, Encoding encoding);
 bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t len);
+bool poll_encodings(FrameBuffer *fb, Encoding *out, uint8_t len, uint32_t max_timeout);
 
 #endif
