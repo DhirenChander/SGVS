@@ -1,3 +1,19 @@
+# Wednesday, October 21th, 2026
+**Attendance: Austin, Carter, Leo, Dhiren, Aurko, Oliver**
+- Planning and splitting up front end UI tasks
+- Developing architecture for Networking module
+
+# Monday, October 19th, 2026 (Afternoon)
+**Attendance: Austin, Carter, Leo, Dhiren, Aurko, Oliver**
+- Making and assigning tickets corresponding to P0s
+  - Allocating members to different modules
+  - Beginning of development phase
+
+# Monday, October 19th, 2026 (Morning)
+**Attendance: Austin, Carter, Leo, Dhiren**
+- Check in with prof to discuss current plan and progress
+
+
 # Friday, October 9th, 2026
 **Attendance: Austin, Carter, Leo, Dhiren**
 - Final reviews and finishing touches to SRS and Project Planning Doc
