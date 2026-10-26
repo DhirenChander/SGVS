@@ -1,3 +1,9 @@
+# Monday, October 26th, 2026
+**Attendance: Austin, Carter, Leo, Dhiren, Oliver**
+- Stand up check in
+- Planning roadmap and deadlines for MVP demo
+
+
 # Wednesday, October 21th, 2026
 **Attendance: Austin, Carter, Leo, Dhiren, Aurko, Oliver**
 - Planning and splitting up front end UI tasks
