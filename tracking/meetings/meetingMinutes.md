@@ -1,3 +1,9 @@
+# Monday, November 2nd, 2026
+**Attendance: Austin, Carter, Leo, Dhiren, Aurko, Oliver**
+- Stand up and check in on current tasks
+- Sub-team meeting planning for further progress
+
+
 # Monday, October 26th, 2026
 **Attendance: Austin, Carter, Leo, Dhiren, Oliver**
 - Stand up check in
