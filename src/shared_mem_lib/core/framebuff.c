@@ -198,3 +198,14 @@ bool blocking_pop_frame(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max_
 
     return blocking_pop(&fb->rings[rb_ind], out->data, out->size, max_timeout);
 }
+
+bool push_frame(FrameBuffer *fb, Frame *f) {
+    int rb_ind = ringbuff_by_encoding(fb, f->encoding);
+
+    if (rb_ind == -1) {
+        printf("No ring buffer present for this encoding.");
+        return false;
+    }
+
+    return push(&fb->rings[rb_ind], f->data, f->size);
+}

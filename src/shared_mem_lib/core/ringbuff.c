@@ -1,6 +1,7 @@
 #if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>
 #endif
+#include <stdio.h>
 #include <stdint.h>
 #include <stdatomic.h>
 #include <inttypes.h>
