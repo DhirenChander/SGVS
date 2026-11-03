@@ -7,7 +7,8 @@
         x:Class="SGVS.Frontend.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="SGVS.Frontend">
+        Title="SGVS.Frontend"
+        xmlns:views="using:SGVS.Frontend.Views">
 
     <Design.DataContext>
         <!-- This only sets the DataContext for the previewer in an IDE,
@@ -15,8 +16,6 @@
         <vm:MainViewModel />
     </Design.DataContext>
 
-    <TextBox Text="{Binding Greeting}"
-             HorizontalAlignment="Center"
-             VerticalAlignment="Center" />
+    <views:MeetingView />
 
 </Window>
