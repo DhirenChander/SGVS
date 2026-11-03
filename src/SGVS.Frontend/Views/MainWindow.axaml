@@ -3,11 +3,15 @@
         xmlns:vm="using:SGVS.Frontend.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="760"
         x:Class="SGVS.Frontend.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="SGVS.Frontend">
+        Title="SGVS" Width="1280" Height="760" MinWidth="960" MinHeight="600"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="-1"
+        FontFamily="SF Pro Display, Segoe UI Variable Display, Inter, Segoe UI, sans-serif"
+        Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}">
 
     <Design.DataContext>
         <!-- This only sets the DataContext for the previewer in an IDE,
@@ -15,8 +19,7 @@
         <vm:MainViewModel />
     </Design.DataContext>
 
-    <TextBox Text="{Binding Greeting}"
-             HorizontalAlignment="Center"
-             VerticalAlignment="Center" />
+    <!-- current page (Start / Meeting / Watch), turned into a view by the ViewLocator -->
+    <ContentControl Content="{Binding CurrentView}" />
 
 </Window>

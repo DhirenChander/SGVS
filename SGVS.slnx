@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SGVS.Frontend/SGVS.Frontend.csproj" />
+  </Folder>
+</Solution>

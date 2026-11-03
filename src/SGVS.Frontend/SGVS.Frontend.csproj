@@ -3,12 +3,24 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- needs x:DataType in the axaml, but catches binding typos at build time -->
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Models\" />
-    <AvaloniaResource Include="Assets\**" />
+    <!-- placeholders are loose files, not embedded resources -->
+    <AvaloniaResource Include="Assets\**" Exclude="Assets\Placeholders\**" />
+  </ItemGroup>
+
+  <!-- stand-in stream/camera media until real call data exists.
+       copied next to the exe (Link keeps the folder names the view models look for) -->
+  <ItemGroup>
+    <Content Include="Assets\Placeholders\StreamImage\**" Link="StreamImage\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Placeholders\StreamVideo\**" Link="StreamVideo\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Placeholders\ViewerCamera\**" Link="ViewerCamera\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,5 +33,8 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!-- video. the windows package ships the native libs, on linux it uses the installed VLC -->
+    <PackageReference Include="LibVLCSharp.Avalonia" Version="3.10.2" />
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.24" />
   </ItemGroup>
 </Project>
