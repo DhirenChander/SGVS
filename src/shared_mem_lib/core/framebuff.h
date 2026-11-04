@@ -24,7 +24,9 @@ typedef struct
     uint8_t ring_count;
     RingBuffer *rings;
     Config config; // Used to hold data about active encodings
+#ifdef _WIN32
     HANDLE conf_ev, conf_map;
+#endif
 } FrameBuffer;
 
 typedef struct
@@ -34,6 +36,8 @@ typedef struct
     uint8_t *data;
 } Frame;
 
+bool new_framebuffer(FrameBuffer *out);
+void free_framebuffer(FrameBuffer *fb);
 bool push_frame(FrameBuffer *fb, Frame *f);
 bool try_pop_frame(FrameBuffer *fb, Encoding encoding, Frame *out);
 bool blocking_pop_frame(FrameBuffer *fb, Encoding encoding, Frame *out, uint32_t max_timeout);

@@ -3,53 +3,64 @@
 #endif
 
 #include <cstdint>
-#include <cstdlib>
-#include <vector>
+#include <stdio.h>
 
-#include "../core/ringbuff.h"
+#include "../core/framebuff.h"
 
-class SharedMemoryRingWriter
-{
-public:
-    explicit SharedMemoryRingWriter(uint32_t id = 0)
-        : rb_(nullptr), owns_memory_(false)
+namespace shared_mem_client {
+    using Frame = ::Frame;
+    using Encoding = ::Encoding;
+
+    class SharedMemoryFrameBuffer
     {
-        rb_ = static_cast<::RingBuffer *>(std::calloc(1, sizeof(::RingBuffer)));
-        if (rb_ != nullptr)
+    public:
+        explicit SharedMemoryFrameBuffer()
+            : fb_(::FrameBuffer{})
         {
-            rb_->id = id;
-            owns_memory_ = true;
+            if(!::new_framebuffer(&fb_)) {
+                fprintf(stderr, "Failed to initialize framebuffer\n");
+            }
         }
-    }
 
-    ~SharedMemoryRingWriter()
-    {
-        if (rb_ != nullptr && owns_memory_)
+        ~SharedMemoryFrameBuffer()
         {
-            std::free(rb_);
-            rb_ = nullptr;
+            ::free_framebuffer(&fb_);
         }
-    }
 
-    SharedMemoryRingWriter(const SharedMemoryRingWriter &) = delete;
-    SharedMemoryRingWriter &operator=(const SharedMemoryRingWriter &) = delete;
+        SharedMemoryFrameBuffer(const SharedMemoryFrameBuffer &) = delete;
+        SharedMemoryFrameBuffer &operator=(const SharedMemoryFrameBuffer &) = delete;
 
-    bool open_ring()
-    {
-        return rb_ != nullptr && ::open_ring(rb_);
-    }
+        bool push_frame(Frame *f) {
+            return ::push_frame(&fb_, f);
+        }
 
-    bool push(const std::vector<uint8_t> &data)
-    {
-        return rb_ != nullptr && ::push(rb_, const_cast<uint8_t *>(data.data()), data.size());
-    }
+        bool try_pop_frame(Encoding encoding, Frame *out) {
+            return ::try_pop_frame(&fb_, encoding, out);
+        }
 
-    ::RingBuffer *native_handle() const
-    {
-        return rb_;
-    }
+        bool blocking_pop_frame(::Encoding encoding, ::Frame *out, uint32_t max_timeout) {
+            return ::blocking_pop_frame(&fb_, encoding, out, max_timeout);
+        }
 
-private:
-    ::RingBuffer *rb_;
-    bool owns_memory_;
-};
+        bool request_encoding(Encoding encoding) {
+            return ::request_encoding(&fb_, encoding);
+        }
+
+        bool remove_encoding(Encoding encoding) {
+            return ::remove_encoding(&fb_, encoding);
+        }
+
+        bool read_encodings(Encoding *out, uint8_t len) {
+            return ::read_encodings(&fb_, out, len);
+        }
+
+    #ifdef _WIN32
+        bool poll_encodings(FrameBuffer *fb, Encoding *out, uint8_t len, DWORD *out_err, uint32_t max_timeout) {
+            return ::poll_encodings(&fb_, out, len, out_err, max_timeout);
+        }
+    #endif
+
+    private:
+        ::FrameBuffer fb_;
+    };
+}

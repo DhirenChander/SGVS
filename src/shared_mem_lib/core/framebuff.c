@@ -212,3 +212,49 @@ bool push_frame(FrameBuffer *fb, Frame *f) {
 
     return push(&fb->rings[rb_ind], f->data, f->size);
 }
+
+bool new_framebuffer(FrameBuffer *out) {
+    out->rings = malloc(0);
+    out->ring_count = 0;
+
+    uint64_t conf_size = sizeof(Config);
+    Config *config;
+#ifdef _WIN32
+
+    out->conf_map = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
+                                 (DWORD)(conf_size >> 32), (DWORD)(conf_size & 0xFFFFFFFF),
+                                 L"Local\\sgvs_enc_conf");
+    if (out->conf_map == nullptr)
+    {
+        return false;
+    }
+
+    // Auto-reset event: a Set before the consumer waits is remembered, so no lost wakeups.
+    out->conf_ev = CreateEventW(nullptr, FALSE, FALSE, L"Local\\sgvs_enc_conf_ev");
+    if (out->conf_ev == nullptr)
+    {
+        CloseHandle(out->conf_map);
+        out->conf_map = nullptr;
+        return false;
+    }
+
+    config = (Config *)MapViewOfFile(out->conf_map, FILE_MAP_ALL_ACCESS, 0, 0, conf_size);
+#endif
+
+    if (config == nullptr) {
+        return false;
+    }
+
+    out->config = *config;
+    return true;
+}
+
+void free_framebuffer(FrameBuffer *fb) {
+    free(fb->rings);
+#ifdef _WIN32
+    UnmapViewOfFile(&fb->config);
+    CloseHandle(fb->conf_map);
+    CloseHandle(fb->conf_ev);
+#endif
+    free(fb);
+}
