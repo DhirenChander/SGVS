@@ -15,13 +15,17 @@ func generateOffer() (*webrtc.PeerConnection, error) {
 		return nil, err
 	}
 
-	// Add Transceivers
-	// This could use pc.AddTrack instead.
-	// pc.AddTrack(&webrtc.TrackLocalStaticRTP{})
-	_, err = pc.AddTransceiverFromKind(webrtc.RTPCodecTypeAudio)
+	//Start with initial data channel for sending application messages
+	//This will let us add appropriate transcievers after the connection is established
+	dataChannel, err := pc.CreateDataChannel("transceiver_management", nil)
 	if err != nil {
+		_ = pc.Close()
 		return nil, err
 	}
+
+	dataChannel.OnOpen(func() {
+		fmt.Println("Signaling data channel is open")
+	})
 
 	// create a first offer that does not contain any local candidates
 	offer, err := pc.CreateOffer(nil)
@@ -107,6 +111,13 @@ func generateAnswer(offerSDP string) (*webrtc.PeerConnection, error) {
 	return pc, nil
 }
 
-func getSDPStr(connection *webrtc.PeerConnection) string {
-	return connection.LocalDescription().SDP
+func applyAnswer(pc *webrtc.PeerConnection, SDP string) error {
+	return pc.SetRemoteDescription(webrtc.SessionDescription{
+		Type: webrtc.SDPTypeAnswer,
+		SDP:  SDP,
+	})
+}
+
+func getSDPStr(pc *webrtc.PeerConnection) string {
+	return pc.LocalDescription().SDP
 }
