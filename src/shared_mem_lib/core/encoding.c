@@ -5,7 +5,7 @@ uint64_t generate_id()
 {
     uint64_t out;
     // This should be fine for unique ids, collisions are unlikely
-    if (RAND_bytes(&out, sizeof(uint64_t)) != 1)
+    if (RAND_bytes((unsigned char*)&out, sizeof(uint64_t)) != 1)
     {
         printf("Failed to generate id, returning 0");
         return 0;

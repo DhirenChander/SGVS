@@ -150,7 +150,7 @@ bool open_ring(RingBuffer *rb)
 void free_ringbuffer(RingBuffer *rb)
 {
 #if defined(_WIN32) || defined(_WIN64)
-    UnmapViewOfFile2(rb->map, rb->ring, 0x0);
+    UnmapViewOfFile(rb->ring);
     CloseHandle(rb->map);
     CloseHandle(rb->ev);
 #endif

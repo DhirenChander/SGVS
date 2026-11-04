@@ -2,6 +2,9 @@
 #include "framebuff.h"
 #include "ring.h"
 #include "ringbuff.h"
+#include <stdio.h>
+
+int ringbuff_by_encoding(FrameBuffer *fb, Encoding enc);
 
 bool config_has_encoding(Config *conf, Encoding enc)
 {
@@ -85,10 +88,10 @@ bool request_encoding(FrameBuffer *fb, Encoding enc)
 
 bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t len)
 {
-    int len = max(len, MAX_ENCODINGS);
+    int mlen = max(len, MAX_ENCODINGS);
     Encoding nil = nil_encoding();
 
-    for (int i = 0, j = 0; i < MAX_ENCODINGS && j < len; i++)
+    for (int i = 0, j = 0; i < MAX_ENCODINGS && j < mlen; i++)
     {
         if (!enc_eq(fb->config.encodings[i], nil))
         {
@@ -166,7 +169,7 @@ bool remove_encoding(FrameBuffer *fb, Encoding enc)
 
 int ringbuff_by_encoding(FrameBuffer *fb, Encoding enc)
 {
-    uint64_t id = encoding_to_int(enc);
+    uint64_t id = enc.id;
 
     for (int i = 0; i < fb->ring_count; i++)
     {
