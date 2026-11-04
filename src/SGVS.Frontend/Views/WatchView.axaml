@@ -1,0 +1,207 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SGVS.Frontend.ViewModels"
+             xmlns:m="using:SGVS.Frontend.Models"
+             xmlns:vlc="clr-namespace:LibVLCSharp.Avalonia;assembly=LibVLCSharp.Avalonia"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="760"
+             x:Class="SGVS.Frontend.Views.WatchView"
+             x:DataType="vm:WatchViewModel">
+
+    <!-- everything below binds to this. at runtime the ViewLocator sets it from MainViewModel.CurrentView -->
+    <Design.DataContext>
+        <vm:WatchViewModel />
+    </Design.DataContext>
+
+    <Panel>
+        <!-- backdrop. big blurred color blobs, this is what the glass panels sit over.
+             kept muted on purpose, loud gradients make it look cheap -->
+        <Panel IsHitTestVisible="False" ClipToBounds="True">
+            <Ellipse Width="760" Height="760" Fill="#2C4F78" Opacity="0.65" Effect="blur(120)"
+                     HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-220,-260,0,0" />
+            <Ellipse Width="680" Height="680" Fill="#2B6B66" Opacity="0.55" Effect="blur(120)"
+                     HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-180,-240" />
+            <Ellipse Width="520" Height="520" Fill="#8A5A2B" Opacity="0.35" Effect="blur(110)"
+                     HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,-300" />
+        </Panel>
+
+        <!-- top margin leaves room for the title bar, since content now runs behind it -->
+        <Grid RowDefinitions="*,Auto" ColumnDefinitions="*,300" Margin="0,32,0,0">
+
+            <!-- stream area, showing the placeholder video/image for now -->
+            <Border Grid.Row="0" Grid.Column="0" Margin="20,4,10,16" CornerRadius="22" Padding="8"
+                    Background="{DynamicResource GlassBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="1" BoxShadow="0 16 48 0 #59000000">
+                <Grid RowDefinitions="Auto,*">
+                    <!-- up here because anything drawn on top of the video surface gets hidden -->
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="10,4,10,10" HorizontalAlignment="Left">
+                        <Ellipse Width="7" Height="7" Fill="{DynamicResource DangerBrush}" VerticalAlignment="Center" />
+                        <TextBlock FontSize="13" VerticalAlignment="Center">
+                            <Run Text="{Binding StreamerName, Mode=OneWay}" FontWeight="SemiBold" />
+                            <Run Text="is sharing their screen" Foreground="{DynamicResource MutedTextBrush}" />
+                        </TextBlock>
+                    </StackPanel>
+
+                    <!-- video/image sits centered in here, black bars if the ratio is off -->
+                    <Border x:Name="StreamSurface" Grid.Row="1" Background="Black">
+                        <Panel>
+                            <!-- fallback, code-behind hides it once a video starts -->
+                            <Image x:Name="StreamImage" Source="{Binding StreamFrame}" Stretch="Uniform" />
+                            <!-- hidden until there is a video -->
+                            <vlc:VideoView x:Name="VideoSurface" IsVisible="False" />
+                        </Panel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- member list -->
+            <Border Grid.Row="0" Grid.Column="1" Margin="10,4,20,16" CornerRadius="22"
+                    Background="{DynamicResource GlassBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="1" BoxShadow="0 16 48 0 #59000000">
+                <Grid RowDefinitions="Auto,*">
+                    <TextBlock Text="{Binding ParticipantsHeader}" FontSize="13" FontWeight="SemiBold"
+                               Foreground="{DynamicResource MutedTextBrush}" Margin="22,20,20,10" />
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="10,0,10,10">
+                        <ItemsControl ItemsSource="{Binding Participants}">
+                            <ItemsControl.ItemTemplate>
+                                <!-- one row per person -->
+                                <DataTemplate x:DataType="m:Participant">
+                                    <Border Margin="0,0,0,4" Padding="4">
+                                      <Panel>
+                                        <!-- camera on: video tile with the name over the bottom edge -->
+                                        <Border IsVisible="{Binding IsVideoOn}" Height="150" CornerRadius="16" ClipToBounds="True"
+                                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                            <Panel>
+                                                <Image Source="{Binding VideoFrame}" Stretch="UniformToFill" />
+                                                <Border VerticalAlignment="Bottom" Padding="12,22,12,10">
+                                                    <Border.Background>
+                                                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                                            <GradientStop Color="#00000000" Offset="0" />
+                                                            <GradientStop Color="#99000000" Offset="1" />
+                                                        </LinearGradientBrush>
+                                                    </Border.Background>
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="Medium"
+                                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                        <Panel Grid.Column="1" Width="14" Height="14" VerticalAlignment="Center">
+                                                            <Path Data="{StaticResource MicIcon}" Classes="icon" />
+                                                            <Line Classes="slash" StartPoint="1,13" EndPoint="13,1" StrokeThickness="2"
+                                                                  Stroke="{DynamicResource DangerBrush}" IsVisible="{Binding IsMuted}" />
+                                                        </Panel>
+                                                    </Grid>
+                                                </Border>
+                                            </Panel>
+                                        </Border>
+
+                                        <!-- camera off: avatar row -->
+                                        <Grid ColumnDefinitions="Auto,*,Auto" Margin="8,4" IsVisible="{Binding !IsVideoOn}">
+                                            <!-- avatar -->
+                                            <Grid Width="36" Height="36">
+                                                <Ellipse Fill="{Binding AvatarBrush}" />
+                                                <TextBlock Text="{Binding Initials}" FontWeight="SemiBold" FontSize="13"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Grid>
+                                            <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center" Spacing="1">
+                                                <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="Medium"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <!-- only one of these shows per person -->
+                                                <TextBlock Text="Streaming" FontSize="12" IsVisible="{Binding IsStreamer}"
+                                                           Foreground="{DynamicResource AccentBrush}" />
+                                                <TextBlock Text="You" FontSize="12" IsVisible="{Binding IsSelf}"
+                                                           Foreground="{DynamicResource MutedTextBrush}" />
+                                            </StackPanel>
+                                            <!-- mic icon, red slash when muted -->
+                                            <Panel Grid.Column="2" Width="16" Height="16" VerticalAlignment="Center">
+                                                <Path Data="{StaticResource MicIcon}" Classes="icon"
+                                                      Fill="{DynamicResource MutedTextBrush}" />
+                                                <Line Classes="slash" StartPoint="1,15" EndPoint="15,1" StrokeThickness="2"
+                                                      Stroke="{DynamicResource DangerBrush}" IsVisible="{Binding IsMuted}" />
+                                            </Panel>
+                                        </Grid>
+                                      </Panel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- floating control bar, one glass pill centered at the bottom -->
+            <Border Grid.Row="1" Grid.ColumnSpan="2" HorizontalAlignment="Center" Margin="0,0,0,24"
+                    Background="{DynamicResource GlassStrongBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="1" CornerRadius="40" Padding="12" BoxShadow="0 12 36 0 #66000000">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <!-- mic: checked = muted -->
+                    <ToggleButton Classes="round" IsChecked="{Binding IsMuted}"
+                                  ToolTip.Tip="{Binding MuteLabel}" AutomationProperties.Name="Mute microphone">
+                        <Panel Width="22" Height="22">
+                            <Path Data="{StaticResource MicIcon}" Classes="icon"
+                                  Fill="{Binding $parent[ToggleButton].Foreground}" />
+                            <Line Classes="slash" StartPoint="2,20" EndPoint="20,2" IsVisible="{Binding IsMuted}"
+                                  Stroke="{Binding $parent[ToggleButton].Foreground}" />
+                        </Panel>
+                    </ToggleButton>
+
+                    <!-- camera: checked = off, same as the mic -->
+                    <ToggleButton Classes="round" IsChecked="{Binding IsVideoOff}"
+                                  ToolTip.Tip="{Binding VideoLabel}" AutomationProperties.Name="Toggle camera">
+                        <Panel Width="22" Height="22">
+                            <Path Data="{StaticResource VideoIcon}" Classes="icon"
+                                  Fill="{Binding $parent[ToggleButton].Foreground}" />
+                            <Line Classes="slash" StartPoint="2,20" EndPoint="20,2" IsVisible="{Binding IsVideoOff}"
+                                  Stroke="{Binding $parent[ToggleButton].Foreground}" />
+                        </Panel>
+                    </ToggleButton>
+
+                    <Border Width="1" Height="28" Background="{DynamicResource SeparatorBrush}" Margin="4,0" />
+
+                    <!-- resolution. wrapped in a border so the icon shares the pill bg -->
+                    <Border Background="{DynamicResource GlassButtonBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                            BorderThickness="1" CornerRadius="26" Height="52" Padding="18,0,6,0">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Panel Width="18" Height="18">
+                                <Path Data="{StaticResource MonitorIcon}" Classes="icon" />
+                            </Panel>
+                            <ComboBox Classes="res" ItemsSource="{Binding Resolutions}"
+                                      SelectedItem="{Binding SelectedResolution}"
+                                      MinWidth="80" VerticalAlignment="Center" Background="Transparent"
+                                      BorderThickness="0" Cursor="Hand"
+                                      AutomationProperties.Name="Stream resolution" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- volume, 0-100. code-behind passes it to the player.
+                         clicking the speaker mutes/unmutes the stream without losing the slider position -->
+                    <Border Background="{DynamicResource GlassButtonBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                            BorderThickness="1" CornerRadius="26" Height="52" Padding="12,0,18,0">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Classes="iconbtn" Command="{Binding ToggleStreamMuteCommand}"
+                                    ToolTip.Tip="{Binding StreamMuteLabel}" AutomationProperties.Name="Mute stream">
+                                <Panel Width="18" Height="18">
+                                    <Path Data="{StaticResource VolumeIcon}" Classes="icon" />
+                                    <!-- red because a white slash disappears into the white speaker -->
+                                    <Line Classes="slash" StartPoint="2,16" EndPoint="16,2" IsVisible="{Binding IsStreamSilent}"
+                                          Stroke="{DynamicResource DangerBrush}" />
+                                </Panel>
+                            </Button>
+                            <Slider Classes="volume" Minimum="0" Maximum="100" Value="{Binding Volume}" Width="110"
+                                    VerticalAlignment="Center" Cursor="Hand" AutomationProperties.Name="Stream volume" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Width="1" Height="28" Background="{DynamicResource SeparatorBrush}" Margin="4,0" />
+
+                    <!-- just quits for now -->
+                    <Button Classes="leave" Command="{Binding LeaveCommand}"
+                            ToolTip.Tip="Leave" AutomationProperties.Name="Leave call">
+                        <Panel Width="22" Height="22">
+                            <Path Data="{StaticResource LeaveIcon}" Classes="icon" />
+                        </Panel>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Panel>
+</UserControl>
