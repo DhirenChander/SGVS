@@ -1,3 +1,12 @@
+# Wednesday, November 4th, 2026
+**Attendance: Carter, Leo, Aurko, Austin, Dhiren, Oliver**
+- Review Figma design progress and assigned tasks regarding its implementation
+- Tested backend network features and discussed build system and unit testing libraries for the processing module
+
+# Tuesday, November 3rd, 2026
+**Attendance: Carter, Leo, Aurko**
+- Planned out and assigned individual frontend tasks
+
 # Monday, November 2nd, 2026
 **Attendance: Austin, Carter, Leo, Dhiren, Aurko, Oliver**
 - Stand up and check in on current tasks
