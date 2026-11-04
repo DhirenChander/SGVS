@@ -11,7 +11,7 @@ func main() {
 	args := os.Args[1:]
 
 	//Check if user wants to create a connection or answer
-	makeAnswer := (len(args) >= 1 && args[1] == "answer")
+	makeAnswer := (len(args) >= 1 && args[0] == "answer")
 
 	reader := bufio.NewReader(os.Stdin)
 
@@ -19,6 +19,7 @@ func main() {
 	if makeAnswer {
 		//wait for user input
 
+		fmt.Println("Enter connection string:\n")
 		SDPOfferStr, err := readSDP(reader)
 		if err != nil {
 			fmt.Printf("Error reading offer: %s\n", err)
@@ -93,7 +94,7 @@ func readSDP(reader *bufio.Reader) (string, error) {
 		if err != nil {
 			return SDPStr, err
 		}
-		if ln == "END\n" {
+		if ln == "END\r\n" || ln == "END\n" {
 			return SDPStr, nil
 		}
 		SDPStr += ln
