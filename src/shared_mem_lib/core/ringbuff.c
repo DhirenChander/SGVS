@@ -114,8 +114,8 @@ bool open_ring(RingBuffer *rb)
     wchar_t map_name[64];
     wchar_t event_name[64];
 
-    swprintf(map_name, 64, L"Local\\sgvs_video_ring_%u", rb->id);
-    swprintf(event_name, 64, L"Local\\sgvs_video_ring_%u_ev", rb->id);
+    swprintf(map_name, 64, L"Local\\sgvs_ring_%u", rb->id);
+    swprintf(event_name, 64, L"Local\\sgvs_ring_%u_ev", rb->id);
 
     rb->map = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
                                  (DWORD)(size >> 32), (DWORD)(size & 0xFFFFFFFF),

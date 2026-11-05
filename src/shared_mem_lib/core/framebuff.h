@@ -14,9 +14,12 @@
 
 #define MAX_ENCODINGS 10
 
+// TODO: Add audio input field
 typedef struct
 {
     Encoding encodings[MAX_ENCODINGS];
+    uint32_t video_selector; // PID when isProcess is true, Screen is with isProcess is false
+    bool isProcess;
 } Config;
 
 typedef struct
@@ -25,7 +28,8 @@ typedef struct
     RingBuffer *rings;
     Config config; // Used to hold data about active encodings
 #ifdef _WIN32
-    HANDLE conf_ev, conf_map;
+    // Encs_ev is using for encoding updates, conf_ev is used for any other config updates
+    HANDLE encs_ev, conf_ev, conf_map;
 #endif
 } FrameBuffer;
 

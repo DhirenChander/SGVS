@@ -65,19 +65,17 @@ bool request_encoding(FrameBuffer *fb, Encoding enc)
         if (enc_eq(fb->config.encodings[i], nil))
         {
             fb->config.encodings[i] = enc;
-#if defined(_WIN32) || defined(_WIN64)
-            SetEvent(fb->conf_ev);
-#endif
 
             if (!add_ring(fb, enc))
             {
                 // Clean up if ring creation fails
                 fb->config.encodings[i] = nil;
-#if defined(_WIN32) || defined(_WIN64)
-                SetEvent(fb->conf_ev);
-#endif
                 return false;
             }
+
+#if defined(_WIN32) || defined(_WIN64)
+            SetEvent(fb->encs_ev); // Only set the event on suc
+#endif
 
             return true;
         }
@@ -106,7 +104,7 @@ bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t len)
 #if defined(_WIN32) || defined(_WIN64)
 bool poll_encodings(FrameBuffer *fb, Encoding *out, uint8_t len, DWORD *out_err, uint32_t max_timeout)
 {
-    DWORD waitResult = WaitForSingleObject(fb->conf_ev, (DWORD)max_timeout);
+    DWORD waitResult = WaitForSingleObject(fb->encs_ev, (DWORD)max_timeout);
 
     switch (waitResult)
     {
@@ -148,14 +146,14 @@ bool remove_encoding(FrameBuffer *fb, Encoding enc)
         {
             fb->config.encodings[i] = nil_encoding();
 #if defined(_WIN32) || defined(_WIN64)
-            SetEvent(fb->conf_ev);
+            SetEvent(fb->encs_ev);
 #endif
             if (!remove_ring(fb, enc))
             {
                 // Clean-up if ring removal fails
                 fb->config.encodings[i] = enc;
 #if defined(_WIN32) || defined(_WIN64)
-                SetEvent(fb->conf_ev);
+                SetEvent(fb->encs_ev);
 #endif
                 return false;
             }
@@ -219,21 +217,30 @@ bool new_framebuffer(FrameBuffer *out) {
 
     uint64_t conf_size = sizeof(Config);
     Config *config;
-#ifdef _WIN32
 
+#ifdef _WIN32
     out->conf_map = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
                                  (DWORD)(conf_size >> 32), (DWORD)(conf_size & 0xFFFFFFFF),
-                                 L"Local\\sgvs_enc_conf");
+                                 L"Local\\sgvs_conf");
     if (out->conf_map == nullptr)
     {
         return false;
     }
 
-    // Auto-reset event: a Set before the consumer waits is remembered, so no lost wakeups.
-    out->conf_ev = CreateEventW(nullptr, FALSE, FALSE, L"Local\\sgvs_enc_conf_ev");
+    out->encs_ev = CreateEventW(nullptr, FALSE, FALSE, L"Local\\sgvs_conf_encs_ev");
+    if (out->encs_ev == nullptr)
+    {
+        CloseHandle(out->conf_map);
+        out->conf_map = nullptr;
+        return false;
+    }
+
+    out->conf_ev = CreateEventW(nullptr, FALSE, FALSE, L"Local\\sgvs_conf_ev");
     if (out->conf_ev == nullptr)
     {
         CloseHandle(out->conf_map);
+        CloseHandle(out->encs_ev);
+        out->encs_ev = nullptr;
         out->conf_map = nullptr;
         return false;
     }
@@ -254,6 +261,7 @@ void free_framebuffer(FrameBuffer *fb) {
 #ifdef _WIN32
     UnmapViewOfFile(&fb->config);
     CloseHandle(fb->conf_map);
+    CloseHandle(fb->encs_ev);
     CloseHandle(fb->conf_ev);
 #endif
     free(fb);
