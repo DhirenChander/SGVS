@@ -1,4 +1,4 @@
-#include "encoding.h"
+#include "shared_mem_lib_core/encoding.h"
 #include "openssl/rand.h"
 
 uint64_t generate_id()

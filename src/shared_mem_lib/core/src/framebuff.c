@@ -1,7 +1,7 @@
 #include <stdint.h>
-#include "framebuff.h"
-#include "ring.h"
-#include "ringbuff.h"
+#include "shared_mem_lib_core/framebuff.h"
+#include "shared_mem_lib_core/ring.h"
+#include "shared_mem_lib_core/ringbuff.h"
 #include <stdio.h>
 
 int ringbuff_by_encoding(FrameBuffer *fb, Encoding enc);

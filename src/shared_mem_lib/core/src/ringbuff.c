@@ -6,7 +6,7 @@
 #include <stdatomic.h>
 #include <inttypes.h>
 #include <wchar.h>
-#include "ringbuff.h"
+#include "shared_mem_lib_core/ringbuff.h"
 
 bool try_pop(RingBuffer *rb, uint8_t *out, size_t size)
 {

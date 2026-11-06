@@ -9,6 +9,12 @@ FetchContent_MakeAvailable(unity)
 
 foreach(t ringbuff_test)
   add_executable(${t} ${t}.c)
+  target_include_directories(${t} PRIVATE 
+    "${CMAKE_CURRENT_SOURCE_DIR}/../include"
+    "${unity_SOURCE_DIR}/src"
+  )
   target_link_libraries(${t} PRIVATE shared_mem_client unity)
   add_test(NAME ${t} COMMAND ${t})
 endforeach()
+
+install(DIRECTORY "../include/" DESTINATION include)

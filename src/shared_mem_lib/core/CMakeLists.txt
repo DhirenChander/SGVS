@@ -7,12 +7,12 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_library(shared_mem_client ringbuff.c framebuff.c encoding.c)
+add_library(shared_mem_client src/ringbuff.c src/framebuff.c src/encoding.c)
 add_library(shared_mem_client::shared_mem_client ALIAS shared_mem_client)
 
 target_include_directories(shared_mem_client
   PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 

@@ -1,5 +1,5 @@
 #include <unity.h>
-#include "../ringbuff.h"
+#include "shared_mem_lib_core/ringbuff.h"
 #include "string.h"
 
 // Required to compile and use unity
