@@ -204,6 +204,8 @@ bool blocking_pop_frame(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max_
 
     out->size = true_size;
     out->data = (uint8_t*)realloc(out->data, true_size);
+
+    return true;
 }
 
 bool push_frame(FrameBuffer *fb, Frame *f) {
