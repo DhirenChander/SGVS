@@ -7,8 +7,12 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
+const managementChannelName = "transceiver_management"
+
+const testMessage = "Hello from Host :)"
+
 // Setting up connections
-func generateOffer() (*webrtc.PeerConnection, error) {
+func generateOffer(managementChannel chan webrtc.DataChannelMessage) (*webrtc.PeerConnection, error) {
 	// create a peer connection
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
@@ -17,14 +21,24 @@ func generateOffer() (*webrtc.PeerConnection, error) {
 
 	//Start with initial data channel for sending application messages
 	//This will let us add appropriate transcievers after the connection is established
-	dataChannel, err := pc.CreateDataChannel("transceiver_management", nil)
+	dataChannel, err := pc.CreateDataChannel(managementChannelName, nil)
 	if err != nil {
 		_ = pc.Close()
 		return nil, err
 	}
 
 	dataChannel.OnOpen(func() {
-		fmt.Println("Signaling data channel is open")
+		fmt.Println("Signaling data channel is open, sending test message")
+		// Send data over connection
+
+		err = dataChannel.SendText(testMessage)
+		if err != nil {
+			fmt.Printf("Error sending test message: %s\n", err)
+		}
+	})
+
+	dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
+		managementChannel <- msg
 	})
 
 	// create a first offer that does not contain any local candidates
@@ -64,7 +78,7 @@ func generateOffer() (*webrtc.PeerConnection, error) {
 	return pc, nil
 }
 
-func generateAnswer(offerSDP string) (*webrtc.PeerConnection, error) {
+func generateAnswer(offerSDP string, managementChannel chan webrtc.DataChannelMessage) (*webrtc.PeerConnection, error) {
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
 		return nil, err
@@ -106,6 +120,18 @@ func generateAnswer(offerSDP string) (*webrtc.PeerConnection, error) {
 	if localAnswer == nil {
 		return nil, fmt.Errorf("Local answer could not be generated")
 	}
+
+	//Called when a data channel is created by the remote (I think)
+	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
+		if dc.Label() != managementChannelName {
+			return
+		}
+
+		// When we receive messages on this channel, pass them along to parameter managementChannel
+		dc.OnMessage(func(msg webrtc.DataChannelMessage) {
+			managementChannel <- msg
+		})
+	})
 
 	keepConnection = true
 	return pc, nil

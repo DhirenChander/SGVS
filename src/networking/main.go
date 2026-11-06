@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+
+	"github.com/pion/webrtc/v4"
 )
 
 func main() {
@@ -17,6 +19,7 @@ func main() {
 
 	//TODO: Move these into separate functions
 	if makeAnswer {
+		messages := make(chan webrtc.DataChannelMessage, 1)
 		//wait for user input
 
 		fmt.Println("Enter connection string:\n")
@@ -26,7 +29,7 @@ func main() {
 			return
 		}
 
-		answerPc, err := generateAnswer(SDPOfferStr)
+		answerPc, err := generateAnswer(SDPOfferStr, messages)
 		defer func() { _ = answerPc.Close() }()
 		if err != nil {
 			fmt.Printf("Error generating answer: %s\n", err)
@@ -37,14 +40,23 @@ func main() {
 
 		//keep connection alive while waiting for waiting for message
 
-		messages := make(chan []byte, 1)
+		firstMessage := <-messages
 
-		<-messages
+		// if !firstMessage.IsString {
+		// 	fmt.Printf("Message was not a string")
+		// }
+
+		fmt.Printf("Recieved Message: %s\n", string(firstMessage.Data))
+
+		// fmt.Printf("Sending response\n")
+		// We need access to the data channel to send a response
+		// Should the connection creation function return a function to send messages?
 
 		//close connection once finished
 
 	} else {
-		offerPc, err := generateOffer()
+		messages := make(chan webrtc.DataChannelMessage, 1)
+		offerPc, err := generateOffer(messages)
 		defer func() { _ = offerPc.Close() }()
 		if err != nil {
 			fmt.Printf("Error generating offer: %s\n", err)
@@ -73,13 +85,9 @@ func main() {
 
 		//add needed audio/video streams
 
-		//Temp for now
-		// just wait forever for now to keep connection open
-		// TODO: pass this channel into create offer and use
-		// it to have messages recieve signals
-		messages := make(chan []byte, 1)
+		firstResponse := <-messages
 
-		<-messages
+		fmt.Printf("Recieved Message: %s\n", string(firstResponse.Data))
 
 		//close connection once finished
 
@@ -87,6 +95,7 @@ func main() {
 
 }
 
+// Read SDP string from input stream (console for now)
 func readSDP(reader *bufio.Reader) (string, error) {
 	SDPStr := ""
 	for {
