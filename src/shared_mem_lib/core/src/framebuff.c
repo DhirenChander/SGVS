@@ -196,8 +196,14 @@ bool blocking_pop_frame(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max_
     }
 
     out->encoding = enc;
+    size_t true_size;
 
-    return blocking_pop(&fb->rings[rb_ind], out->data, out->size, max_timeout);
+    if (!blocking_pop(&fb->rings[rb_ind], out->data, &true_size, out->size, max_timeout)) {
+        return false;
+    }
+
+    out->size = true_size;
+    out->data = (uint8_t*)realloc(out->data, true_size);
 }
 
 bool push_frame(FrameBuffer *fb, Frame *f) {

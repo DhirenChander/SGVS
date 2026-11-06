@@ -80,15 +80,17 @@ void test_ringbuff_try_pop(void) {
         for(int j = 0; j < cases[i].len; j++)
         {
             uint8_t *out = (uint8_t*)malloc(cases[i].sizes[j]);
-            bool result = try_pop(&rb, out, cases[i].sizes[j]);
+            size_t out_size;
+            bool result = try_pop(&rb, out, &out_size, cases[i].sizes[j]);
             TEST_ASSERT(result);
+            TEST_ASSERT_EQUAL(out_size, cases[i].sizes[j]);
             TEST_ASSERT_EQUAL_MEMORY(out, cases[i].data[j], cases[i].sizes[j]);
             TEST_ASSERT(atomic_load(&rb.ring->head) == cases[i].len);
             TEST_ASSERT(atomic_load(&rb.ring->tail) == j + 1);
         }
 
         uint8_t *fail_out;
-        bool fail_result = try_pop(&rb, fail_out, 1000);
+        bool fail_result = try_pop(&rb, fail_out, (size_t*)fail_out, 1000);
         TEST_ASSERT(!fail_result);
 
         RingBuffer rb_2;

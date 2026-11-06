@@ -8,14 +8,14 @@
 #include <wchar.h>
 #include "shared_mem_lib_core/ringbuff.h"
 
-bool try_pop(RingBuffer *rb, uint8_t *out, size_t size)
+bool try_pop(RingBuffer *rb, uint8_t *out, size_t* out_size, size_t size)
 {
-    return blocking_pop(rb, out, size, 0x0);
+    return blocking_pop(rb, out, out_size, size, 0x0);
 }
 
-bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t size, uint32_t max_timeout)
+bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t* out_size, size_t max_size, uint32_t max_timeout)
 {
-    if (rb == nullptr || out == nullptr || size == 0)
+    if (rb == nullptr || out == nullptr || max_size == 0)
     {
         return false;
     }
@@ -65,9 +65,10 @@ bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t size, uint32_t max_timeou
     }
 
     Slot *slot = &rb->ring->buff[tail];
-    uint8_t cpy_size = min(size, slot->size);
+    uint8_t cpy_size = min(max_size, slot->size);
 
     memcpy(out, slot->bytes, cpy_size);
+    *out_size = cpy_size;
 
     atomic_store(&rb->ring->tail, next);
 

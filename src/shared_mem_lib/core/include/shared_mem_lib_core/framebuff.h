@@ -51,5 +51,6 @@ bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t len);
 #if defined(_WIN32) || defined(_WIN64)
 bool poll_encodings(FrameBuffer *fb, Encoding *out, uint8_t len, DWORD *out_err, uint32_t max_timeout);
 #endif
+Frame frame_sized_by_encoding(Encoding enc);
 
 #endif
