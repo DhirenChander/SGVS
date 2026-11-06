@@ -22,7 +22,7 @@ bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t size, uint32_t max_timeou
 
     uint32_t head = atomic_load(&rb->ring->head);
     uint32_t tail = atomic_load(&rb->ring->tail);
-    int32_t next = (tail + 1) % RING_SIZE;
+    uint32_t next = (tail + 1) % RING_SIZE;
 
     // Block on the event
     if (head == tail)
@@ -56,7 +56,7 @@ bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t size, uint32_t max_timeou
         uint32_t head = atomic_load(&rb->ring->head);
         uint32_t tail = atomic_load(&rb->ring->tail);
 
-        // Shouldn't happen in an spsc scenario, but still need to check
+        // Shouldn't happen in a spsc scenario, but still need to check
         if (head == tail)
         {
             printf("Buffer was empty after timeout.\n");
@@ -65,7 +65,7 @@ bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t size, uint32_t max_timeou
     }
 
     Slot *slot = &rb->ring->buff[tail];
-    uint8_t cpy_size = max(size, slot->size);
+    uint8_t cpy_size = min(size, slot->size);
 
     memcpy(out, slot->bytes, cpy_size);
 
