@@ -145,5 +145,5 @@ func applyAnswer(pc *webrtc.PeerConnection, SDP string) error {
 }
 
 func getSDPStr(pc *webrtc.PeerConnection) string {
-	return pc.LocalDescription().SDP + "END\n" //Change later
+	return pc.LocalDescription().SDP //Change later
 }

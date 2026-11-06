@@ -103,7 +103,7 @@ func readSDP(reader *bufio.Reader) (string, error) {
 		if err != nil {
 			return SDPStr, err
 		}
-		if ln == "END\r\n" || ln == "END\n" {
+		if ln == "\r\n" || ln == "\n" {
 			return SDPStr, nil
 		}
 		SDPStr += ln
