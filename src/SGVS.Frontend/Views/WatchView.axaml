@@ -2,7 +2,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:SGVS.Frontend.ViewModels"
              xmlns:m="using:SGVS.Frontend.Models"
-             xmlns:vlc="clr-namespace:LibVLCSharp.Avalonia;assembly=LibVLCSharp.Avalonia"
              xmlns:controls="using:SGVS.Frontend.Views.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -20,19 +19,11 @@
          itself (see the Stream border and member rail margins) -->
     <Panel Background="{DynamicResource BgBrush}">
 
-        <!-- the stream. StreamHost normally holds the overlay (gear/bar/fullscreen) as a
-             plain child so it sits over the placeholder image; once real video starts it
-             gets moved into VideoSurface.Content instead, because a NativeControlHost
-             (what VideoView really is under the hood) paints outside Avalonia's own
-             compositing - anything just stacked on top of it in the visual tree gets
-             hidden behind it. VideoView exposes exactly this "floating overlay content"
-             as its Content property, so the move is all WatchView.axaml.cs does. -->
+        <!-- the stream: placeholder image with the control overlay on top -->
         <Border x:Name="StreamBorder" Margin="8,36,72,9" CornerRadius="8" ClipToBounds="True"
                 BoxShadow="0 12 34 0 #80000000">
             <Panel x:Name="StreamHost" Background="Black">
                 <Image x:Name="StreamImage" Source="{Binding StreamFrame}" Stretch="UniformToFill" />
-                <!-- hidden until there is a video, see WatchView.axaml.cs -->
-                <vlc:VideoView x:Name="VideoSurface" IsVisible="False" />
                 <!-- FlyoutOpened/FlyoutClosed are wired in code-behind (needs a closure
                      over _suppressAutoHide), not here -->
                 <controls:StreamOverlay x:Name="Overlay" FullscreenRequested="OnFullscreenRequested" />
@@ -69,8 +60,8 @@
         </ItemsControl>
 
         <!-- join-code rail, bottom-right. lives outside the stream border on purpose -
-             it's never supposed to be hidden by the auto-hide timer or sit behind the
-             native video surface, so it isn't part of StreamOverlay at all -->
+             it's never supposed to be hidden by the auto-hide timer,
+             so it isn't part of StreamOverlay at all -->
         <Border x:Name="CodeRail" Width="72" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,14">
             <StackPanel>
                 <!-- collapsed: just the key icon -->

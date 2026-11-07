@@ -9,6 +9,16 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // on Windows, extending into the decorations makes the OS paint its own
+        // min/max/close buttons in the top-right, right on top of ours. BorderOnly
+        // drops the native title bar (keeps the resize border), so only our bar shows.
+        // other platforms are left as they were
+        if (OperatingSystem.IsWindows())
+        {
+            ExtendClientAreaToDecorationsHint = false;
+            WindowDecorations = WindowDecorations.BorderOnly;
+        }
     }
 
     // drag-to-move + double-click-to-maximize, same as a native title bar. only fires

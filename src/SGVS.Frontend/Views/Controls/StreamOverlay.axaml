@@ -9,9 +9,7 @@
 
     <!-- everything that floats on top of the stream itself: settings gear, the control
          bar, fullscreen button, and the stream options dialog. kept as one control so
-         WatchView only has to move one thing between "sitting over the placeholder
-         image" and "VideoView's native overlay content" when playback starts/stops -
-         see WatchView.axaml.cs.
+         WatchView places a single thing over the stream.
 
          OverlayRoot itself is always visible - ChromeGroup is the part the auto-hide
          timer actually toggles. they're split so an open dialog (which lives outside
@@ -151,8 +149,7 @@
         <!-- start-stream / stop-watching options. purely a picker UI for now - nothing
              here actually starts or stops a stream, same placeholder state the two
              commands were already in. outside ChromeGroup on purpose: it has to survive
-             the auto-hide timer and it has to float over native video the same way the
-             rest of this control does, so it rides along in the same reparented control. -->
+             the auto-hide timer so it lives in this control. -->
         <Panel IsVisible="{Binding IsDialogOpen}">
             <Border Background="#99000000" PointerPressed="OnDialogScrimPressed" />
             <Border HorizontalAlignment="Center" VerticalAlignment="Center" Width="300" CornerRadius="12"

@@ -3,16 +3,12 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Threading;
-using LibVLCSharp.Shared;
 using SGVS.Frontend.ViewModels;
 
 namespace SGVS.Frontend.Views;
 
 public partial class WatchView : UserControl
 {
-    private LibVLC? _libVlc;
-    private MediaPlayer? _player;
-
     // control chrome fades out after this long with the mouse sitting still over the
     // stream, same idea as youtube/twitch - comes back on the next move
     private static readonly TimeSpan HideDelay = TimeSpan.FromSeconds(2.5);
@@ -75,17 +71,11 @@ public partial class WatchView : UserControl
             };
         };
 
-        // the video surface needs a real window first, so wait for Loaded
-        Loaded += (_, _) =>
-        {
-            StartPlaceholderVideo();
-            ShowControlsForAWhile();
-        };
+        Loaded += (_, _) => ShowControlsForAWhile();
         Unloaded += (_, _) =>
         {
             _hideTimer.Stop();
             _copiedResetTimer.Stop();
-            StopVideo();
         };
     }
 
@@ -94,83 +84,6 @@ public partial class WatchView : UserControl
         Overlay.ControlsVisible = true;
         _hideTimer.Stop();
         _hideTimer.Start();
-    }
-
-    // loops the first mp4 in StreamVideo/ until there's a real stream.
-    // no mp4 = the image stays up
-    private void StartPlaceholderVideo()
-    {
-        var folder = Path.Combine(AppContext.BaseDirectory, "StreamVideo");
-        var file = Directory.Exists(folder)
-            ? Directory.EnumerateFiles(folder, "*.mp4").Order().FirstOrDefault()
-            : null;
-        if (file is null) return;
-
-        try
-        {
-            // throws if the vlc libs are missing (e.g. no VLC installed on linux)
-            Core.Initialize();
-            _libVlc = new LibVLC();
-            _player = new MediaPlayer(_libVlc);
-
-            if (DataContext is WatchViewModel vm)
-            {
-                vm.PropertyChanged += (_, e) =>
-                {
-                    if (e.PropertyName is nameof(WatchViewModel.Volume) or nameof(WatchViewModel.IsStreamMuted))
-                        ApplyVolume(vm);
-                };
-
-                // vlc resets the volume when playback starts, so set it again then
-                _player.Playing += (_, _) => ApplyVolume(vm);
-                ApplyVolume(vm);
-            }
-
-            using var media = new Media(_libVlc, file, FromType.FromPath);
-            media.AddOption(":input-repeat=65535"); // loop
-
-            // move the overlay off the plain Image and into the VideoView's own native
-            // overlay content - see the comment on StreamOverlay in WatchView.axaml for why
-            StreamHost.Children.Remove(Overlay);
-            VideoSurface.Content = Overlay;
-
-            VideoSurface.MediaPlayer = _player;
-            VideoSurface.IsVisible = true;
-            StreamImage.IsVisible = false;
-            _player.Play(media);
-        }
-        catch (Exception)
-        {
-            // couldn't start vlc, fall back to the image
-            StopVideo();
-            VideoSurface.IsVisible = false;
-            StreamImage.IsVisible = true;
-        }
-    }
-
-    // can be called from vlc's thread too
-    private void ApplyVolume(WatchViewModel vm)
-    {
-        if (_player is null) return;
-        _player.Mute = vm.IsStreamMuted;
-        _player.Volume = (int)Math.Round(vm.Volume);
-    }
-
-    private void StopVideo()
-    {
-        _player?.Stop();
-        VideoSurface.MediaPlayer = null;
-        _player?.Dispose();
-        _libVlc?.Dispose();
-        _player = null;
-        _libVlc = null;
-
-        // put the overlay back over the image if it had been moved into the video
-        if (VideoSurface.Content == Overlay)
-        {
-            VideoSurface.Content = null;
-            StreamHost.Children.Add(Overlay);
-        }
     }
 
     private void OnFullscreenRequested(object? sender, EventArgs e) => ToggleFullscreen();
