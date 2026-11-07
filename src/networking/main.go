@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/pion/webrtc/v4"
 )
@@ -16,7 +17,9 @@ func main() {
 	//Check if user wants to create a connection or answer
 	host := (len(args) >= 1 && args[0] == "host")
 
-	testCallAndResponse(host)
+	go testCallAndResponse(host)
+
+	<-time.After(5 * time.Minute)
 
 }
 
