@@ -1,0 +1,10 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Icon/share">
+<path id="Vector" d="M15.75 9V11.25C15.75 11.4489 15.671 11.6397 15.5303 11.7803C15.3897 11.921 15.1989 12 15 12H3C2.80109 12 2.61032 11.921 2.46967 11.7803C2.32902 11.6397 2.25 11.4489 2.25 11.25V3.75C2.25 3.55109 2.32902 3.36032 2.46967 3.21967C2.61032 3.07902 2.80109 3 3 3H9.75" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#F0EEEC"/>
+<path id="Vector_2" d="M5.25 15H12.75" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#F0EEEC"/>
+<path id="Vector_3" d="M6.75 12V15" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#F0EEEC"/>
+<path id="Vector_4" d="M11.25 12V15" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#F0EEEC"/>
+<path id="Vector_5" d="M12.75 3H15.75V6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#F0EEEC"/>
+<path id="Vector_6" d="M12 6.75L15.75 3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#F0EEEC"/>
+</g>
+</svg>

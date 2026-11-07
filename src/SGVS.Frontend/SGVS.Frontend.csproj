@@ -6,6 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- bakes the icon into the .exe itself (Explorer, taskbar before the window even
+         opens) - Windows-only, ignored elsewhere. the Window.Icon in MainWindow.axaml
+         covers the runtime icon (taskbar/dock/window manager) on every platform -->
+    <ApplicationIcon>Assets\sgvs-icon\sgvs.ico</ApplicationIcon>
     <!-- needs x:DataType in the axaml, but catches binding typos at build time -->
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
@@ -15,12 +19,11 @@
     <AvaloniaResource Include="Assets\**" Exclude="Assets\Placeholders\**" />
   </ItemGroup>
 
-  <!-- stand-in stream/camera media until real call data exists.
+  <!-- stand-in stream media until real call data exists.
        copied next to the exe (Link keeps the folder names the view models look for) -->
   <ItemGroup>
     <Content Include="Assets\Placeholders\StreamImage\**" Link="StreamImage\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Placeholders\StreamVideo\**" Link="StreamVideo\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets\Placeholders\ViewerCamera\**" Link="ViewerCamera\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

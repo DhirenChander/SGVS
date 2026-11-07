@@ -6,7 +6,7 @@
         mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="760"
         x:Class="SGVS.Frontend.Views.MainWindow"
         x:DataType="vm:MainViewModel"
-        Icon="/Assets/avalonia-logo.ico"
+        Icon="/Assets/sgvs-icon/sgvs.ico"
         Title="SGVS" Width="1280" Height="760" MinWidth="960" MinHeight="600"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaTitleBarHeightHint="-1"
@@ -19,7 +19,45 @@
         <vm:MainViewModel />
     </Design.DataContext>
 
-    <!-- current page (Start / Meeting / Watch), turned into a view by the ViewLocator -->
-    <ContentControl Content="{Binding CurrentView}" />
+    <Panel>
+        <!-- current page (Start / Meeting / Watch), turned into a view by the ViewLocator -->
+        <ContentControl Content="{Binding CurrentView}" />
+
+        <!-- our own title bar, matching the mockup's icon set and giving the window
+             drag-to-move + double-click-to-maximize. note: this Avalonia version doesn't
+             expose ExtendClientAreaChromeHints (that's what turns native caption buttons
+             off in newer versions), so macOS still draws its own traffic lights in the
+             top-left corner alongside these - nothing to be done about that short of
+             native interop, not worth it for three pixels of polish.
+             every view already leaves 36px clear at the top for this (see WatchView's
+             margins) - it's just an overlay, not a layout row, so it draws on top of
+             whatever's behind it instead of pushing content down -->
+        <Grid x:Name="TitleBar" Height="36" VerticalAlignment="Top" Background="Transparent"
+              ColumnDefinitions="*,Auto" PointerPressed="OnTitleBarPointerPressed">
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Classes="titlebar" Width="44" Height="36" Click="OnMinimizeClick" AutomationProperties.Name="Minimize">
+                    <Panel Width="14" Height="14">
+                        <!-- a flat line has no height for Stretch=Uniform to scale against
+                             (it'll just vanish), so this is a Line like the mute slash is,
+                             not a Path - same reason, same fix -->
+                        <Line StartPoint="2.91667,7" EndPoint="11.0833,7" Stroke="{DynamicResource MutedTextBrush}"
+                              StrokeThickness="1.5" StrokeLineCap="Round" />
+                    </Panel>
+                </Button>
+                <Button Classes="titlebar" Width="44" Height="36" Click="OnMaximizeClick" AutomationProperties.Name="Maximize">
+                    <Panel Width="14" Height="14">
+                        <Path Data="{StaticResource WindowMaximizeIcon}" Classes="icon"
+                              Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.5" />
+                    </Panel>
+                </Button>
+                <Button Classes="titlebar" Width="44" Height="36" Click="OnCloseClick" AutomationProperties.Name="Close">
+                    <Panel Width="14" Height="14">
+                        <Path Data="{StaticResource WindowCloseIcon}" Classes="icon"
+                              Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.5" />
+                    </Panel>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Panel>
 
 </Window>

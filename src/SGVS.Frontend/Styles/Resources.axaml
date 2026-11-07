@@ -2,42 +2,55 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- colors + icons, looked up by key everywhere else.
-         glass = white at low alpha over the blurred backdrop, so the alpha values are the whole look -->
-    <SolidColorBrush x:Key="BgBrush" Color="#0B0D12" />
+         pulled straight from the Figma variables (color/ground, color/text, etc) on the
+         "Watching a Screenshare" frame - warm near-black ground, teal accent, no blue anywhere -->
+    <SolidColorBrush x:Key="BgBrush" Color="#110F0E" />
+    <SolidColorBrush x:Key="TextBrush" Color="#F0EEEC" />
+    <SolidColorBrush x:Key="MutedTextBrush" Color="#B4B0AC" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#53C9C9" />
+    <SolidColorBrush x:Key="DangerTextBrush" Color="#F09A8E" />
 
-    <!-- panels (stream card, member list) -->
-    <LinearGradientBrush x:Key="GlassBrush" StartPoint="0%,0%" EndPoint="100%,100%">
-        <GradientStop Color="#26FFFFFF" Offset="0" />
-        <GradientStop Color="#0DFFFFFF" Offset="1" />
+    <!-- avatar ring colors, one per participant slot in the mockup (amber/teal/cream/muted) -->
+    <SolidColorBrush x:Key="AvatarAmberBrush" Color="#EDB25A" />
+    <SolidColorBrush x:Key="AvatarCreamBrush" Color="#F3DAB2" />
+
+    <!-- glass surfaces (settings button, fullscreen button, control bar, resolution menu).
+         Avalonia has no per-element backdrop blur, so this is a flat approximation of
+         "ground at 56% opacity + hairline border" instead of the real blur-behind effect -->
+    <SolidColorBrush x:Key="GlassBrush" Color="#8F110F0E" />
+    <SolidColorBrush x:Key="GlassBorderBrush" Color="#1FFFFFFF" />
+    <SolidColorBrush x:Key="GlassHoverBrush" Color="#14FFFFFF" />
+    <SolidColorBrush x:Key="SeparatorBrush" Color="#29F0EEEC" />
+    <!-- the "off" state of the settings-menu toggle pills -->
+    <SolidColorBrush x:Key="ToggleOffBrush" Color="#33F0EEEC" />
+
+    <!-- the ring drawn around whoever is currently streaming, in the member rail -->
+    <LinearGradientBrush x:Key="LiveRingBrush" StartPoint="0%,50%" EndPoint="100%,50%">
+        <GradientStop Color="#53C9C9" Offset="0" />
+        <GradientStop Color="#EDB25A" Offset="0.5" />
+        <GradientStop Color="#F3DAB2" Offset="1" />
     </LinearGradientBrush>
-    <!-- control bar, a bit denser so it reads over the video -->
-    <LinearGradientBrush x:Key="GlassStrongBrush" StartPoint="0%,0%" EndPoint="100%,100%">
-        <GradientStop Color="#33FFFFFF" Offset="0" />
-        <GradientStop Color="#1AFFFFFF" Offset="1" />
-    </LinearGradientBrush>
-    <!-- light catches the top-left edge, fades out toward the bottom-right -->
-    <LinearGradientBrush x:Key="GlassBorderBrush" StartPoint="0%,0%" EndPoint="100%,100%">
-        <GradientStop Color="#59FFFFFF" Offset="0" />
-        <GradientStop Color="#1AFFFFFF" Offset="0.5" />
-        <GradientStop Color="#0DFFFFFF" Offset="1" />
-    </LinearGradientBrush>
 
-    <SolidColorBrush x:Key="GlassButtonBrush" Color="#1FFFFFFF" />        <!-- round buttons, pills -->
-    <SolidColorBrush x:Key="GlassButtonHoverBrush" Color="#33FFFFFF" />
-    <SolidColorBrush x:Key="SeparatorBrush" Color="#26FFFFFF" />
-    <SolidColorBrush x:Key="TextBrush" Color="#F2FFFFFF" />
-    <SolidColorBrush x:Key="MutedTextBrush" Color="#99FFFFFF" />
-
-    <!-- apple system colors -->
-    <SolidColorBrush x:Key="AccentBrush" Color="#0A84FF" />
-    <SolidColorBrush x:Key="DangerBrush" Color="#FF453A" />
-    <SolidColorBrush x:Key="DangerHoverBrush" Color="#FF6961" />
-    <SolidColorBrush x:Key="DangerPressedBrush" Color="#D70015" />
-
-    <!-- icons are Material Design paths (24x24), no icon font so it works on linux/mac too -->
-    <StreamGeometry x:Key="MicIcon">M12,2A3,3 0 0,1 15,5V11A3,3 0 0,1 12,14A3,3 0 0,1 9,11V5A3,3 0 0,1 12,2M19,11C19,14.53 16.39,17.44 13,17.93V21H11V17.93C7.61,17.44 5,14.53 5,11H7A5,5 0 0,0 12,16A5,5 0 0,0 17,11H19Z</StreamGeometry>
-    <StreamGeometry x:Key="VideoIcon">M17,10.5V7A1,1 0 0,0 16,6H4A1,1 0 0,0 3,7V17A1,1 0 0,0 4,18H16A1,1 0 0,0 17,17V13.5L21,17.5V6.5L17,10.5Z</StreamGeometry>
-    <StreamGeometry x:Key="MonitorIcon">M21,16H3V4H21M21,2H3C1.89,2 1,2.89 1,4V16A2,2 0 0,0 3,18H10V20H8V22H16V20H14V18H21A2,2 0 0,0 23,16V4C23,2.89 22.1,2 21,2Z</StreamGeometry>
-    <StreamGeometry x:Key="LeaveIcon">M16,17V14H9V10H16V7L21,12L16,17M14,2A2,2 0 0,1 16,4V6H14V4H5V20H14V18H16V20A2,2 0 0,1 14,22H5A2,2 0 0,1 3,20V4A2,2 0 0,1 5,2H14Z</StreamGeometry>
-    <StreamGeometry x:Key="VolumeIcon">M14,3.23V5.29C16.89,6.15 19,8.83 19,12C19,15.17 16.89,17.84 14,18.7V20.77C18,19.86 21,16.28 21,12C21,7.72 18,4.14 14,3.23M16.5,12C16.5,10.23 15.5,8.71 14,7.97V16C15.5,15.29 16.5,13.76 16.5,12M3,9V15H7L12,20V4L7,9H3Z</StreamGeometry>
+    <!-- icons below are redrawn from the Figma icon set (stroke style, round caps/joins,
+         originally Feather-ish line icons) rather than the old filled Material icons, so
+         they match the mockup. Mic is the one exception - there's no mic icon in the
+         design since viewer mic control isn't part of that screen, so it's hand-picked
+         from the same Feather family to keep the set looking like one icon font. -->
+    <StreamGeometry x:Key="MicIcon">M12,1C10.8954,1 10,1.89543 10,3V11C10,12.1046 10.8954,13 12,13C13.1046,13 14,12.1046 14,11V3C14,1.89543 13.1046,1 12,1Z M19,10V12C19,15.866 15.866,19 12,19C8.13401,19 5,15.866 5,12V10 M12,19V23 M8,23H16</StreamGeometry>
+    <StreamGeometry x:Key="GearIcon">M9.46458,3.95725C9.85508,2.34758 12.1449,2.34758 12.5354,3.95725C12.594,4.19907 12.7089,4.42363 12.8707,4.61267C13.0324,4.8017 13.2366,4.94987 13.4664,5.0451C13.6963,5.14033 13.9454,5.17995 14.1935,5.16071C14.4415,5.14148 14.6816,5.06394 14.894,4.93442C16.3084,4.07275 17.9282,5.69158 17.0665,7.10692C16.9372,7.31927 16.8597,7.55914 16.8406,7.80704C16.8214,8.05494 16.8609,8.30387 16.9561,8.5336C17.0512,8.76332 17.1992,8.96736 17.388,9.12913C17.5768,9.2909 17.8012,9.40583 18.0428,9.46458C19.6524,9.85508 19.6524,12.1449 18.0428,12.5354C17.8009,12.594 17.5764,12.7089 17.3873,12.8707C17.1983,13.0324 17.0501,13.2366 16.9549,13.4664C16.8597,13.6963 16.8201,13.9454 16.8393,14.1935C16.8585,14.4415 16.9361,14.6816 17.0656,14.894C17.9273,16.3084 16.3084,17.9282 14.8931,17.0665C14.6807,16.9372 14.4409,16.8597 14.193,16.8406C13.9451,16.8214 13.6961,16.8609 13.4664,16.9561C13.2367,17.0512 13.0326,17.1992 12.8709,17.388C12.7091,17.5768 12.5942,17.8012 12.5354,18.0428C12.1449,19.6524 9.85508,19.6524 9.46458,18.0428C9.40599,17.8009 9.29113,17.5764 9.12935,17.3873C8.96757,17.1983 8.76344,17.0501 8.53357,16.9549C8.3037,16.8597 8.0546,16.8201 7.80653,16.8393C7.55846,16.8585 7.31844,16.9361 7.106,17.0656C5.69158,17.9273 4.07183,16.3084 4.9335,14.8931C5.06284,14.6807 5.14025,14.4409 5.15944,14.193C5.17863,13.9451 5.13906,13.6961 5.04393,13.4664C4.94881,13.2367 4.80082,13.0326 4.612,12.8709C4.42318,12.7091 4.19885,12.5942 3.95725,12.5354C2.34758,12.1449 2.34758,9.85508 3.95725,9.46458C4.19907,9.40599 4.42363,9.29113 4.61267,9.12935C4.8017,8.96757 4.94987,8.76344 5.0451,8.53357C5.14033,8.3037 5.17995,8.0546 5.16071,7.80653C5.14148,7.55846 5.06394,7.31844 4.93442,7.106C4.07275,5.69158 5.69158,4.07183 7.10692,4.9335C8.02358,5.49083 9.21158,4.99767 9.46458,3.95725Z M8.25,11C8.25,11.7293 8.53973,12.4288 9.05546,12.9445C9.57118,13.4603 10.2707,13.75 11,13.75C11.7293,13.75 12.4288,13.4603 12.9445,12.9445C13.4603,12.4288 13.75,11.7293 13.75,11C13.75,10.2707 13.4603,9.57118 12.9445,9.05546C12.4288,8.53973 11.7293,8.25 11,8.25C10.2707,8.25 9.57118,8.53973 9.05546,9.05546C8.53973,9.57118 8.25,10.2707 8.25,11Z</StreamGeometry>
+    <StreamGeometry x:Key="CaretUpIcon">M3.5,8.75L7,5.25L10.5,8.75</StreamGeometry>
+    <StreamGeometry x:Key="VolumeIcon">M11.25,6C11.7157,6.3493 12.0937,6.80224 12.3541,7.32295C12.6145,7.84366 12.75,8.41783 12.75,9C12.75,9.58217 12.6145,10.1563 12.3541,10.6771C12.0937,11.1978 11.7157,11.6507 11.25,12 M13.275,3.75C14.058,4.38274 14.6895,5.18259 15.1234,6.09099C15.5572,6.99939 15.7824,7.99332 15.7824,9C15.7824,10.0067 15.5572,11.0006 15.1234,11.909C14.6895,12.8174 14.058,13.6173 13.275,14.25 M4.5,11.25H3C2.80109,11.25 2.61032,11.171 2.46967,11.0303C2.32902,10.8897 2.25,10.6989 2.25,10.5V7.5C2.25,7.30109 2.32902,7.11032 2.46967,6.96967C2.61032,6.82902 2.80109,6.75 3,6.75H4.5L7.125,3.375C7.19055,3.24767 7.29949,3.14799 7.43212,3.09397C7.56475,3.03995 7.71233,3.03515 7.84819,3.08043C7.98405,3.12572 8.09923,3.21811 8.17292,3.34091C8.24662,3.4637 8.27395,3.60881 8.25,3.75V14.25C8.27395,14.3912 8.24662,14.5363 8.17292,14.6591C8.09923,14.7819 7.98405,14.8743 7.84819,14.9196C7.71233,14.9649 7.56475,14.9601 7.43212,14.906C7.29949,14.852 7.19055,14.7523 7.125,14.625L4.5,11.25Z</StreamGeometry>
+    <StreamGeometry x:Key="StopWatchingIcon">M3.75,5.25C3.75,4.85218 3.90804,4.47064 4.18934,4.18934C4.47064,3.90804 4.85218,3.75 5.25,3.75H12.75C13.1478,3.75 13.5294,3.90804 13.8107,4.18934C14.092,4.47064 14.25,4.85218 14.25,5.25V12.75C14.25,13.1478 14.092,13.5294 13.8107,13.8107C13.5294,14.092 13.1478,14.25 12.75,14.25H5.25C4.85218,14.25 4.47064,14.092 4.18934,13.8107C3.90804,13.5294 3.75,13.1478 3.75,12.75V5.25Z</StreamGeometry>
+    <StreamGeometry x:Key="StartStreamIcon">M15.75,9V11.25C15.75,11.4489 15.671,11.6397 15.5303,11.7803C15.3897,11.921 15.1989,12 15,12H3C2.80109,12 2.61032,11.921 2.46967,11.7803C2.32902,11.6397 2.25,11.4489 2.25,11.25V3.75C2.25,3.55109 2.32902,3.36032 2.46967,3.21967C2.61032,3.07902 2.80109,3 3,3H9.75 M5.25,15H12.75 M6.75,12V15 M11.25,12V15 M12.75,3H15.75V6 M12,6.75L15.75,3</StreamGeometry>
+    <StreamGeometry x:Key="LeaveIcon">M10.5,6V4.5C10.5,4.10218 10.342,3.72064 10.0607,3.43934C9.77936,3.15804 9.39782,3 9,3H3.75C3.35218,3 2.97064,3.15804 2.68934,3.43934C2.40804,3.72064 2.25,4.10218 2.25,4.5V13.5C2.25,13.8978 2.40804,14.2794 2.68934,14.5607C2.97064,14.842 3.35218,15 3.75,15H9C9.39782,15 9.77936,14.842 10.0607,14.5607C10.342,14.2794 10.5,13.8978 10.5,13.5V12 M6.75,9H15.75L13.5,6.75 M13.5,11.25L15.75,9</StreamGeometry>
+    <StreamGeometry x:Key="FullscreenIcon">M13.3333,3.33333H16.6667V6.66667 M11.6667,8.33333L16.6667,3.33333 M6.66667,16.6667H3.33333V13.3333 M3.33333,16.6667L8.33333,11.6667 M13.3333,16.6667H16.6667V13.3333 M11.6667,11.6667L16.6667,16.6667 M6.66667,3.33333H3.33333V6.66667 M3.33333,3.33333L8.33333,8.33333</StreamGeometry>
+    <StreamGeometry x:Key="KeyIcon">M13.7958,3.2025L16.7975,6.20417C17.0202,6.4268 17.1968,6.69111 17.3173,6.98202C17.4378,7.27292 17.4998,7.58471 17.4998,7.89958C17.4998,8.21446 17.4378,8.52625 17.3173,8.81715C17.1968,9.10805 17.0202,9.37237 16.7975,9.595L14.595,11.7975C14.3724,12.0202 14.1081,12.1968 13.8172,12.3173C13.5262,12.4378 13.2145,12.4998 12.8996,12.4998C12.5847,12.4998 12.2729,12.4378 11.982,12.3173C11.6911,12.1968 11.4268,12.0202 11.2042,11.7975L10.9533,11.5467L5.48833,17.0117C5.21143,17.2885 4.8459,17.4591 4.45583,17.4933L4.31,17.5H3.33333C3.12922,17.5 2.93222,17.425 2.77969,17.2894C2.62716,17.1538 2.52971,16.9669 2.50583,16.7642L2.5,16.6667V15.69C2.5001,15.2987 2.63786,14.9199 2.88917,14.62L2.98833,14.5117L3.33333,14.1667H5V12.5H6.66667V10.8333L8.45333,9.04667L8.2025,8.79583C7.97983,8.5732 7.8032,8.30889 7.68269,8.01798C7.56219,7.72708 7.50016,7.41529 7.50016,7.10042C7.50016,6.78554 7.56219,6.47375 7.68269,6.18285C7.8032,5.89195 7.97983,5.62763 8.2025,5.405L10.405,3.2025C10.6276,2.97983 10.8919,2.8032 11.1828,2.68269C11.4738,2.56219 11.7855,2.50016 12.1004,2.50016C12.4153,2.50016 12.7271,2.56219 13.018,2.68269C13.3089,2.8032 13.5732,2.97983 13.7958,3.2025Z M12.5,7.5H12.5083</StreamGeometry>
+    <StreamGeometry x:Key="CopyIcon">M5.25,7.25025C5.25,6.71975 5.46074,6.21098 5.83586,5.83586C6.21098,5.46074 6.71975,5.25 7.25025,5.25H13.7498C14.0124,5.25 14.2725,5.30174 14.5152,5.40226C14.7579,5.50278 14.9784,5.65012 15.1641,5.83586C15.3499,6.0216 15.4972,6.24211 15.5977,6.48479C15.6983,6.72747 15.75,6.98757 15.75,7.25025V13.7498C15.75,14.0124 15.6983,14.2725 15.5977,14.5152C15.4972,14.7579 15.3499,14.9784 15.1641,15.1641C14.9784,15.3499 14.7579,15.4972 14.5152,15.5977C14.2725,15.6983 14.0124,15.75 13.7498,15.75H7.25025C6.98757,15.75 6.72747,15.6983 6.48479,15.5977C6.24211,15.4972 6.0216,15.3499 5.83586,15.1641C5.65012,14.9784 5.50278,14.7579 5.40226,14.5152C5.30174,14.2725 5.25,14.0124 5.25,13.7498V7.25025Z M3.009,12.5527C2.77901,12.4216 2.5877,12.2321 2.45443,12.0034C2.32116,11.7746 2.25064,11.5147 2.25,11.25V3.75C2.25,2.925 2.925,2.25 3.75,2.25H11.25C11.8125,2.25 12.1185,2.53875 12.375,3</StreamGeometry>
+    <!-- no WindowMinimizeIcon here - it's a flat horizontal line, which has zero height
+         and breaks Path's Stretch=Uniform scaling, so MainWindow draws it as a plain
+         Line instead (same as the mute slash already does) -->
+    <StreamGeometry x:Key="WindowMaximizeIcon">M1.75,2.91667C1.75,2.60725 1.87292,2.3105 2.09171,2.09171C2.3105,1.87292 2.60725,1.75 2.91667,1.75H11.0833C11.3928,1.75 11.6895,1.87292 11.9083,2.09171C12.1271,2.3105 12.25,2.60725 12.25,2.91667V11.0833C12.25,11.3928 12.1271,11.6895 11.9083,11.9083C11.6895,12.1271 11.3928,12.25 11.0833,12.25H2.91667C2.60725,12.25 2.3105,12.1271 2.09171,11.9083C1.87292,11.6895 1.75,11.3928 1.75,11.0833V2.91667Z</StreamGeometry>
+    <StreamGeometry x:Key="WindowCloseIcon">M10.5,3.5L3.5,10.5 M3.5,3.5L10.5,10.5</StreamGeometry>
+    <!-- not from the design - just a plain checkmark for the resolution menu's selected row -->
+    <StreamGeometry x:Key="CheckIcon">M3,8.5L6.5,12L13,4.5</StreamGeometry>
 </ResourceDictionary>
