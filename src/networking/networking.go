@@ -116,8 +116,7 @@ func generateAnswer(offerSDP string) (
 
 	dataChanOpen := make(chan struct{}, 1)
 	dcMessages := make(chan webrtc.DataChannelMessage, 1)
-
-	var dataChannel *webrtc.DataChannel = nil
+	dcReady := make(chan *webrtc.DataChannel, 1)
 
 	//Called when a data channel is created by the remote (I think)
 	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
@@ -125,8 +124,6 @@ func generateAnswer(offerSDP string) (
 		if dc.Label() != managementChannelName {
 			return
 		}
-
-		dataChannel = dc
 
 		dc.OnMessage(func(msg webrtc.DataChannelMessage) {
 			dcMessages <- msg
@@ -137,6 +134,7 @@ func generateAnswer(offerSDP string) (
 			close(dataChanOpen)
 		})
 
+		dcReady <- dc
 	})
 
 	if err := pc.SetRemoteDescription(remoteOffer); err != nil {
@@ -161,8 +159,10 @@ func generateAnswer(offerSDP string) (
 		return nil, nil, nil, nil, fmt.Errorf("Local answer could not be generated")
 	}
 
+	dc := <-dcReady
+
 	keepConnection = true
-	return pc, dataChannel, dataChanOpen, dcMessages, nil
+	return pc, dc, dataChanOpen, dcMessages, nil
 }
 
 func applyAnswer(pc *webrtc.PeerConnection, SDP string) error {
