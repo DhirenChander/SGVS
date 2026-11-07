@@ -16,7 +16,8 @@ func main() {
 	//Check if user wants to create a connection or answer
 	host := (len(args) >= 1 && args[0] == "host")
 
-	go testCallAndResponse(host)
+	testCallAndResponse(host)
+
 }
 
 func testCallAndResponse(host bool) {
@@ -30,11 +31,14 @@ func testCallAndResponse(host bool) {
 		}
 
 		//Wait for data channel to open
+		fmt.Println("Waiting for datachannel to open")
 		<-dataChanOpen
 
+		fmt.Println("Sending message from host")
 		dataChan.SendText("Hello from host :)")
 
 		//Wait for response
+		fmt.Println("Waiting for response")
 		response := <-messages
 
 		if !response.IsString {
