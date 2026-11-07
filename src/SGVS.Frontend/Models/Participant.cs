@@ -7,21 +7,41 @@ namespace SGVS.Frontend.Models;
 public class Participant : ObservableObject
 {
     private bool _isMuted;
+    private bool _isStreamer;
+    private Bitmap? _streamPreview;
 
     public required string Name { get; init; }
 
-    // flat avatar color, one of apple's system colors
+    // flat avatar color, one of apple's system colors (Watch screen)
     public IBrush AvatarBrush { get; init; } = Brushes.Gray;
+
+    // avatar color on the Meeting screen, mapped to a token in Styles/Resources.axaml
+    public AvatarTone Tone { get; init; } = AvatarTone.Neutral;
 
     // stand-in for their camera feed, null = camera off
     public Bitmap? VideoFrame { get; set; }
 
     public bool IsVideoOn => VideoFrame is not null;
 
-    public bool IsStreamer { get; init; }
+    // sharing their screen right now. settable because people start and stop mid-call
+    public bool IsStreamer
+    {
+        get => _isStreamer;
+        set => SetProperty(ref _isStreamer, value);
+    }
+
+    // latest frame of their stream for the gallery tile, null while nothing has arrived
+    public Bitmap? StreamPreview
+    {
+        get => _streamPreview;
+        set => SetProperty(ref _streamPreview, value);
+    }
 
     // true for whoever is running this app
     public bool IsSelf { get; init; }
+
+    // what the gallery tile says: your own tile reads "You"
+    public string TileLabel => IsSelf ? "You" : Name;
 
     // "Viewer 2" -> "V2"
     public string Initials
