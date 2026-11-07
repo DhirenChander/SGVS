@@ -8,6 +8,7 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
+// TODO: only close peer connection if it is not nil (in all files)
 func main() {
 
 	args := os.Args[1:]
