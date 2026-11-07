@@ -59,8 +59,10 @@ func testCallAndResponse(host bool) {
 			return
 		}
 
+		fmt.Println("Waiting for datachannel to open")
 		<-dataChanOpen
 
+		fmt.Println("Waiting for message from host")
 		firstMessage := <-messages
 
 		if !firstMessage.IsString {
