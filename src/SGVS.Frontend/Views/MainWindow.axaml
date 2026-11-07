@@ -10,6 +10,7 @@
         Title="SGVS" Width="1280" Height="720" MinWidth="960" MinHeight="600"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaTitleBarHeightHint="-1"
+        WindowDecorationsTheme="{StaticResource SgvsWindowDecorations}"
         FontFamily="SF Pro Display, Segoe UI Variable Display, Inter, Segoe UI, sans-serif"
         Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}">
 

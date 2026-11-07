@@ -27,6 +27,11 @@
     </UserControl.Styles>
 
     <Panel>
+        <!-- this page paints its own background, which would cover the window's drag strip.
+             marking the top 36px as title bar keeps dragging, snapping and double-click-to-maximize working -->
+        <Border Height="36" VerticalAlignment="Top" Background="Transparent"
+                WindowDecorationProperties.ElementRole="TitleBar" />
+
         <!-- gallery. one tile per member, the grid widens as people join.
              top 44 leaves room for the title bar (36) plus the 8px gap -->
         <ItemsControl ItemsSource="{Binding Members}" Margin="24,44,24,78">

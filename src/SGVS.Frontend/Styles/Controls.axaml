@@ -208,6 +208,12 @@
         <Setter Property="Height" Value="40" />
         <Setter Property="Padding" Value="10,0" />
     </Style>
+    <!-- window minimize / maximize / close (Styles/WindowChrome.axaml) -->
+    <Style Selector="Button.flat.caption">
+        <Setter Property="Width" Value="44" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="CornerRadius" Value="0" />
+    </Style>
     <!-- rows in the glass stream menu -->
     <Style Selector="Button.flat.menuitem">
         <Setter Property="Height" Value="{DynamicResource SgvsSizeControl}" />
