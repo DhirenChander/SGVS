@@ -69,8 +69,7 @@
                                             AutomationProperties.Name="{Binding Name, StringFormat='Watch {0}'}">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <Panel Width="18" Height="18">
-                                                <Path Classes="lineicon" Data="{StaticResource SgvsEyeIcon}"
-                                                      Stroke="{DynamicResource SgvsOnAccentBrush}" />
+                                                <Path Classes="lineicon onaccent" Data="{StaticResource SgvsEyeIcon}" />
                                             </Panel>
                                             <TextBlock Classes="label" Text="Watch" Foreground="{DynamicResource SgvsOnAccentBrush}" />
                                         </StackPanel>
@@ -133,7 +132,7 @@
                         Command="{Binding ToggleShareMenuCommand}" AutomationProperties.Name="Start stream">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Panel Width="18" Height="18">
-                            <Path Classes="lineicon" Data="{StaticResource SgvsShareIcon}" Stroke="{DynamicResource SgvsTextBrush}" />
+                            <Path Classes="lineicon text" Data="{StaticResource SgvsShareIcon}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Start stream" />
                         <Panel Width="14" Height="14" VerticalAlignment="Center">
@@ -146,7 +145,7 @@
                         Command="{Binding StopStreamCommand}" AutomationProperties.Name="Stop stream">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Panel Width="18" Height="18">
-                            <Path Classes="lineicon" Data="{StaticResource SgvsStopIcon}" Stroke="{DynamicResource SgvsTextBrush}" />
+                            <Path Classes="lineicon text" Data="{StaticResource SgvsStopIcon}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Stop stream" />
                     </StackPanel>
@@ -156,7 +155,7 @@
             <Button Classes="flat bar" Command="{Binding LeaveCommand}" AutomationProperties.Name="Leave meeting">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Panel Width="18" Height="18">
-                        <Path Classes="lineicon" Data="{StaticResource SgvsLeaveIcon}" Stroke="{DynamicResource SgvsDangerTextBrush}" />
+                        <Path Classes="lineicon danger" Data="{StaticResource SgvsLeaveIcon}" />
                     </Panel>
                     <TextBlock Classes="label" Text="Leave" Foreground="{DynamicResource SgvsDangerTextBrush}" />
                 </StackPanel>
@@ -179,8 +178,7 @@
                                LetterSpacing="0.84" VerticalAlignment="Center" />
                     <Panel Width="18" Height="18" VerticalAlignment="Center">
                         <Path Classes="lineicon" Data="{StaticResource SgvsCopyIcon}" IsVisible="{Binding !IsCodeCopied}" />
-                        <Path Classes="lineicon" Data="{StaticResource SgvsCheckIcon}" IsVisible="{Binding IsCodeCopied}"
-                              Stroke="{DynamicResource SgvsAccentBrush}" />
+                        <Path Classes="lineicon accent" Data="{StaticResource SgvsCheckIcon}" IsVisible="{Binding IsCodeCopied}" />
                     </Panel>
                 </StackPanel>
             </Button>

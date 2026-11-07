@@ -121,7 +121,8 @@
          =================================================================================== -->
 
     <!-- Figma line icons (Sgvs*Icon). drawn at their real size, no stretching, from the top-left of a
-         Panel that is the icon's size. Stroke defaults to text-muted, set it on the Path for other colors -->
+         Panel that is the icon's size. text-muted by default, add a color class for the others
+         (a Stroke set on the Path itself got lost inside the gallery's DataTemplate, classes don't) -->
     <Style Selector="Path.lineicon">
         <Setter Property="Stretch" Value="None" />
         <Setter Property="HorizontalAlignment" Value="Left" />
@@ -130,6 +131,18 @@
         <Setter Property="StrokeLineCap" Value="Round" />
         <Setter Property="StrokeJoin" Value="Round" />
         <Setter Property="Stroke" Value="{DynamicResource SgvsTextMutedBrush}" />
+    </Style>
+    <Style Selector="Path.lineicon.text">
+        <Setter Property="Stroke" Value="{DynamicResource SgvsTextBrush}" />
+    </Style>
+    <Style Selector="Path.lineicon.onaccent">
+        <Setter Property="Stroke" Value="{DynamicResource SgvsOnAccentBrush}" />
+    </Style>
+    <Style Selector="Path.lineicon.accent">
+        <Setter Property="Stroke" Value="{DynamicResource SgvsAccentBrush}" />
+    </Style>
+    <Style Selector="Path.lineicon.danger">
+        <Setter Property="Stroke" Value="{DynamicResource SgvsDangerTextBrush}" />
     </Style>
 
     <!-- base for every SGVS button: a flat background plus a hover wash on top.
