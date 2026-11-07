@@ -1,13 +1,15 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+    <!-- colors come from Styles/Resources.axaml, nothing is hardcoded in here -->
+
     <!-- round mic/camera buttons. checked = off, which flips to solid white like facetime -->
     <Style Selector="ToggleButton.round">
         <Setter Property="Width" Value="52" />
         <Setter Property="Height" Value="52" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Foreground" Value="{DynamicResource IconBrush}" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
@@ -22,14 +24,14 @@
         <Setter Property="Background" Value="{DynamicResource GlassButtonHoverBrush}" />
     </Style>
     <Style Selector="ToggleButton.round:checked /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="#F2FFFFFF" />
+        <Setter Property="Background" Value="{DynamicResource RoundCheckedBrush}" />
     </Style>
     <Style Selector="ToggleButton.round:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="White" />
+        <Setter Property="Background" Value="{DynamicResource RoundCheckedHoverBrush}" />
     </Style>
     <!-- icon + slash take the button's foreground (see WatchView), so they go dark on the white circle -->
     <Style Selector="ToggleButton.round:checked">
-        <Setter Property="Foreground" Value="#1C1C1E" />
+        <Setter Property="Foreground" Value="{DynamicResource RoundCheckedForegroundBrush}" />
     </Style>
 
     <!-- leave button, the one solid-color thing on screen -->
@@ -58,7 +60,7 @@
         <Setter Property="Stretch" Value="Uniform" />
         <Setter Property="HorizontalAlignment" Value="Center" />
         <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="Fill" Value="White" />
+        <Setter Property="Fill" Value="{DynamicResource IconBrush}" />
     </Style>
 
     <!-- small invisible button around the volume icon, lights up on hover -->
@@ -83,7 +85,7 @@
 
     <!-- the diagonal "off" slash drawn over an icon -->
     <Style Selector="Line.slash">
-        <Setter Property="Stroke" Value="White" />
+        <Setter Property="Stroke" Value="{DynamicResource IconBrush}" />
         <Setter Property="StrokeThickness" Value="2.4" />
         <Setter Property="StrokeLineCap" Value="Round" />
     </Style>
@@ -91,15 +93,15 @@
     <!-- thin white volume slider. these are the theme's own resource keys -->
     <Style Selector="Slider.volume">
         <Style.Resources>
-            <SolidColorBrush x:Key="SliderTrackFill" Color="#40FFFFFF" />
-            <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#40FFFFFF" />
-            <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#40FFFFFF" />
-            <SolidColorBrush x:Key="SliderTrackValueFill" Color="White" />
-            <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="White" />
-            <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="White" />
-            <SolidColorBrush x:Key="SliderThumbBackground" Color="White" />
-            <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="White" />
-            <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="White" />
+            <StaticResource x:Key="SliderTrackFill" ResourceKey="VolumeTrackBrush" />
+            <StaticResource x:Key="SliderTrackFillPointerOver" ResourceKey="VolumeTrackBrush" />
+            <StaticResource x:Key="SliderTrackFillPressed" ResourceKey="VolumeTrackBrush" />
+            <StaticResource x:Key="SliderTrackValueFill" ResourceKey="VolumeFillBrush" />
+            <StaticResource x:Key="SliderTrackValueFillPointerOver" ResourceKey="VolumeFillBrush" />
+            <StaticResource x:Key="SliderTrackValueFillPressed" ResourceKey="VolumeFillBrush" />
+            <StaticResource x:Key="SliderThumbBackground" ResourceKey="VolumeFillBrush" />
+            <StaticResource x:Key="SliderThumbBackgroundPointerOver" ResourceKey="VolumeFillBrush" />
+            <StaticResource x:Key="SliderThumbBackgroundPressed" ResourceKey="VolumeFillBrush" />
             <x:Double x:Key="SliderTrackThemeHeight">4</x:Double>
             <x:Double x:Key="SliderHorizontalThumbWidth">16</x:Double>
             <x:Double x:Key="SliderHorizontalThumbHeight">16</x:Double>
@@ -109,8 +111,107 @@
     <!-- resolution dropdown list: dark and slightly see-through so it matches -->
     <Style Selector="ComboBox.res">
         <Style.Resources>
-            <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#F01E2026" />
-            <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#26FFFFFF" />
+            <StaticResource x:Key="ComboBoxDropDownBackground" ResourceKey="ResDropDownBrush" />
+            <StaticResource x:Key="ComboBoxDropDownBorderBrush" ResourceKey="ResDropDownBorderBrush" />
         </Style.Resources>
+    </Style>
+
+    <!-- ===================================================================================
+         SGVS (Figma) controls, used by MeetingView. sizes and colors are the Sgvs* tokens
+         =================================================================================== -->
+
+    <!-- Figma line icons (Sgvs*Icon). drawn at their real size, no stretching, from the top-left of a
+         Panel that is the icon's size. Stroke defaults to text-muted, set it on the Path for other colors -->
+    <Style Selector="Path.lineicon">
+        <Setter Property="Stretch" Value="None" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="StrokeThickness" Value="2" />
+        <Setter Property="StrokeLineCap" Value="Round" />
+        <Setter Property="StrokeJoin" Value="Round" />
+        <Setter Property="Stroke" Value="{DynamicResource SgvsTextMutedBrush}" />
+    </Style>
+
+    <!-- base for every SGVS button: a flat background plus a hover wash on top.
+         Figma has no hover/pressed states, so the wash (SgvsHoverBrush) is the only addition -->
+    <Style Selector="Button.flat">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource SgvsTextBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource SgvsRadiusControl}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontFamily" Value="{DynamicResource SgvsUiFont}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <Border Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}" />
+                    <Border Name="PART_Wash" Background="{DynamicResource SgvsHoverBrush}"
+                            CornerRadius="{TemplateBinding CornerRadius}" IsVisible="False" />
+                    <ContentPresenter Name="PART_ContentPresenter"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Padding="{TemplateBinding Padding}"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Button.flat:pointerover /template/ Border#PART_Wash">
+        <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="Button.flat:pressed /template/ Border#PART_Wash">
+        <Setter Property="IsVisible" Value="True" />
+        <Setter Property="Background" Value="{DynamicResource SgvsPressedBrush}" />
+    </Style>
+    <!-- fluent colors the presenter on hover/press. our background lives on the Borders above, so keep it clear -->
+    <Style Selector="Button.flat /template/ ContentPresenter#PART_ContentPresenter, Button.flat:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.flat:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+
+    <!-- Figma "Button / Bar": Start stream, Stop stream, Leave -->
+    <Style Selector="Button.flat.bar">
+        <Setter Property="Background" Value="{DynamicResource SgvsSurfaceRaisedBrush}" />
+        <Setter Property="Height" Value="{DynamicResource SgvsSizeControl}" />
+        <Setter Property="Padding" Value="16,0" />
+    </Style>
+    <!-- Figma "Button / Accent": Watch -->
+    <Style Selector="Button.flat.accent">
+        <Setter Property="Background" Value="{DynamicResource SgvsAccentBrush}" />
+        <Setter Property="Height" Value="{DynamicResource SgvsSizeControl}" />
+        <Setter Property="Padding" Value="16,0" />
+    </Style>
+    <!-- 40x40 icon-only buttons: settings gear, code key -->
+    <Style Selector="Button.flat.square">
+        <Setter Property="Width" Value="40" />
+        <Setter Property="Height" Value="40" />
+    </Style>
+    <!-- the revealed code: text + copy icon, 40 tall, hugs its content -->
+    <Style Selector="Button.flat.code">
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Padding" Value="10,0" />
+    </Style>
+    <!-- rows in the glass stream menu -->
+    <Style Selector="Button.flat.menuitem">
+        <Setter Property="Height" Value="{DynamicResource SgvsSizeControl}" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+    </Style>
+
+    <!-- Figma text styles -->
+    <Style Selector="TextBlock.label">          <!-- Button/Label -->
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.tilename">       <!-- Tile/Name -->
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource SgvsTextBrush}" />
     </Style>
 </Styles>

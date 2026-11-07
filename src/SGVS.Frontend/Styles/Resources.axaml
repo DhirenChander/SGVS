@@ -1,8 +1,109 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- colors + icons, looked up by key everywhere else.
-         glass = white at low alpha over the blurred backdrop, so the alpha values are the whole look -->
+    <!-- every color in the app lives in this file, so swapping the palette is a one-file change -->
+
+    <!-- ===================================================================================
+         SGVS tokens. mirrors the "SGVS tokens" variable collection in Figma
+         (color/accent -> SgvsAccentColor / SgvsAccentBrush, radius/control -> SgvsRadiusControl ...).
+         the palette is still a placeholder, change the hex values here when it's final.
+         =================================================================================== -->
+    <Color x:Key="SgvsGroundColor">#110F0E</Color>
+    <Color x:Key="SgvsSurfaceColor">#1C1A18</Color>
+    <Color x:Key="SgvsSurfaceRaisedColor">#292623</Color>
+    <Color x:Key="SgvsTextColor">#F0EEEC</Color>
+    <Color x:Key="SgvsTextMutedColor">#B4B0AC</Color>
+    <Color x:Key="SgvsOutlineColor">#6E6A66</Color>
+    <Color x:Key="SgvsOutlineFocusColor">#8E8A85</Color>
+    <Color x:Key="SgvsAccentColor">#53C9C9</Color>
+    <Color x:Key="SgvsOnAccentColor">#0E0F12</Color>
+    <Color x:Key="SgvsGradientMidColor">#EDB25A</Color>
+    <Color x:Key="SgvsGradientEndColor">#F3DAB2</Color>
+    <Color x:Key="SgvsDangerTextColor">#F09A8E</Color>
+
+    <SolidColorBrush x:Key="SgvsGroundBrush" Color="{StaticResource SgvsGroundColor}" />
+    <SolidColorBrush x:Key="SgvsSurfaceBrush" Color="{StaticResource SgvsSurfaceColor}" />
+    <SolidColorBrush x:Key="SgvsSurfaceRaisedBrush" Color="{StaticResource SgvsSurfaceRaisedColor}" />
+    <SolidColorBrush x:Key="SgvsTextBrush" Color="{StaticResource SgvsTextColor}" />
+    <SolidColorBrush x:Key="SgvsTextMutedBrush" Color="{StaticResource SgvsTextMutedColor}" />
+    <SolidColorBrush x:Key="SgvsOutlineBrush" Color="{StaticResource SgvsOutlineColor}" />
+    <SolidColorBrush x:Key="SgvsOutlineFocusBrush" Color="{StaticResource SgvsOutlineFocusColor}" />
+    <SolidColorBrush x:Key="SgvsAccentBrush" Color="{StaticResource SgvsAccentColor}" />
+    <SolidColorBrush x:Key="SgvsOnAccentBrush" Color="{StaticResource SgvsOnAccentColor}" />
+    <SolidColorBrush x:Key="SgvsGradientMidBrush" Color="{StaticResource SgvsGradientMidColor}" />
+    <SolidColorBrush x:Key="SgvsGradientEndBrush" Color="{StaticResource SgvsGradientEndColor}" />
+    <SolidColorBrush x:Key="SgvsDangerTextBrush" Color="{StaticResource SgvsDangerTextColor}" />
+
+    <CornerRadius x:Key="SgvsRadiusControl">8</CornerRadius>
+    <x:Double x:Key="SgvsSizeControl">44</x:Double>
+    <x:Double x:Key="SgvsSizeControlLarge">72</x:Double>
+    <x:Double x:Key="SgvsSpaceStack">16</x:Double>
+
+    <!-- avatar tones (Figma "Avatar / Tone=..."). each is a token color: the circle is it at 20%, the initial is it solid -->
+    <SolidColorBrush x:Key="SgvsToneTealBrush" Color="{StaticResource SgvsAccentColor}" />
+    <SolidColorBrush x:Key="SgvsToneAmberBrush" Color="{StaticResource SgvsGradientMidColor}" />
+    <SolidColorBrush x:Key="SgvsToneSandBrush" Color="{StaticResource SgvsGradientEndColor}" />
+    <SolidColorBrush x:Key="SgvsToneNeutralBrush" Color="{StaticResource SgvsTextMutedColor}" />
+
+    <!-- live tile border: accent -> gradient-mid -> gradient-end, left to right -->
+    <LinearGradientBrush x:Key="SgvsLiveStrokeBrush" StartPoint="0%,50%" EndPoint="100%,50%">
+        <GradientStop Color="{StaticResource SgvsAccentColor}" Offset="0" />
+        <GradientStop Color="{StaticResource SgvsGradientMidColor}" Offset="0.5" />
+        <GradientStop Color="{StaticResource SgvsGradientEndColor}" Offset="1" />
+    </LinearGradientBrush>
+
+    <!-- glass stream menu: surface-raised at 62% with a faint white edge.
+         Figma also blurs what is behind it (18px). Avalonia can only blur the whole window, so that part is skipped -->
+    <SolidColorBrush x:Key="SgvsGlassBrush" Color="{StaticResource SgvsSurfaceRaisedColor}" Opacity="0.62" />
+    <Color x:Key="SgvsGlassEdgeColor">#FFFFFF</Color>
+    <SolidColorBrush x:Key="SgvsGlassEdgeBrush" Color="{StaticResource SgvsGlassEdgeColor}" Opacity="0.1" />
+
+    <!-- not in Figma (it has no hover/pressed states): a thin wash of the text color over the button -->
+    <SolidColorBrush x:Key="SgvsHoverBrush" Color="{StaticResource SgvsTextColor}" Opacity="0.06" />
+    <SolidColorBrush x:Key="SgvsPressedBrush" Color="{StaticResource SgvsTextColor}" Opacity="0.1" />
+
+    <!-- shadows, same values as the Figma effects -->
+    <BoxShadows x:Key="SgvsLiveTileShadow">0 8 28 0 #70000000</BoxShadows>
+    <BoxShadows x:Key="SgvsMenuShadow">0 14 34 0 #80000000</BoxShadows>
+    <Color x:Key="SgvsShadowColor">#000000</Color>
+    <DropShadowEffect x:Key="SgvsTileNameShadow" OffsetX="0" OffsetY="1" BlurRadius="3"
+                      Color="{StaticResource SgvsShadowColor}" Opacity="0.65" />
+
+    <!-- Inter comes from the Avalonia.Fonts.Inter package.
+         JetBrains Mono is not bundled yet, so the code falls back to Consolas until it is -->
+    <FontFamily x:Key="SgvsUiFont">fonts:Inter#Inter</FontFamily>
+    <FontFamily x:Key="SgvsCodeFont">JetBrains Mono, Consolas, monospace</FontFamily>
+
+    <!-- line icons from the Figma file, path data copied as-is. they are strokes (2px, round ends), not fills,
+         and the numbers are in the icon's own size (18 = an 18x18 box), so draw them with Path.lineicon
+         inside a Panel of that size -->
+    <!-- 18 -->
+    <StreamGeometry x:Key="SgvsShareIcon">M15.75 9V11.25C15.75 11.4489 15.671 11.6397 15.5303 11.7803C15.3897 11.921 15.1989 12 15 12H3C2.80109 12 2.61032 11.921 2.46967 11.7803C2.32902 11.6397 2.25 11.4489 2.25 11.25V3.75C2.25 3.55109 2.32902 3.36032 2.46967 3.21967C2.61032 3.07902 2.80109 3 3 3H9.75M5.25 15H12.75M6.75 12V15M11.25 12V15M12.75 3H15.75V6M12 6.75L15.75 3</StreamGeometry>
+    <!-- 18 -->
+    <StreamGeometry x:Key="SgvsStopIcon">M3.75 5.25C3.75 4.85218 3.90804 4.47064 4.18934 4.18934C4.47064 3.90804 4.85218 3.75 5.25 3.75H12.75C13.1478 3.75 13.5294 3.90804 13.8107 4.18934C14.092 4.47064 14.25 4.85218 14.25 5.25V12.75C14.25 13.1478 14.092 13.5294 13.8107 13.8107C13.5294 14.092 13.1478 14.25 12.75 14.25H5.25C4.85218 14.25 4.47064 14.092 4.18934 13.8107C3.90804 13.5294 3.75 13.1478 3.75 12.75V5.25Z</StreamGeometry>
+    <!-- 18 -->
+    <StreamGeometry x:Key="SgvsLeaveIcon">M10.5 6V4.5C10.5 4.10218 10.342 3.72064 10.0607 3.43934C9.77936 3.15804 9.39782 3 9 3H3.75C3.35218 3 2.97064 3.15804 2.68934 3.43934C2.40804 3.72064 2.25 4.10218 2.25 4.5V13.5C2.25 13.8978 2.40804 14.2794 2.68934 14.5607C2.97064 14.842 3.35218 15 3.75 15H9C9.39782 15 9.77936 14.842 10.0607 14.5607C10.342 14.2794 10.5 13.8978 10.5 13.5V12M6.75 9H15.75L13.5 6.75M13.5 11.25L15.75 9</StreamGeometry>
+    <!-- 18 -->
+    <StreamGeometry x:Key="SgvsEyeIcon">M7.5 9C7.5 9.39782 7.65804 9.77936 7.93934 10.0607C8.22064 10.342 8.60218 10.5 9 10.5C9.39782 10.5 9.77936 10.342 10.0607 10.0607C10.342 9.77936 10.5 9.39782 10.5 9C10.5 8.60218 10.342 8.22064 10.0607 7.93934C9.77936 7.65804 9.39782 7.5 9 7.5C8.60218 7.5 8.22064 7.65804 7.93934 7.93934C7.65804 8.22064 7.5 8.60218 7.5 9ZM15.75 9C13.95 12 11.7 13.5 9 13.5C6.3 13.5 4.05 12 2.25 9C4.05 6 6.3 4.5 9 4.5C11.7 4.5 13.95 6 15.75 9Z</StreamGeometry>
+    <!-- 18 -->
+    <StreamGeometry x:Key="SgvsDeskIcon">M2.25 3.75C2.25 3.55109 2.32902 3.36032 2.46967 3.21967C2.61032 3.07902 2.80109 3 3 3H15C15.1989 3 15.3897 3.07902 15.5303 3.21967C15.671 3.36032 15.75 3.55109 15.75 3.75V11.25C15.75 11.4489 15.671 11.6397 15.5303 11.7803C15.3897 11.921 15.1989 12 15 12H3C2.80109 12 2.61032 11.921 2.46967 11.7803C2.32902 11.6397 2.25 11.4489 2.25 11.25V3.75ZM5.25 15H12.75M6.75 12V15M11.25 12V15</StreamGeometry>
+    <!-- 18 -->
+    <StreamGeometry x:Key="SgvsAppIcon">M2.25 5.25C2.25 4.85218 2.40804 4.47064 2.68934 4.18934C2.97064 3.90804 3.35218 3.75 3.75 3.75H14.25C14.6478 3.75 15.0294 3.90804 15.3107 4.18934C15.592 4.47064 15.75 4.85218 15.75 5.25V12.75C15.75 13.1478 15.592 13.5294 15.3107 13.8107C15.0294 14.092 14.6478 14.25 14.25 14.25H3.75C3.35218 14.25 2.97064 14.092 2.68934 13.8107C2.40804 13.5294 2.25 13.1478 2.25 12.75V5.25ZM4.5 6H4.5075M6.75 6H6.7575</StreamGeometry>
+    <!-- 18 -->
+    <StreamGeometry x:Key="SgvsCopyIcon">M5.25 7.25025C5.25 6.71975 5.46074 6.21098 5.83586 5.83586C6.21098 5.46074 6.71975 5.25 7.25025 5.25H13.7498C14.0124 5.25 14.2725 5.30174 14.5152 5.40226C14.7579 5.50278 14.9784 5.65012 15.1641 5.83586C15.3499 6.0216 15.4972 6.24211 15.5977 6.48479C15.6983 6.72747 15.75 6.98757 15.75 7.25025V13.7498C15.75 14.0124 15.6983 14.2725 15.5977 14.5152C15.4972 14.7579 15.3499 14.9784 15.1641 15.1641C14.9784 15.3499 14.7579 15.4972 14.5152 15.5977C14.2725 15.6983 14.0124 15.75 13.7498 15.75H7.25025C6.98757 15.75 6.72747 15.6983 6.48479 15.5977C6.24211 15.4972 6.0216 15.3499 5.83586 15.1641C5.65012 14.9784 5.50278 14.7579 5.40226 14.5152C5.30174 14.2725 5.25 14.0124 5.25 13.7498V7.25025ZM3.009 12.5527C2.77901 12.4216 2.5877 12.2321 2.45443 12.0034C2.32116 11.7746 2.25064 11.5147 2.25 11.25V3.75C2.25 2.925 2.925 2.25 3.75 2.25H11.25C11.8125 2.25 12.1185 2.53875 12.375 3</StreamGeometry>
+    <!-- 18 -->
+    <StreamGeometry x:Key="SgvsCheckIcon">M3.75 9L7.5 12.75L15 5.25</StreamGeometry>
+    <!-- 14 -->
+    <StreamGeometry x:Key="SgvsChevronUpIcon">M3.5 8.75L7 5.25L10.5 8.75</StreamGeometry>
+    <!-- 20 -->
+    <StreamGeometry x:Key="SgvsKeyIcon">M13.7958 3.2025L16.7975 6.20417C17.0202 6.4268 17.1968 6.69111 17.3173 6.98202C17.4378 7.27292 17.4998 7.58471 17.4998 7.89958C17.4998 8.21446 17.4378 8.52625 17.3173 8.81715C17.1968 9.10805 17.0202 9.37237 16.7975 9.595L14.595 11.7975C14.3724 12.0202 14.1081 12.1968 13.8172 12.3173C13.5262 12.4378 13.2145 12.4998 12.8996 12.4998C12.5847 12.4998 12.2729 12.4378 11.982 12.3173C11.6911 12.1968 11.4268 12.0202 11.2042 11.7975L10.9533 11.5467L5.48833 17.0117C5.21143 17.2885 4.8459 17.4591 4.45583 17.4933L4.31 17.5H3.33333C3.12922 17.5 2.93222 17.425 2.77969 17.2894C2.62716 17.1538 2.52971 16.9669 2.50583 16.7642L2.5 16.6667V15.69C2.5001 15.2987 2.63786 14.9199 2.88917 14.62L2.98833 14.5117L3.33333 14.1667H5V12.5H6.66667V10.8333L8.45333 9.04667L8.2025 8.79583C7.97983 8.5732 7.8032 8.30889 7.68269 8.01798C7.56219 7.72708 7.50016 7.41529 7.50016 7.10042C7.50016 6.78554 7.56219 6.47375 7.68269 6.18285C7.8032 5.89195 7.97983 5.62763 8.2025 5.405L10.405 3.2025C10.6276 2.97983 10.8919 2.8032 11.1828 2.68269C11.4738 2.56219 11.7855 2.50016 12.1004 2.50016C12.4153 2.50016 12.7271 2.56219 13.018 2.68269C13.3089 2.8032 13.5732 2.97983 13.7958 3.2025ZM12.5 7.5H12.5083</StreamGeometry>
+    <!-- 22 -->
+    <StreamGeometry x:Key="SgvsSettingsIcon">M9.46458 3.95725C9.85508 2.34758 12.1449 2.34758 12.5354 3.95725C12.594 4.19907 12.7089 4.42363 12.8707 4.61267C13.0324 4.8017 13.2366 4.94987 13.4664 5.0451C13.6963 5.14033 13.9454 5.17995 14.1935 5.16071C14.4415 5.14148 14.6816 5.06394 14.894 4.93442C16.3084 4.07275 17.9282 5.69158 17.0665 7.10692C16.9372 7.31927 16.8597 7.55914 16.8406 7.80704C16.8214 8.05494 16.8609 8.30387 16.9561 8.5336C17.0512 8.76332 17.1992 8.96736 17.388 9.12913C17.5768 9.2909 17.8012 9.40583 18.0428 9.46458C19.6524 9.85508 19.6524 12.1449 18.0428 12.5354C17.8009 12.594 17.5764 12.7089 17.3873 12.8707C17.1983 13.0324 17.0501 13.2366 16.9549 13.4664C16.8597 13.6963 16.8201 13.9454 16.8393 14.1935C16.8585 14.4415 16.9361 14.6816 17.0656 14.894C17.9273 16.3084 16.3084 17.9282 14.8931 17.0665C14.6807 16.9372 14.4409 16.8597 14.193 16.8406C13.9451 16.8214 13.6961 16.8609 13.4664 16.9561C13.2367 17.0512 13.0326 17.1992 12.8709 17.388C12.7091 17.5768 12.5942 17.8012 12.5354 18.0428C12.1449 19.6524 9.85508 19.6524 9.46458 18.0428C9.40599 17.8009 9.29113 17.5764 9.12935 17.3873C8.96757 17.1983 8.76344 17.0501 8.53357 16.9549C8.3037 16.8597 8.0546 16.8201 7.80653 16.8393C7.55846 16.8585 7.31844 16.9361 7.106 17.0656C5.69158 17.9273 4.07183 16.3084 4.9335 14.8931C5.06284 14.6807 5.14025 14.4409 5.15944 14.193C5.17863 13.9451 5.13906 13.6961 5.04393 13.4664C4.94881 13.2367 4.80082 13.0326 4.612 12.8709C4.42318 12.7091 4.19885 12.5942 3.95725 12.5354C2.34758 12.1449 2.34758 9.85508 3.95725 9.46458C4.19907 9.40599 4.42363 9.29113 4.61267 9.12935C4.8017 8.96757 4.94987 8.76344 5.0451 8.53357C5.14033 8.3037 5.17995 8.0546 5.16071 7.80653C5.14148 7.55846 5.06394 7.31844 4.93442 7.106C4.07275 5.69158 5.69158 4.07183 7.10692 4.9335C8.02358 5.49083 9.21158 4.99767 9.46458 3.95725ZM8.25 11C8.25 11.7293 8.53973 12.4288 9.05546 12.9445C9.57118 13.4603 10.2707 13.75 11 13.75C11.7293 13.75 12.4288 13.4603 12.9445 12.9445C13.4603 12.4288 13.75 11.7293 13.75 11C13.75 10.2707 13.4603 9.57118 12.9445 9.05546C12.4288 8.53973 11.7293 8.25 11 8.25C10.2707 8.25 9.57118 8.53973 9.05546 9.05546C8.53973 9.57118 8.25 10.2707 8.25 11Z</StreamGeometry>
+
+    <!-- ===================================================================================
+         Watch screen palette (pre-Figma, from PR #31). glass = white at low alpha over the blurred backdrop,
+         so the alpha values are the whole look
+         =================================================================================== -->
     <SolidColorBrush x:Key="BgBrush" Color="#0B0D12" />
 
     <!-- panels (stream card, member list) -->
@@ -33,6 +134,16 @@
     <SolidColorBrush x:Key="DangerBrush" Color="#FF453A" />
     <SolidColorBrush x:Key="DangerHoverBrush" Color="#FF6961" />
     <SolidColorBrush x:Key="DangerPressedBrush" Color="#D70015" />
+
+    <!-- used by Styles/Controls.axaml (moved here so colors stay in one file) -->
+    <SolidColorBrush x:Key="IconBrush" Color="White" />                    <!-- Path.icon, slashes, round button glyphs -->
+    <SolidColorBrush x:Key="RoundCheckedBrush" Color="#F2FFFFFF" />        <!-- mic/camera "off": solid white circle -->
+    <SolidColorBrush x:Key="RoundCheckedHoverBrush" Color="White" />
+    <SolidColorBrush x:Key="RoundCheckedForegroundBrush" Color="#1C1C1E" />
+    <SolidColorBrush x:Key="VolumeTrackBrush" Color="#40FFFFFF" />
+    <SolidColorBrush x:Key="VolumeFillBrush" Color="White" />
+    <SolidColorBrush x:Key="ResDropDownBrush" Color="#F01E2026" />
+    <SolidColorBrush x:Key="ResDropDownBorderBrush" Color="#26FFFFFF" />
 
     <!-- icons are Material Design paths (24x24), no icon font so it works on linux/mac too -->
     <StreamGeometry x:Key="MicIcon">M12,2A3,3 0 0,1 15,5V11A3,3 0 0,1 12,14A3,3 0 0,1 9,11V5A3,3 0 0,1 12,2M19,11C19,14.53 16.39,17.44 13,17.93V21H11V17.93C7.61,17.44 5,14.53 5,11H7A5,5 0 0,0 12,16A5,5 0 0,0 17,11H19Z</StreamGeometry>
