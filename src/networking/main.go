@@ -15,83 +15,141 @@ func main() {
 	//Check if user wants to create a connection or answer
 	makeAnswer := (len(args) >= 1 && args[0] == "answer")
 
-	reader := bufio.NewReader(os.Stdin)
+	if !makeAnswer /* We are the host */ {
 
-	//TODO: Move these into separate functions
-	if makeAnswer {
-		messages := make(chan webrtc.DataChannelMessage, 1)
-		//wait for user input
+		peerConnection, dataChan, dataChanOpen, messages, err := setupPcAsHost()
 
-		fmt.Println("Enter connection string:\n")
-		SDPOfferStr, err := readSDP(reader)
 		if err != nil {
-			fmt.Printf("Error reading offer: %s\n", err)
+			fmt.Printf("Error setting up connection: %s\n", err)
 			return
 		}
 
-		answerPc, err := generateAnswer(SDPOfferStr, messages)
-		defer func() { _ = answerPc.Close() }()
-		if err != nil {
-			fmt.Printf("Error generating answer: %s\n", err)
+		//Wait for data channel to open
+		<-dataChanOpen
+
+		dataChan.SendText("Hello from host :)")
+
+		//Wait for response
+		response := <-messages
+
+		if !response.IsString {
+			fmt.Printf("Message was not a string")
 			return
 		}
 
-		fmt.Printf("Answer SDP:\n%s", getSDPStr(answerPc))
+		fmt.Printf("Recieved Message: %s\n", string(response.Data))
 
-		//keep connection alive while waiting for waiting for message
+		_ = peerConnection.Close()
+
+	} else /* We are not the host */ {
+
+		peerConnection, dataChan, dataChanOpen, messages, err := setupPcAsAttendee()
+
+		if err != nil {
+			fmt.Printf("Error setting up connection: %s\n", err)
+			return
+		}
+
+		<-dataChanOpen
 
 		firstMessage := <-messages
 
-		// if !firstMessage.IsString {
-		// 	fmt.Printf("Message was not a string")
-		// }
+		if !firstMessage.IsString {
+			fmt.Printf("Message was not a string")
+			return
+		}
 
 		fmt.Printf("Recieved Message: %s\n", string(firstMessage.Data))
 
-		// fmt.Printf("Sending response\n")
-		// We need access to the data channel to send a response
-		// Should the connection creation function return a function to send messages?
+		fmt.Println("Sending reponse")
 
-		//close connection once finished
+		dataChan.SendText("Hello from the other side")
 
-	} else {
-		messages := make(chan webrtc.DataChannelMessage, 1)
-		offerPc, err := generateOffer(messages)
-		defer func() { _ = offerPc.Close() }()
-		if err != nil {
-			fmt.Printf("Error generating offer: %s\n", err)
-
-			return
-		}
-
-		fmt.Printf("Offer SDP:\n%s", getSDPStr(offerPc))
-
-		//Prompt user for answer string and wait
-		fmt.Printf("\nEnter Answer SDP:\n")
-		answerStr, err := readSDP(reader)
-		if err != nil {
-			fmt.Printf("Error reading answer: %s\n", err)
-			return
-		}
-
-		//apply answer to connection
-		err = applyAnswer(offerPc, answerStr)
-		if err != nil {
-			fmt.Printf("Error applying answer: %s\n", err)
-			return
-		}
-
-		//send data over connection
-
-		//add needed audio/video streams
-
-		firstResponse := <-messages
-
-		fmt.Printf("Recieved Message: %s\n", string(firstResponse.Data))
-
-		//close connection once finished
+		_ = peerConnection.Close()
 
 	}
+}
+
+func setupPcAsHost() (
+	*webrtc.PeerConnection,
+	*webrtc.DataChannel,
+	chan struct{}, //Signals when dataChannel is open (by closing itself)
+	chan webrtc.DataChannelMessage, //Messages are sent here
+	error) {
+
+	// Change to take in a reader and writer if using a different IO stream
+	reader := bufio.NewReader(os.Stdin)
+
+	offerPc, dataChan, dataChanOpen, messages, err := generateOffer()
+
+	keepConnection := false
+	defer func() {
+		if !keepConnection {
+			//If setup fails we may get an error on close, but we can ignore it
+			_ = offerPc.Close()
+		}
+	}()
+
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("Error generating offer: %s\n", err)
+	}
+
+	fmt.Printf("Offer SDP:\n%s", getSDPStr(offerPc))
+
+	//Prompt user for answer string and wait
+	fmt.Printf("\nEnter Answer SDP:\n")
+	answerStr, err := readSDP(reader)
+	if err != nil {
+
+		return nil, nil, nil, nil, fmt.Errorf("Error reading answer: %s\n", err)
+	}
+
+	//apply answer to connection
+	err = applyAnswer(offerPc, answerStr)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("Error applying answer: %s\n", err)
+	}
+
+	keepConnection = true
+	return offerPc, dataChan, dataChanOpen, messages, nil
+}
+
+func setupPcAsAttendee() (
+	*webrtc.PeerConnection,
+	*webrtc.DataChannel,
+	chan struct{}, //Signals when dataChannel is open (by closing itself)
+	chan webrtc.DataChannelMessage, //Messages are sent here
+	error) {
+
+	reader := bufio.NewReader(os.Stdin)
+
+	//Wait for user input
+	fmt.Println("Enter connection string:\n")
+	SDPOfferStr, err := readSDP(reader)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("Error reading offer: %s\n", err)
+	}
+
+	answerPc, dc, dataChanOpen, messages, err := generateAnswer(SDPOfferStr)
+
+	keepConnection := false
+	defer func() {
+		if !keepConnection {
+			//If setup fails we may get an error on close, but we can ignore it
+			_ = answerPc.Close()
+		}
+	}()
+
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("Error generating answer: %s\n", err)
+	}
+
+	fmt.Printf("Answer SDP:\n%s", getSDPStr(answerPc))
+
+	return answerPc, dc, dataChanOpen, messages, nil
+}
+
+func sendTestMessage() {
 
 }
 

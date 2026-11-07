@@ -9,42 +9,53 @@ import (
 
 const managementChannelName = "transceiver_management"
 
-const testMessage = "Hello from Host :)"
-
 // Setting up connections
-func generateOffer(managementChannel chan webrtc.DataChannelMessage) (*webrtc.PeerConnection, error) {
+func generateOffer() (
+	*webrtc.PeerConnection,
+	*webrtc.DataChannel,
+	chan struct{}, //Signals when dataChannel is open (by closing itself)
+	chan webrtc.DataChannelMessage, //Messages are sent to here (should this be an input instead of output?)
+	error) {
+
 	// create a peer connection
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, err
 	}
+
+	keepConnection := false
+	defer func() {
+		if !keepConnection {
+			//If setup fails we may get an error on close, but we can ignore it
+			_ = pc.Close()
+		}
+	}()
 
 	//Start with initial data channel for sending application messages
 	//This will let us add appropriate transcievers after the connection is established
 	dataChannel, err := pc.CreateDataChannel(managementChannelName, nil)
 	if err != nil {
 		_ = pc.Close()
-		return nil, err
+		return nil, nil, nil, nil, err
 	}
 
-	dataChannel.OnOpen(func() {
-		fmt.Println("Signaling data channel is open, sending test message")
-		// Send data over connection
-
-		err = dataChannel.SendText(testMessage)
-		if err != nil {
-			fmt.Printf("Error sending test message: %s\n", err)
-		}
-	})
+	dataChanOpen := make(chan struct{}, 1)
+	dcMessages := make(chan webrtc.DataChannelMessage, 1)
 
 	dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
-		managementChannel <- msg
+		dcMessages <- msg
+	})
+
+	dataChannel.OnOpen(func() {
+		//Close channel to signal dataChannel is open
+		close(dataChanOpen)
+
 	})
 
 	// create a first offer that does not contain any local candidates
 	offer, err := pc.CreateOffer(nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// gatherComplete is a channel that will be closed when
@@ -54,34 +65,38 @@ func generateOffer(managementChannel chan webrtc.DataChannelMessage) (*webrtc.Pe
 	// apply the offer
 	err = pc.SetLocalDescription(offer)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// wait for gathering of local candidates to complete
+	// Add timeout?
 	<-gatherComplete
 
 	// compute the local offer again
 	offer2 := pc.LocalDescription()
 
-	// This second offer contains all candidates, and can be sent to peer
-	// Since we don't trickle SDPs, and grab them all upfront, we only need one message
+	// This second offer contains all candidates (no trickling), and can be sent to peer
 
 	// Check that it contains at least one candidate
 	// Potentially move this check outside of this function if we need to differentiate it or act differently
 	if !strings.Contains(offer2.SDP, "\na=candidate:") {
-		return nil, fmt.Errorf("No SDP candidates found, offer is not usable")
+		return nil, nil, nil, nil, fmt.Errorf("No SDP candidates found, offer is not usable")
 	}
 
-	// fmt.Printf("Offer String:\n%s", offer2.SDP)
-
-	//The description can be grabbed from the connection
-	return pc, nil
+	keepConnection = true
+	return pc, dataChannel, dataChanOpen, dcMessages, nil
 }
 
-func generateAnswer(offerSDP string, managementChannel chan webrtc.DataChannelMessage) (*webrtc.PeerConnection, error) {
+func generateAnswer(offerSDP string) (
+	*webrtc.PeerConnection,
+	*webrtc.DataChannel,
+	chan struct{}, //Signals when dataChannel is open (by closing itself)
+	chan webrtc.DataChannelMessage, //Messages are sent to here (should this be an input instead of output?)
+	error) {
+
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// Close the connection if setup fails
@@ -99,27 +114,9 @@ func generateAnswer(offerSDP string, managementChannel chan webrtc.DataChannelMe
 		SDP:  offerSDP,
 	}
 
-	if err := pc.SetRemoteDescription(remoteOffer); err != nil {
-		return nil, err
-	}
-
-	answer, err := pc.CreateAnswer(nil)
-	if err != nil {
-		return nil, err
-	}
-
-	gatherComplete := webrtc.GatheringCompletePromise(pc)
-	if err := pc.SetLocalDescription(answer); err != nil {
-		return nil, err
-	}
-
-	// wait for gathering of candidates to complete
-	<-gatherComplete
-
-	localAnswer := pc.LocalDescription()
-	if localAnswer == nil {
-		return nil, fmt.Errorf("Local answer could not be generated")
-	}
+	dcReady := make(chan *webrtc.DataChannel, 1)
+	dataChanOpen := make(chan struct{}, 1)
+	dcMessages := make(chan webrtc.DataChannelMessage, 1)
 
 	//Called when a data channel is created by the remote (I think)
 	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
@@ -127,14 +124,47 @@ func generateAnswer(offerSDP string, managementChannel chan webrtc.DataChannelMe
 			return
 		}
 
-		// When we receive messages on this channel, pass them along to parameter managementChannel
 		dc.OnMessage(func(msg webrtc.DataChannelMessage) {
-			managementChannel <- msg
+			dcMessages <- msg
 		})
+
+		dc.OnOpen(func() {
+			//Signal that the data channel is open by closing this channel
+			close(dataChanOpen)
+		})
+
+		dcReady <- dc
 	})
 
+	if err := pc.SetRemoteDescription(remoteOffer); err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	answer, err := pc.CreateAnswer(nil)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	gatherComplete := webrtc.GatheringCompletePromise(pc)
+	if err := pc.SetLocalDescription(answer); err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	// wait for gathering of candidates to complete
+	<-gatherComplete
+
+	localAnswer := pc.LocalDescription()
+	if localAnswer == nil {
+		return nil, nil, nil, nil, fmt.Errorf("Local answer could not be generated")
+	}
+
+	//Wait for datachannel to be created (created only, not opened)
+	// (should be immediately after remote description is set)
+	//TODO: Add timeout fallback w/ select statment
+	dc := <-dcReady
+
 	keepConnection = true
-	return pc, nil
+	return pc, dc, dataChanOpen, dcMessages, nil
 }
 
 func applyAnswer(pc *webrtc.PeerConnection, SDP string) error {
@@ -145,5 +175,5 @@ func applyAnswer(pc *webrtc.PeerConnection, SDP string) error {
 }
 
 func getSDPStr(pc *webrtc.PeerConnection) string {
-	return pc.LocalDescription().SDP //Change later
+	return pc.LocalDescription().SDP
 }
