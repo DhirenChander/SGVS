@@ -13,9 +13,13 @@ func main() {
 	args := os.Args[1:]
 
 	//Check if user wants to create a connection or answer
-	makeAnswer := (len(args) >= 1 && args[0] == "answer")
+	host := (len(args) >= 1 && args[0] == "host")
 
-	if !makeAnswer /* We are the host */ {
+	go testCallAndResponse(host)
+}
+
+func testCallAndResponse(host bool) {
+	if host /* We are the host */ {
 
 		peerConnection, dataChan, dataChanOpen, messages, err := setupPcAsHost()
 
