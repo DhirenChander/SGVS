@@ -159,6 +159,7 @@ func generateAnswer(offerSDP string) (
 		return nil, nil, nil, nil, fmt.Errorf("Local answer could not be generated")
 	}
 
+	fmt.Println("Waiting for Datachannel creation")
 	dc := <-dcReady
 
 	keepConnection = true
