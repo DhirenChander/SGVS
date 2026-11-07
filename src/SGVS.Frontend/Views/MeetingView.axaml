@@ -111,8 +111,10 @@
                             BorderThickness="1" CornerRadius="{DynamicResource SgvsRadiusControl}"
                             BoxShadow="{DynamicResource SgvsMenuShadow}">
                         <StackPanel>
+                            <!-- named for screen readers, otherwise they announce the StackPanel type -->
                             <Button Classes="flat menuitem" Command="{Binding StartStreamCommand}"
-                                    CommandParameter="{x:Static s:ShareSource.Screen}">
+                                    CommandParameter="{x:Static s:ShareSource.Screen}"
+                                    AutomationProperties.Name="Share screen">
                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                     <Panel Width="18" Height="18">
                                         <Path Classes="lineicon" Data="{StaticResource SgvsDeskIcon}" />
@@ -121,7 +123,8 @@
                                 </StackPanel>
                             </Button>
                             <Button Classes="flat menuitem" Command="{Binding StartStreamCommand}"
-                                    CommandParameter="{x:Static s:ShareSource.App}">
+                                    CommandParameter="{x:Static s:ShareSource.App}"
+                                    AutomationProperties.Name="Share app">
                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                     <Panel Width="18" Height="18">
                                         <Path Classes="lineicon" Data="{StaticResource SgvsAppIcon}" />
