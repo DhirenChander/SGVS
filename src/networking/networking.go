@@ -116,6 +116,9 @@ func generateAnswer(offerSDP string) (
 
 	dataChanOpen := make(chan struct{}, 1)
 	dcMessages := make(chan webrtc.DataChannelMessage, 1)
+
+	//TODO: re-arrange so that dataChanOpen is an input to function, which gets assigned to
+	//potentially also do the same for the data channel itself
 	dcReady := make(chan *webrtc.DataChannel, 1)
 
 	//Called when a data channel is created by the remote (I think)
