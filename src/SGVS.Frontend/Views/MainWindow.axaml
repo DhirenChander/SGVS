@@ -7,7 +7,7 @@
         x:Class="SGVS.Frontend.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="SGVS" Width="1280" Height="760" MinWidth="960" MinHeight="600"
+        Title="SGVS" Width="1280" Height="720" MinWidth="960" MinHeight="600"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaTitleBarHeightHint="-1"
         FontFamily="SF Pro Display, Segoe UI Variable Display, Inter, Segoe UI, sans-serif"
