@@ -75,6 +75,20 @@ IAudioClient *ActivateProcessLoopback(DWORD pid)
     IAudioClient *client = handler->client.Detach(); // caller owns it
     return client;
 }
+
+IAudioClient *ActivateDeviceLoopback(LPWSTR device_id)
+{
+    // TODO: Implement device selection beyond default device
+    IMMDeviceEnumerator *pEnumerator = nullptr;
+    IMMDevice *pDevice = nullptr;
+    CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void **)&pEnumerator);
+    pEnumerator->GetDefaultAudioEndpoint(eCapture, eConsole, &pDevice);
+
+    IAudioClient *pAudioClient = nullptr;
+    pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void **)&pAudioClient);
+
+    return pAudioClient;
+}
 #endif
 
 ProcessAudioReader::ProcessAudioReader(uint32_t pid)
@@ -82,7 +96,18 @@ ProcessAudioReader::ProcessAudioReader(uint32_t pid)
 #ifdef _WIN32
     // Need to initialize before creating the audio client
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    this->m_client = ActivateProcessLoopback((DWORD)pid);
+    m_client = ActivateProcessLoopback((DWORD)pid);
+    m_stream_flags = AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
+#endif
+}
+
+ProcessAudioReader::ProcessAudioReader(wchar_t *device_id)
+{
+#ifdef _WIN32
+    // Need to initialize before creating the audio client
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    m_client = ActivateDeviceLoopback((LPWSTR)device_id);
+    m_stream_flags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
 #endif
 }
 
@@ -124,10 +149,9 @@ bool ProcessAudioReader::start_capture_windows(uint32_t buffer_time_nanos, Audio
 
     HRESULT hr = m_client->Initialize(
         AUDCLNT_SHAREMODE_SHARED,
-        AUDCLNT_STREAMFLAGS_LOOPBACK |
-            AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+        m_stream_flags,
         buffer_time_nanos,
-        AUDCLNT_STREAMFLAGS_LOOPBACK, &m_fmt, nullptr);
+        0, &m_fmt, nullptr);
 
     if (FAILED(hr))
     {
@@ -164,6 +188,7 @@ void ProcessAudioReader::stop_capture_windows()
 // Generated with Claude
 void ProcessAudioReader::capture_process_audio_windows()
 {
+    std::cout << "Separate capture thread started." << std::endl;
     // TODO: See if this is needed
     // Optional: raise thread priority for glitch-free audio
     DWORD taskIndex = 0;
@@ -180,6 +205,7 @@ void ProcessAudioReader::capture_process_audio_windows()
     {
         if (w == WAIT_TIMEOUT)
         {
+            std::cout << "Still waiting for audio event..." << std::endl;
             w = WaitForMultipleObjects(2, handles, FALSE, AUDIO_WAIT_MS);
             continue;
         }
@@ -196,6 +222,7 @@ void ProcessAudioReader::capture_process_audio_windows()
             HRESULT hr = m_capture->GetBuffer(&data, &frames, &flags, nullptr, nullptr);
             if (FAILED(hr)) // e.g. AUDCLNT_E_DEVICE_INVALIDATED
             {
+                std::cout << "Failed to get buffer..." << std::endl;
                 failed = true;
                 break;
             }

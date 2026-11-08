@@ -1,10 +1,10 @@
 #include <fstream>
-#include "audio_capture.hpp"
+#include "../../audio_capture.hpp"
 
 int main()
 {
-    ProcessAudioReader audioReader(0);
-    FILE *file = fopen("test.pcm", "wb");
+    ProcessAudioReader audioReader((uint32_t)0);
+    FILE *file = fopen("desktop_audio.pcm", "wb");
 
     audioReader.start(200 * 10000, AudioFormat{true, 44100, 16}, [&](uint32_t ind, uint16_t fCount, size_t fSize)
                       { 
@@ -14,8 +14,5 @@ int main()
                         } });
 
     while (true)
-    {
-    }
-
-    return 0;
+        ;
 }

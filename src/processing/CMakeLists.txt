@@ -43,3 +43,10 @@ target_link_libraries(processing_tests PRIVATE processing_module GTest::gtest_ma
 
 include(GoogleTest)
 gtest_discover_tests(processing_tests DISCOVERY_MODE PRE_TEST)
+
+# Functional Tests
+add_executable(desktop_audio_recorder tests/functional/desktop_audio_recorder.cpp)
+target_link_libraries(desktop_audio_recorder PRIVATE processing_module)
+
+add_executable(mic_audio_recorder tests/functional/mic_audio_recorder.cpp)
+target_link_libraries(mic_audio_recorder PRIVATE processing_module)

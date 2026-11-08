@@ -9,9 +9,7 @@
 #endif
 
 #include <thread>
-#include <atomic>
 #include <functional>
-#include <vector>
 #include <cstdint>
 
 #define AUDIO_WAIT_MS 2000
@@ -32,11 +30,13 @@ WAVEFORMATEX windows_format(AudioFormat format);
 class ProcessAudioReader
 {
 public:
+    // Blank constructor for tests
     ProcessAudioReader()
     {
     }
     // PID 0 => Read all audio (except for the SGVS process)
     ProcessAudioReader(uint32_t pid);
+    ProcessAudioReader(wchar_t *device_id);
     // Starts reading audio under the given format, and calls the callback with the starting buffer index and the number of frames
     // This automatically starts running on the capture function on a separate thread
     bool start(uint32_t buffer_time, AudioFormat format, Callback callback);
@@ -52,6 +52,7 @@ private:
     IAudioCaptureClient *m_capture = nullptr;
     WAVEFORMATEX m_fmt{};
     HANDLE m_audioEvent = nullptr, m_stopEvent = nullptr;
+    DWORD m_stream_flags = 0;
 #endif
     // Constant ring buffer is allocated once and shared between callback calls
     uint8_t *m_buffer;
@@ -60,6 +61,8 @@ private:
 
     // Runner automatically runs on a separate thread
     std::thread m_thread;
+
+    // Used to pass data in buffer to the next function
     Callback m_cb;
 
     void setup_buffer(AudioFormat format);
