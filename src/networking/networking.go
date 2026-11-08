@@ -22,6 +22,7 @@ func generateOffer() (
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
+	logPeerConnectionState(pc, "host")
 
 	keepConnection := false
 	defer func() {
@@ -100,6 +101,7 @@ func generateAnswer(offerSDP string) (
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
+	logPeerConnectionState(pc, "attendee")
 
 	// Close the connection if setup fails
 	// Calling this as a deferred function lets us avoid calling it before every return
@@ -175,4 +177,26 @@ func applyAnswer(pc *webrtc.PeerConnection, SDP string) error {
 
 func getSDPStr(pc *webrtc.PeerConnection) string {
 	return pc.LocalDescription().SDP
+}
+
+func logPeerConnectionState(pc *webrtc.PeerConnection, role string) {
+	pc.OnICECandidate(func(candidate *webrtc.ICECandidate) {
+		if candidate == nil {
+			fmt.Printf("[%s] ICE candidate gathering complete\n", role)
+			return
+		}
+		fmt.Printf("[%s] Local ICE candidate: %s\n", role, candidate.String())
+	})
+
+	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
+		fmt.Printf("[%s] ICE connection state: %s\n", role, state.String())
+	})
+
+	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+		fmt.Printf("[%s] Peer connection state: %s\n", role, state.String())
+	})
+
+	pc.OnSignalingStateChange(func(state webrtc.SignalingState) {
+		fmt.Printf("[%s] Signaling state: %s\n", role, state.String())
+	})
 }
