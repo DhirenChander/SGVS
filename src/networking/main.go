@@ -17,20 +17,25 @@ func main() {
 	//Check if user wants to create a connection or answer
 	host := (len(args) >= 1 && args[0] == "host")
 
-	go testCallAndResponse(host)
+	pcChan := make(chan *webrtc.PeerConnection, 1)
+
+	go func() {
+		pcChan <- testCallAndResponse(host)
+	}()
 
 	<-time.After(5 * time.Minute)
+	<-pcChan //Used to keep peer connection open during testing
 
 }
 
-func testCallAndResponse(host bool) {
+func testCallAndResponse(host bool) *webrtc.PeerConnection {
 	if host /* We are the host */ {
 
 		peerConnection, dataChan, dataChanOpen, messages, err := setupPcAsHost()
 
 		if err != nil {
 			fmt.Printf("Error setting up connection: %s\n", err)
-			return
+			return nil
 		}
 
 		//Wait for data channel to open
@@ -46,12 +51,12 @@ func testCallAndResponse(host bool) {
 
 		if !response.IsString {
 			fmt.Printf("Message was not a string")
-			return
+			return nil
 		}
 
 		fmt.Printf("Recieved Message: %s\n", string(response.Data))
 
-		_ = peerConnection.Close()
+		return peerConnection
 
 	} else /* We are not the host */ {
 
@@ -59,7 +64,7 @@ func testCallAndResponse(host bool) {
 
 		if err != nil {
 			fmt.Printf("Error setting up connection: %s\n", err)
-			return
+			return nil
 		}
 
 		fmt.Println("Waiting for datachannel to be created")
@@ -73,7 +78,7 @@ func testCallAndResponse(host bool) {
 
 		if !firstMessage.IsString {
 			fmt.Printf("Message was not a string")
-			return
+			return nil
 		}
 
 		fmt.Printf("Recieved Message: %s\n", string(firstMessage.Data))
@@ -82,9 +87,9 @@ func testCallAndResponse(host bool) {
 
 		dataChan.SendText("Hello from the other side")
 
-		_ = peerConnection.Close()
-
+		return peerConnection
 	}
+
 }
 
 func setupPcAsHost() (
