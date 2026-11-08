@@ -179,6 +179,7 @@ func getSDPStr(pc *webrtc.PeerConnection) string {
 	return pc.LocalDescription().SDP
 }
 
+// Generated with AI
 func logPeerConnectionState(pc *webrtc.PeerConnection, role string) {
 	pc.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 		if candidate == nil {

@@ -163,6 +163,7 @@ func setupPcAsAttendee() (
 
 	fmt.Printf("Answer SDP:\n%s", getSDPStr(answerPc))
 
+	keepConnection = true
 	return answerPc, dcReady, dataChanOpen, messages, nil
 }
 
