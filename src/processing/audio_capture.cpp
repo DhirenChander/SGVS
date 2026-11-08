@@ -86,7 +86,7 @@ ProcessAudioReader::ProcessAudioReader(uint32_t pid)
 #endif
 }
 
-void ProcessAudioReader::setup_buffer(uint32_t buffer_time, AudioFormat format)
+void ProcessAudioReader::setup_buffer(AudioFormat format)
 {
     size_t buffSize = BUFFER_SECONDS * format.samplesPerSec * (format.multiChannel ? 2 : 1) * format.bitsPerSamp / 8;
     m_buffer = (uint8_t *)malloc(buffSize);
@@ -97,7 +97,7 @@ void ProcessAudioReader::setup_buffer(uint32_t buffer_time, AudioFormat format)
 bool ProcessAudioReader::start(uint32_t buffer_time, AudioFormat format, Callback callback)
 {
     m_cb = std::move(callback);
-    setup_buffer(buffer_time, format);
+    setup_buffer(format);
 #ifdef _WIN32
     return this->start_capture_windows(buffer_time, format);
 #endif

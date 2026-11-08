@@ -62,7 +62,7 @@ private:
     std::thread m_thread;
     Callback m_cb;
 
-    void setup_buffer(uint32_t buffer_time, AudioFormat format);
+    void setup_buffer(AudioFormat format);
     void handle_audio_buffer(uint8_t *data, uint32_t frames, const size_t frameSize, uint32_t flags);
 #ifdef _WIN32
     bool start_capture_windows(uint32_t buffer_time, AudioFormat format);
