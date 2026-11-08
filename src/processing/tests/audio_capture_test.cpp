@@ -21,7 +21,7 @@ protected:
     ProcessAudioReader all_reader{};
     ProcessAudioReader single_reader{};
 
-    // Fixture members have friend access; test bodies don't.
+    // Duplicate member functions because test fixtures do not have friend access to ProcessAudioReader's private fields
     static void setCb(ProcessAudioReader &r, Callback cb) { r.m_cb = std::move(cb); }
     static const uint8_t *bufferData(const ProcessAudioReader &r) { return r.m_buffer; }
     static uint32_t &head(ProcessAudioReader &r) { return r.m_buffHead; }
