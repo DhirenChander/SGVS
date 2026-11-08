@@ -89,7 +89,9 @@ func generateOffer() (
 
 func generateAnswer(offerSDP string) (
 	*webrtc.PeerConnection,
-	*webrtc.DataChannel,
+	chan *webrtc.DataChannel, //Return a channel that will recieve the DataChannel once it is created
+	//                          Because channel is only received once host finished setup, we cannot wait for channel here
+
 	chan struct{}, //Signals when dataChannel is open (by closing itself)
 	chan webrtc.DataChannelMessage, //Messages are sent to here (should this be an input instead of output?)
 	error) {
@@ -117,13 +119,11 @@ func generateAnswer(offerSDP string) (
 	dataChanOpen := make(chan struct{}, 1)
 	dcMessages := make(chan webrtc.DataChannelMessage, 1)
 
-	//TODO: re-arrange so that dataChanOpen is an input to function, which gets assigned to
-	//potentially also do the same for the data channel itself
 	dcReady := make(chan *webrtc.DataChannel, 1)
 
 	//Called when a data channel is created by the remote (I think)
 	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
-		fmt.Println("Data Channel Opened: " + dc.Label())
+		fmt.Println("Data Channel Created by Remote: " + dc.Label())
 		if dc.Label() != managementChannelName {
 			return
 		}
@@ -162,11 +162,8 @@ func generateAnswer(offerSDP string) (
 		return nil, nil, nil, nil, fmt.Errorf("Local answer could not be generated")
 	}
 
-	fmt.Println("Waiting for Datachannel creation")
-	dc := <-dcReady
-
 	keepConnection = true
-	return pc, dc, dataChanOpen, dcMessages, nil
+	return pc, dcReady, dataChanOpen, dcMessages, nil
 }
 
 func applyAnswer(pc *webrtc.PeerConnection, SDP string) error {

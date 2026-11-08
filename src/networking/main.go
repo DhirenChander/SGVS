@@ -55,12 +55,15 @@ func testCallAndResponse(host bool) {
 
 	} else /* We are not the host */ {
 
-		peerConnection, dataChan, dataChanOpen, messages, err := setupPcAsAttendee()
+		peerConnection, dcReady, dataChanOpen, messages, err := setupPcAsAttendee()
 
 		if err != nil {
 			fmt.Printf("Error setting up connection: %s\n", err)
 			return
 		}
+
+		fmt.Println("Waiting for datachannel to be created")
+		dataChan := <-dcReady
 
 		fmt.Println("Waiting for datachannel to open")
 		<-dataChanOpen
@@ -130,7 +133,7 @@ func setupPcAsHost() (
 
 func setupPcAsAttendee() (
 	*webrtc.PeerConnection,
-	*webrtc.DataChannel,
+	chan *webrtc.DataChannel,
 	chan struct{}, //Signals when dataChannel is open (by closing itself)
 	chan webrtc.DataChannelMessage, //Messages are sent here
 	error) {
@@ -144,7 +147,7 @@ func setupPcAsAttendee() (
 		return nil, nil, nil, nil, fmt.Errorf("Error reading offer: %s\n", err)
 	}
 
-	answerPc, dc, dataChanOpen, messages, err := generateAnswer(SDPOfferStr)
+	answerPc, dcReady, dataChanOpen, messages, err := generateAnswer(SDPOfferStr)
 
 	keepConnection := false
 	defer func() {
@@ -160,11 +163,7 @@ func setupPcAsAttendee() (
 
 	fmt.Printf("Answer SDP:\n%s", getSDPStr(answerPc))
 
-	return answerPc, dc, dataChanOpen, messages, nil
-}
-
-func sendTestMessage() {
-
+	return answerPc, dcReady, dataChanOpen, messages, nil
 }
 
 // Read SDP string from input stream (console for now)
