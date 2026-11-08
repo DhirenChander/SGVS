@@ -1,0 +1,19 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SVGS.Frontend.ViewModels"
+        xmlns:view="using:SVGS.Frontend.Views"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="450"
+        x:Class="SVGS.Frontend.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="SVGS.Frontend"
+        WindowState="Maximized"
+        Background="#FF1E1E1E"
+        Foreground="#FFD4D4D4">
+    <Design.DataContext>
+        <vm:MainViewModel />
+    </Design.DataContext>
+    <ContentControl Content="{Binding CurrentPage}" />
+</Window>

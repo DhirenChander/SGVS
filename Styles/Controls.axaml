@@ -1,0 +1,116 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- round mic/camera buttons. checked = off, which flips to solid white like facetime -->
+    <Style Selector="ToggleButton.round">
+        <Setter Property="Width" Value="52" />
+        <Setter Property="Height" Value="52" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <!-- fluent paints the button on the inner ContentPresenter, so the colors have to go there -->
+    <Style Selector="ToggleButton.round /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource GlassButtonBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="26" />
+    </Style>
+    <Style Selector="ToggleButton.round:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource GlassButtonHoverBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.round:checked /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#F2FFFFFF" />
+    </Style>
+    <Style Selector="ToggleButton.round:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="White" />
+    </Style>
+    <!-- icon + slash take the button's foreground (see WatchView), so they go dark on the white circle -->
+    <Style Selector="ToggleButton.round:checked">
+        <Setter Property="Foreground" Value="#1C1C1E" />
+    </Style>
+
+    <!-- leave button, the one solid-color thing on screen -->
+    <Style Selector="Button.leave">
+        <Setter Property="Width" Value="52" />
+        <Setter Property="Height" Value="52" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.leave /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
+        <Setter Property="CornerRadius" Value="26" />
+    </Style>
+    <Style Selector="Button.leave:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource DangerHoverBrush}" />
+    </Style>
+    <Style Selector="Button.leave:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource DangerPressedBrush}" />
+    </Style>
+
+    <!-- Path with Classes="icon" = white icon. no Width/Height on purpose: a fixed size pins the
+         shape to its top-left corner, so put it in a Panel of the size you want and it centers -->
+    <Style Selector="Path.icon">
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Fill" Value="White" />
+    </Style>
+
+    <!-- small invisible button around the volume icon, lights up on hover -->
+    <Style Selector="Button.iconbtn">
+        <Setter Property="Width" Value="32" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.iconbtn /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="16" />
+    </Style>
+    <Style Selector="Button.iconbtn:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource GlassButtonHoverBrush}" />
+    </Style>
+    <Style Selector="Button.iconbtn:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource GlassButtonHoverBrush}" />
+    </Style>
+
+    <!-- the diagonal "off" slash drawn over an icon -->
+    <Style Selector="Line.slash">
+        <Setter Property="Stroke" Value="White" />
+        <Setter Property="StrokeThickness" Value="2.4" />
+        <Setter Property="StrokeLineCap" Value="Round" />
+    </Style>
+
+    <!-- thin white volume slider. these are the theme's own resource keys -->
+    <Style Selector="Slider.volume">
+        <Style.Resources>
+            <SolidColorBrush x:Key="SliderTrackFill" Color="#40FFFFFF" />
+            <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#40FFFFFF" />
+            <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#40FFFFFF" />
+            <SolidColorBrush x:Key="SliderTrackValueFill" Color="White" />
+            <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="White" />
+            <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="White" />
+            <SolidColorBrush x:Key="SliderThumbBackground" Color="White" />
+            <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="White" />
+            <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="White" />
+            <x:Double x:Key="SliderTrackThemeHeight">4</x:Double>
+            <x:Double x:Key="SliderHorizontalThumbWidth">16</x:Double>
+            <x:Double x:Key="SliderHorizontalThumbHeight">16</x:Double>
+        </Style.Resources>
+    </Style>
+
+    <!-- resolution dropdown list: dark and slightly see-through so it matches -->
+    <Style Selector="ComboBox.res">
+        <Style.Resources>
+            <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#F01E2026" />
+            <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#26FFFFFF" />
+        </Style.Resources>
+    </Style>
+</Styles>

@@ -1,0 +1,54 @@
+{
+  "version": 2,
+  "dgSpecHash": "lJDhXhcfizk=",
+  "success": true,
+  "projectFilePath": "C:\\Capstone\\SVGS.Frontend\\SVGS.Frontend.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Carter\\.nuget\\packages\\avalonia\\11.3.2\\avalonia.11.3.2.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\avalonia.angle.windows.natives\\2.1.25547.20250602\\avalonia.angle.windows.natives.2.1.25547.20250602.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\avalonia.buildservices\\0.0.31\\avalonia.buildservices.0.0.31.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\avalonia.desktop\\11.3.2\\avalonia.desktop.11.3.2.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\avalonia.fonts.inter\\11.3.2\\avalonia.fonts.inter.11.3.2.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\avalonia.freedesktop\\11.3.2\\avalonia.freedesktop.11.3.2.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\avalonia.native\\11.3.2\\avalonia.native.11.3.2.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\avalonia.remote.protocol\\11.3.2\\avalonia.remote.protocol.11.3.2.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\avalonia.skia\\11.3.2\\avalonia.skia.11.3.2.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\avalonia.themes.fluent\\11.3.2\\avalonia.themes.fluent.11.3.2.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\avalonia.win32\\11.3.2\\avalonia.win32.11.3.2.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\avalonia.x11\\11.3.2\\avalonia.x11.11.3.2.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\avaloniaui.diagnosticssupport\\2.2.3\\avaloniaui.diagnosticssupport.2.2.3.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\communitytoolkit.mvvm\\8.4.2\\communitytoolkit.mvvm.8.4.2.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\harfbuzzsharp\\8.3.1.1\\harfbuzzsharp.8.3.1.1.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\harfbuzzsharp.nativeassets.linux\\8.3.1.1\\harfbuzzsharp.nativeassets.linux.8.3.1.1.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\harfbuzzsharp.nativeassets.macos\\8.3.1.1\\harfbuzzsharp.nativeassets.macos.8.3.1.1.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\harfbuzzsharp.nativeassets.webassembly\\8.3.1.1\\harfbuzzsharp.nativeassets.webassembly.8.3.1.1.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\harfbuzzsharp.nativeassets.win32\\8.3.1.1\\harfbuzzsharp.nativeassets.win32.8.3.1.1.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\libvlcsharp\\3.9.0\\libvlcsharp.3.9.0.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\libvlcsharp.avalonia\\3.9.0\\libvlcsharp.avalonia.3.9.0.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\microcom.runtime\\0.11.0\\microcom.runtime.0.11.0.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\8.0.0\\microsoft.extensions.dependencyinjection.abstractions.8.0.0.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\8.0.0\\microsoft.extensions.logging.abstractions.8.0.0.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\microsoft.io.recyclablememorystream\\3.0.1\\microsoft.io.recyclablememorystream.3.0.1.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\skiasharp\\2.88.9\\skiasharp.2.88.9.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\skiasharp.nativeassets.linux\\2.88.9\\skiasharp.nativeassets.linux.2.88.9.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\skiasharp.nativeassets.macos\\2.88.9\\skiasharp.nativeassets.macos.2.88.9.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\skiasharp.nativeassets.webassembly\\2.88.9\\skiasharp.nativeassets.webassembly.2.88.9.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\skiasharp.nativeassets.win32\\2.88.9\\skiasharp.nativeassets.win32.2.88.9.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\tmds.dbus.protocol\\0.21.2\\tmds.dbus.protocol.0.21.2.nupkg.sha512",
+    "C:\\Users\\Carter\\.nuget\\packages\\videolan.libvlc.windows\\3.0.21\\videolan.libvlc.windows.3.0.21.nupkg.sha512"
+  ],
+  "logs": [
+    {
+      "code": "NU1903",
+      "level": "Warning",
+      "message": "Package 'Tmds.DBus.Protocol' 0.21.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-xrw6-gwf8-vvr9",
+      "projectPath": "C:\\Capstone\\SVGS.Frontend\\SVGS.Frontend.csproj",
+      "warningLevel": 1,
+      "filePath": "C:\\Capstone\\SVGS.Frontend\\SVGS.Frontend.csproj",
+      "libraryId": "Tmds.DBus.Protocol",
+      "targetGraphs": [
+        "net10.0"
+      ]
+    }
+  ]
+}

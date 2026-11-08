@@ -1,0 +1,72 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:vm="using:SVGS.Frontend.ViewModels"
+                xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="450"
+                x:Class="SVGS.Frontend.Views.JoinMeetingView"
+                x:DataType="vm:JoinMeetingViewModel">
+    <UserControl.Styles>
+        <Style Selector="Button.meeting-button">
+            <Setter Property="Background" Value="#FF4CAF50" />
+            <Setter Property="Foreground" Value="#FFFFFFFF" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter x:Name="PART_ContentPresenter"
+                                      Background="{TemplateBinding Background}"
+                                      BorderBrush="{TemplateBinding BorderBrush}"
+                                      BorderThickness="{TemplateBinding BorderThickness}"
+                                      CornerRadius="{TemplateBinding CornerRadius}"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Padding="{TemplateBinding Padding}"
+                                      RecognizesAccessKey="True"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.meeting-button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#FF2E7D32" />
+            <Setter Property="TextBlock.Foreground" Value="#FFFFFFFF" />
+        </Style>
+    </UserControl.Styles>
+    <Grid Background="#FF1E1E1E"
+          ColumnDefinitions="15*,70*,15*"
+          RowDefinitions="15*,70*,15*">
+        <Border Grid.Row="1"
+                Grid.Column="1"
+                CornerRadius="20"
+                Background="#FF252526"
+                Padding="24">
+            <Grid>
+                <Button HorizontalAlignment="Left"
+                        VerticalAlignment="Top"
+                        MaxWidth="48"
+                        MaxHeight="48"
+                        Padding="4"
+                        CornerRadius="8"
+                        Name="BackButton"
+                        Command="{Binding GoToStartPageCommand}">
+                    <Image Source="/Assets/backArrow.png"
+                           Stretch="Uniform"/>
+                </Button>
+                <StackPanel
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Center"
+                            Spacing="12">
+                    <TextBlock FontWeight="Bold"
+                            TextAlignment="Center"
+                            Text="Paste your meeting link below" />
+                    <TextBox Text="https://example.com/meeting-link"
+                            HorizontalAlignment="Stretch" />
+                    <Button Classes="meeting-button"
+                            HorizontalAlignment="Center"
+                            HorizontalContentAlignment="Center">
+                        Join Meeting
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

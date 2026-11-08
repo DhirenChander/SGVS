@@ -1,0 +1,110 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SVGS.Frontend.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="450"
+             x:Class="SVGS.Frontend.Views.StartPageView"
+             x:DataType="vm:StartPageViewModel">
+
+
+    <UserControl.Styles>
+        <Style Selector="Button.meeting-button">
+            <Setter Property="Background" Value="#FF4CAF50" />
+            <Setter Property="Foreground" Value="#FFFFFFFF" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter x:Name="PART_ContentPresenter"
+                                      Background="{TemplateBinding Background}"
+                                      BorderBrush="{TemplateBinding BorderBrush}"
+                                      BorderThickness="{TemplateBinding BorderThickness}"
+                                      CornerRadius="{TemplateBinding CornerRadius}"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Padding="{TemplateBinding Padding}"
+                                      RecognizesAccessKey="True"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.meeting-button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#FF2E7D32" />
+            <Setter Property="TextBlock.Foreground" Value="#FFFFFFFF" />
+        </Style>
+    </UserControl.Styles>
+    <Grid Background="#FF1E1E1E"
+          ColumnDefinitions="15*,70*,15*"
+          RowDefinitions="15*,70*,15*">
+        <Border Grid.Row="1"
+                Grid.Column="1"
+                CornerRadius="20"
+                Background="#FF252526"
+                Padding="24">
+            <Grid RowDefinitions="Auto,*">
+                <Viewbox Stretch="Uniform">
+                    <TextBlock FontWeight="Bold"
+                            TextAlignment="Center"
+                            Text="High Performance P2P Small Group Video Sharing"/>
+                </Viewbox>
+                <Grid
+                    Grid.Row="1"
+                    Margin="0,12,0,0"
+                    ColumnSpacing="12"
+                    ColumnDefinitions="*,*">
+                    <Grid
+                        Grid.Column="0"
+                        Grid.Row="0"
+                        RowDefinitions="33*,34*,33*">
+                        <Button Grid.Column="0"
+                                Grid.Row="1"
+                                Classes="meeting-button"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                CornerRadius="20"
+                                Name="CreateMeetingButton"
+                                Command="{Binding ShowMeetingCommand}">
+                            <Image Source="/Assets/plusSymbol.png"
+                                    Margin="20"/>
+                        </Button>
+                        <TextBlock Grid.Column="0"
+                                    Grid.Row="2"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Top"
+                                    TextAlignment="Center"
+                                    TextWrapping="Wrap"
+                                    Margin="12,12,12,0">
+                                Create Meeting
+                                </TextBlock>
+                    </Grid>
+                    <Grid 
+                        Grid.Column="1"
+                        Grid.Row="0"
+                        RowDefinitions="33*,34*,33*">
+                            <Button
+                                    Grid.Column="0"
+                                    Grid.Row="1"
+                                    Classes="meeting-button"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    CornerRadius="20"
+                                    Name="JoinMeetingButton"
+                                    Command="{Binding ShowJoinMeetingCommand}">
+                                <Image Source="/Assets/joinMeetingSymbol.png"
+                                        Margin="20"/>
+                            </Button>
+                            <TextBlock Grid.Column="0"
+                                    Grid.Row="2"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Top"
+                                    TextAlignment="Center"
+                                    TextWrapping="Wrap"
+                                    Margin="12,12,12,0">
+                                Join Meeting
+                                </TextBlock>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

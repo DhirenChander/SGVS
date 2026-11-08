@@ -1,0 +1,86 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+xmlns:vm="using:SVGS.Frontend.ViewModels"
+xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+mc:Ignorable="d"
+d:DesignWidth="800"
+d:DesignHeight="550"
+x:Class="SVGS.Frontend.Views.MeetingView"
+x:DataType="vm:MeetingViewModel">
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="24" MaxWidth="640" Spacing="20">
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="SGVS" Opacity="0.6" />
+                <TextBlock Text="In meeting" FontSize="28" FontWeight="SemiBold" />
+                <TextBlock Text="Placeholder — no live stream connected."
+                           Opacity="0.7" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <Border BorderBrush="#60808080" BorderThickness="1"
+                    CornerRadius="8" Padding="20">
+                <StackPanel Spacing="14">
+                    <TextBlock Text="Streams" FontSize="18" FontWeight="SemiBold" />
+
+                    <Grid ColumnDefinitions="*,*">
+                        <Button Grid.Column="0" Margin="0,0,6,0"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                Content="Watch a stream"
+                                Command="{Binding GoToScreenShareCommand}" />
+                        <Button Grid.Column="1" Margin="6,0,0,0"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                Content="Start a stream"
+                                Click="StartStream_Click" />
+                    </Grid>
+
+                    <!-- Opens when Start a stream is clicked. -->
+                    <StackPanel x:Name="ShareOptions" IsVisible="False" Spacing="10">
+                        <TextBlock Text="What would you like to share?"
+                                   TextWrapping="Wrap" />
+                        <Grid ColumnDefinitions="*,*">
+                            <Button Grid.Column="0" Margin="0,0,6,0"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    Content="A screen"
+                                    Click="ShareScreen_Click" />
+                            <Button Grid.Column="1" Margin="6,0,0,0"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    Content="An app"
+                                    Click="ShareApp_Click" />
+                        </Grid>
+                        <Button Content="Cancel" Click="CancelShare_Click" />
+                    </StackPanel>
+
+                    <TextBlock x:Name="StreamStatusText"
+                               Text="Choose an action above."
+                               Opacity="0.7" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border BorderBrush="#60808080" BorderThickness="1"
+                    CornerRadius="8" Padding="20">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Meeting code" FontSize="18" FontWeight="SemiBold" />
+                    <Button x:Name="RevealCodeButton" Content="Reveal code"
+                            Click="RevealCode_Click" />
+
+                    <StackPanel x:Name="CodePanel" IsVisible="False" Spacing="8">
+                        <Button x:Name="CopyCodeButton"
+                                FontSize="20" FontWeight="SemiBold"
+                                ToolTip.Tip="Copy meeting code"
+                                Click="CopyCode_Click" />
+                        <TextBlock x:Name="CodeFeedbackText"
+                                   Text="Click the code to copy it. This is a demo code."
+                                   Opacity="0.7" TextWrapping="Wrap" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
