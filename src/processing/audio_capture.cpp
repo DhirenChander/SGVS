@@ -165,7 +165,7 @@ void ProcessAudioReader::stop_capture_windows()
 void ProcessAudioReader::capture_process_audio_windows()
 {
     // TODO: See if this is needed
-    // Optional: raise thread priority for glitch-free audio
+    // Raise thread priority for glitch-free audio
     DWORD taskIndex = 0;
     HANDLE mmcss = AvSetMmThreadCharacteristicsW(L"Audio", &taskIndex); // link avrt.lib, include <avrt.h>
 
