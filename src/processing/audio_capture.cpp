@@ -27,6 +27,15 @@ WAVEFORMATEX windows_format(AudioFormat format)
     return fmt;
 }
 
+AudioFormat from_windows_format(WAVEFORMATEX wformat)
+{
+    AudioFormat fmt;
+    fmt.bitsPerSamp = wformat.wBitsPerSample;
+    fmt.multiChannel = wformat.nChannels > 1;
+    fmt.samplesPerSec = wformat.nSamplesPerSec;
+    return fmt;
+}
+
 // Generated with Claude
 // Creates the audio client
 IAudioClient *ActivateProcessLoopback(DWORD pid)
@@ -75,14 +84,57 @@ IAudioClient *ActivateProcessLoopback(DWORD pid)
     IAudioClient *client = handler->client.Detach(); // caller owns it
     return client;
 }
+
+IAudioClient *ActivateDeviceLoopback(LPWSTR device_id)
+{
+    // TODO: Implement device selection beyond default device
+    IMMDeviceEnumerator *pEnumerator = nullptr;
+    IMMDevice *pDevice = nullptr;
+    CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void **)&pEnumerator);
+    pEnumerator->GetDefaultAudioEndpoint(eCapture, eConsole, &pDevice);
+
+    IAudioClient *pAudioClient = nullptr;
+    pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void **)&pAudioClient);
+
+    return pAudioClient;
+}
 #endif
 
-ProcessAudioReader::ProcessAudioReader(uint32_t pid)
+ProcessAudioReader::ProcessAudioReader(uint32_t pid, AudioFormat format)
 {
 #ifdef _WIN32
     // Need to initialize before creating the audio client
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    this->m_client = ActivateProcessLoopback((DWORD)pid);
+    m_client = ActivateProcessLoopback((DWORD)pid);
+    m_stream_flags = AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
+    m_fmt = windows_format(format);
+#endif
+}
+
+ProcessAudioReader::ProcessAudioReader(wchar_t *device_id)
+{
+#ifdef _WIN32
+    // Need to initialize before creating the audio client
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    m_client = ActivateDeviceLoopback((LPWSTR)device_id);
+    m_stream_flags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
+
+    // Get default device format instead of taking format as input
+    WAVEFORMATEX *temp_fmt = nullptr;
+    HRESULT hr = m_client->GetMixFormat(&temp_fmt);
+    if (FAILED(hr))
+    {
+        std::cout << "Failed to get mix format" << std::endl;
+        free(m_client);
+        CoUninitialize();
+        return;
+    }
+    // TODO: See if we want to enable higher bitrate mic audio
+    // Force audio into 16 bit format
+    AudioFormat temp_afmt = from_windows_format(*temp_fmt);
+    temp_afmt.bitsPerSamp = 16;
+    m_fmt = windows_format(temp_afmt);
+    CoTaskMemFree(temp_fmt);
 #endif
 }
 
@@ -94,12 +146,12 @@ void ProcessAudioReader::setup_buffer(AudioFormat format)
     m_buffSize = buffSize;
 }
 
-bool ProcessAudioReader::start(uint32_t buffer_time, AudioFormat format, Callback callback)
+bool ProcessAudioReader::start(uint32_t buffer_time, Callback callback)
 {
     m_cb = std::move(callback);
-    setup_buffer(format);
 #ifdef _WIN32
-    return this->start_capture_windows(buffer_time, format);
+    setup_buffer(from_windows_format(m_fmt));
+    return this->start_capture_windows(buffer_time);
 #endif
 
     return false;
@@ -115,19 +167,16 @@ void ProcessAudioReader::stop()
 #ifdef _WIN32
 
 // Generated with Claude
-bool ProcessAudioReader::start_capture_windows(uint32_t buffer_time_nanos, AudioFormat format)
+bool ProcessAudioReader::start_capture_windows(uint32_t buffer_time_nanos)
 {
-    m_fmt = windows_format(format);
-
     m_audioEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr); // auto-reset
     m_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);   // manual-reset
 
     HRESULT hr = m_client->Initialize(
         AUDCLNT_SHAREMODE_SHARED,
-        AUDCLNT_STREAMFLAGS_LOOPBACK |
-            AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+        m_stream_flags,
         buffer_time_nanos,
-        AUDCLNT_STREAMFLAGS_LOOPBACK, &m_fmt, nullptr);
+        0, &m_fmt, nullptr);
 
     if (FAILED(hr))
     {
@@ -164,8 +213,9 @@ void ProcessAudioReader::stop_capture_windows()
 // Generated with Claude
 void ProcessAudioReader::capture_process_audio_windows()
 {
+    std::cout << "Separate capture thread started." << std::endl;
     // TODO: See if this is needed
-    // Raise thread priority for glitch-free audio
+    // Optional: raise thread priority for glitch-free audio
     DWORD taskIndex = 0;
     HANDLE mmcss = AvSetMmThreadCharacteristicsW(L"Audio", &taskIndex); // link avrt.lib, include <avrt.h>
 
@@ -180,6 +230,7 @@ void ProcessAudioReader::capture_process_audio_windows()
     {
         if (w == WAIT_TIMEOUT)
         {
+            std::cout << "Still waiting for audio event..." << std::endl;
             w = WaitForMultipleObjects(2, handles, FALSE, AUDIO_WAIT_MS);
             continue;
         }
@@ -196,6 +247,7 @@ void ProcessAudioReader::capture_process_audio_windows()
             HRESULT hr = m_capture->GetBuffer(&data, &frames, &flags, nullptr, nullptr);
             if (FAILED(hr)) // e.g. AUDCLNT_E_DEVICE_INVALIDATED
             {
+                std::cout << "Failed to get buffer..." << std::endl;
                 failed = true;
                 break;
             }
