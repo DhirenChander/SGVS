@@ -24,6 +24,7 @@ Encoding new_video_encoding(uint16_t max_bit_rate, uint16_t min_bit_rate, uint16
     enc.data.video_enc.frame_height = frame_height;
     enc.data.video_enc.frame_width = frame_width;
     enc.data.video_enc.frame_rate = frame_rate;
+    enc.type = Video;
     return enc;
 }
 
@@ -32,6 +33,7 @@ Encoding new_audio_encoding(bool is_input)
     Encoding enc;
     enc.id = generate_id();
     enc.data.audio_enc.is_input = is_input;
+    enc.type = Audio;
     return enc;
 }
 
