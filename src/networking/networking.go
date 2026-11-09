@@ -93,7 +93,7 @@ func generateAnswer(offerSDP string) (
 	chan *webrtc.DataChannel, //Return a channel that will recieve the DataChannel once it is created
 	//                          Because channel is only received once host finished setup, we cannot wait for channel here
 
-	chan struct{}, //Signals when dataChannel is open (by closing itself)
+	chan struct{}, //Signals when dataChannel is open (by closing itself) (TODO): See if we can change this into a chan bool
 	chan webrtc.DataChannelMessage, //Messages are sent to here (should this be an input instead of output?)
 	error) {
 
