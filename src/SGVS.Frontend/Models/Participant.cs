@@ -12,16 +12,12 @@ public class Participant : ObservableObject
 
     public required string Name { get; init; }
 
-    // flat avatar color, one of apple's system colors (Watch screen)
+    // ring + initials color in the member rail. no facecam in this design, so this is
+    // the only per-person visual there is
     public IBrush AvatarBrush { get; init; } = Brushes.Gray;
 
     // avatar color on the Meeting screen, mapped to a token in Styles/Resources.axaml
     public AvatarTone Tone { get; init; } = AvatarTone.Neutral;
-
-    // stand-in for their camera feed, null = camera off
-    public Bitmap? VideoFrame { get; set; }
-
-    public bool IsVideoOn => VideoFrame is not null;
 
     // sharing their screen right now. settable because people start and stop mid-call
     public bool IsStreamer
