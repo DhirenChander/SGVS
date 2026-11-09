@@ -13,7 +13,7 @@ const managementChannelName = "transceiver_management"
 func generateOffer() (
 	*webrtc.PeerConnection,
 	*webrtc.DataChannel,
-	chan struct{}, //Signals when dataChannel is open (by closing itself)
+	chan struct{}, //Signals when dataChannel is open (by closing itself) (TODO): See if we can change this into a chan bool
 	chan webrtc.DataChannelMessage, //Messages are sent to here (should this be an input instead of output?)
 	error) {
 
