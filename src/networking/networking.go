@@ -9,6 +9,20 @@ import (
 
 const managementChannelName = "transceiver_management"
 
+var StunServers = []string{
+	"stun.l.google.com:19302",
+	"stun1.l.google.com:19302",
+	"stun2.l.google.com:19302",
+	"stun3.l.google.com:19302",
+	"stun4.l.google.com:19302",
+}
+
+var ICEConfiguration = webrtc.Configuration{
+	ICEServers: []webrtc.ICEServer{{
+		URLs: StunServers,
+	}},
+}
+
 // Setting up connections
 func generateOffer() (
 	*webrtc.PeerConnection,
@@ -18,7 +32,7 @@ func generateOffer() (
 	error) {
 
 	// create a peer connection
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	pc, err := webrtc.NewPeerConnection(ICEConfiguration)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -177,6 +191,48 @@ func applyAnswer(pc *webrtc.PeerConnection, SDP string) error {
 
 func getSDPStr(pc *webrtc.PeerConnection) string {
 	return pc.LocalDescription().SDP
+}
+
+// TODO: Call this before creating offer (for host) and before creating answer but after setting remote (for attendee)
+func AddVoiceTrack(pc *webrtc.PeerConnection) (
+	*webrtc.TrackLocalStaticSample,
+	*webrtc.RTPSender,
+	error,
+) {
+
+	defaultAudioCapability :=
+		webrtc.RTPCodecCapability{
+			MimeType:  webrtc.MimeTypeOpus, //TODO: confirm with others which encoding we will use
+			ClockRate: 48000,
+			Channels:  2,
+		}
+
+	track, err := webrtc.NewTrackLocalStaticSample(
+		defaultAudioCapability,
+		"voice-audio",
+		"voice-audio-stream",
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sender, err := pc.AddTrack(track)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Read from the buffer forever
+	// go func() {
+	//     buf := make([]byte, 1500)
+	//     for {
+	//         if _, _, err := sender.Read(buf); err != nil {
+	//             return
+	//         }
+	//     }
+	// }()
+
+	return track, sender, nil
+
 }
 
 // Generated with AI
