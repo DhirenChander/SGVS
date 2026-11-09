@@ -1,5 +1,4 @@
 using Avalonia.Media;
-using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace SGVS.Frontend.Models;
@@ -10,13 +9,9 @@ public class Participant : ObservableObject
 
     public required string Name { get; init; }
 
-    // flat avatar color, one of apple's system colors
+    // ring + initials color in the member rail. no facecam in this design, so this is
+    // the only per-person visual there is
     public IBrush AvatarBrush { get; init; } = Brushes.Gray;
-
-    // stand-in for their camera feed, null = camera off
-    public Bitmap? VideoFrame { get; set; }
-
-    public bool IsVideoOn => VideoFrame is not null;
 
     public bool IsStreamer { get; init; }
 

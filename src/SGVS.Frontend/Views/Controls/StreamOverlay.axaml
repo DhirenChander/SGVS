@@ -1,0 +1,217 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SGVS.Frontend.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="675"
+             x:Class="SGVS.Frontend.Views.Controls.StreamOverlay"
+             x:DataType="vm:WatchViewModel">
+
+    <!-- everything that floats on top of the stream itself: settings gear, the control
+         bar, fullscreen button, and the stream options dialog. kept as one control so
+         WatchView places a single thing over the stream.
+
+         OverlayRoot itself is always visible - ChromeGroup is the part the auto-hide
+         timer actually toggles. they're split so an open dialog (which lives outside
+         ChromeGroup, below) doesn't vanish along with the gear/bar/fullscreen on a
+         2.5s idle timeout; both are named so code-behind can reach them without a
+         bindable property just for that. -->
+    <Panel x:Name="OverlayRoot">
+      <Panel x:Name="ChromeGroup">
+
+        <!-- settings gear. bottom-left, on top of the video itself per the mockup. opens
+             a menu of frontend-only prefs - nothing here has a backend to persist to
+             yet, see RebuildSettingsOptions for why the rows are built in code -->
+        <Button x:Name="GearButton" Classes="glass" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                Margin="12,0,0,11" ToolTip.Tip="Settings" AutomationProperties.Name="Settings">
+            <Panel Width="22" Height="22">
+                <Path Data="{StaticResource GearIcon}" Classes="icon" />
+            </Panel>
+            <Button.Flyout>
+                <Flyout Placement="Top" ShowMode="Standard">
+                    <Border Background="{DynamicResource GlassBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                            BorderThickness="1" CornerRadius="8" BoxShadow="0 14 34 0 #80000000" Padding="4" MinWidth="220">
+                        <StackPanel>
+                            <TextBlock Text="Settings" FontSize="12" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource MutedTextBrush}" Margin="14,8,14,6" />
+                            <StackPanel x:Name="SettingsOptions" />
+                        </StackPanel>
+                    </Border>
+                </Flyout>
+            </Button.Flyout>
+        </Button>
+
+        <!-- the control bar: mic, resolution, volume, stop watching, start stream, leave -->
+        <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,14"
+                Background="{DynamicResource GlassBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                BorderThickness="1" CornerRadius="8" Padding="4" BoxShadow="0 14 34 0 #80000000">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+
+                <!-- mic: checked = muted. figma's bar doesn't have this at all (viewer mic
+                     control isn't part of this screen in the mockup) but it was asked for
+                     on top of the design, so it's squeezed in as just another segment -->
+                <ToggleButton Classes="micseg" IsChecked="{Binding IsMuted}"
+                              ToolTip.Tip="{Binding MuteLabel}" AutomationProperties.Name="Mute microphone">
+                    <Panel Width="20" Height="20">
+                        <Path Data="{StaticResource MicIcon}" Classes="icon" />
+                        <Line Classes="slash" StartPoint="2,18" EndPoint="18,2" IsVisible="{Binding IsMuted}" />
+                    </Panel>
+                </ToggleButton>
+
+                <Border Width="1" Height="20" Background="{DynamicResource SeparatorBrush}" />
+
+                <!-- resolution. the dropdown is a Flyout so Avalonia handles open/close and
+                     light-dismiss for free - the row list itself gets built in code-behind
+                     (see RebuildResolutionRows) since comparing "is this row the selected
+                     one" against a plain string list isn't something a compiled binding can
+                     express without a converter, and that felt like a lot of ceremony for
+                     four rows -->
+                <Button x:Name="ResolutionButton" Classes="barseg">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding SelectedResolution}" FontSize="14" VerticalAlignment="Center" />
+                        <Panel Width="14" Height="14" VerticalAlignment="Center">
+                            <Path Data="{StaticResource CaretUpIcon}" Classes="icon" Stroke="{DynamicResource MutedTextBrush}" />
+                        </Panel>
+                    </StackPanel>
+                    <Button.Flyout>
+                        <Flyout Placement="Top" ShowMode="Standard">
+                            <Border Background="{DynamicResource GlassBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                                    BorderThickness="1" CornerRadius="8" BoxShadow="0 14 34 0 #80000000" Padding="4" MinWidth="140">
+                                <StackPanel x:Name="ResolutionMenuItems" />
+                            </Border>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+
+                <Border Width="1" Height="20" Background="{DynamicResource SeparatorBrush}" />
+
+                <!-- volume. clicking the speaker mutes/unmutes the stream without losing
+                     the slider position, same as before -->
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="10,0">
+                    <Button Classes="iconbtn" Command="{Binding ToggleStreamMuteCommand}"
+                            ToolTip.Tip="{Binding StreamMuteLabel}" AutomationProperties.Name="Mute stream">
+                        <Panel Width="18" Height="18">
+                            <Path Data="{StaticResource VolumeIcon}" Classes="icon" />
+                            <!-- same slash-over-icon trick the mic button uses -->
+                            <Line Classes="slash" StartPoint="2,16" EndPoint="16,2" IsVisible="{Binding IsStreamSilent}" />
+                        </Panel>
+                    </Button>
+                    <Slider Classes="volume" Minimum="0" Maximum="100" Value="{Binding Volume}" Width="100"
+                            VerticalAlignment="Center" Cursor="Hand" AutomationProperties.Name="Stream volume" />
+                </StackPanel>
+
+                <Border Width="1" Height="20" Background="{DynamicResource SeparatorBrush}" />
+
+                <!-- these two don't do anything real yet, same placeholder situation Leave
+                     was already in - no backend to switch streams or go live with -->
+                <Button Classes="barseg" Command="{Binding StopWatchingCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Panel Width="18" Height="18">
+                            <Path Data="{StaticResource StopWatchingIcon}" Classes="icon" />
+                        </Panel>
+                        <TextBlock Text="Stop watching" FontSize="14" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <Border Width="1" Height="20" Background="{DynamicResource SeparatorBrush}" />
+
+                <Button Classes="barseg" Command="{Binding StartStreamCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Panel Width="18" Height="18">
+                            <Path Data="{StaticResource StartStreamIcon}" Classes="icon" />
+                        </Panel>
+                        <TextBlock Text="Start stream" FontSize="14" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <Button Classes="barseg" Command="{Binding LeaveCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Panel Width="18" Height="18">
+                            <Path Data="{StaticResource LeaveIcon}" Classes="icon" Stroke="{DynamicResource DangerTextBrush}" />
+                        </Panel>
+                        <TextBlock Text="Leave" FontSize="14" VerticalAlignment="Center" Foreground="{DynamicResource DangerTextBrush}" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <!-- fullscreen. actually toggling the window is MainWindow's job, so this just
+             raises an event and lets WatchView deal with it -->
+        <Button x:Name="FullscreenButton" Classes="glass" Width="50" Height="50"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,14,14"
+                Click="OnFullscreenClick" ToolTip.Tip="Fullscreen" AutomationProperties.Name="Toggle fullscreen">
+            <Panel Width="20" Height="20">
+                <Path Data="{StaticResource FullscreenIcon}" Classes="icon" />
+            </Panel>
+        </Button>
+      </Panel>
+
+        <!-- start-stream / stop-watching options. purely a picker UI for now - nothing
+             here actually starts or stops a stream, same placeholder state the two
+             commands were already in. outside ChromeGroup on purpose: it has to survive
+             the auto-hide timer so it lives in this control. -->
+        <Panel IsVisible="{Binding IsDialogOpen}">
+            <Border Background="#99000000" PointerPressed="OnDialogScrimPressed" />
+            <Border HorizontalAlignment="Center" VerticalAlignment="Center" Width="300" CornerRadius="12"
+                    Background="{DynamicResource GlassBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="1" BoxShadow="0 14 34 0 #80000000" Padding="20">
+                <StackPanel Spacing="16">
+
+                    <!-- start stream: pick a source. the row list is built in code-behind,
+                         same reason and same pattern as the resolution menu above -->
+                    <StackPanel Spacing="10" IsVisible="{Binding IsStartStreamDialog}">
+                        <TextBlock Text="Start stream" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock Text="Choose what to share" FontSize="13" Foreground="{DynamicResource MutedTextBrush}" />
+                        <StackPanel x:Name="StreamSourceOptions" Spacing="6" />
+                    </StackPanel>
+
+                    <!-- stop watching: nothing to pick, just a confirm -->
+                    <StackPanel Spacing="10" IsVisible="{Binding IsStopWatchingDialog}">
+                        <TextBlock Text="Stop watching" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock Text="You'll stop seeing the shared screen until you watch again." FontSize="13"
+                                   Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right"
+                                IsVisible="{Binding !IsLeaveDialog}">
+                        <Button Classes="barseg" Content="Cancel" Command="{Binding CloseDialogCommand}" />
+                        <Button Classes="barseg" Content="{Binding DialogConfirmLabel}" Command="{Binding CloseDialogCommand}" />
+                    </StackPanel>
+
+                    <!-- leave: its own confirm action isn't "just close the dialog" like
+                         the other two, so it gets a fully self-contained block including
+                         its own button row rather than sharing the one above -->
+                    <StackPanel Spacing="14" IsVisible="{Binding IsLeaveDialog}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Leave?" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Text="You'll leave the call. You can rejoin later with the same code." FontSize="13"
+                                       Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <!-- "don't ask again" - a plain hand-built checkbox row (Border +
+                             checkmark), same reasoning as the settings toggle pills: this
+                             app doesn't lean on default Fluent chrome anywhere else -->
+                        <Button Classes="resrow" Command="{Binding ToggleSkipLeaveConfirmationCommand}">
+                            <Grid ColumnDefinitions="Auto,*">
+                                <Border Width="16" Height="16" CornerRadius="4" BorderThickness="1.5"
+                                        BorderBrush="{DynamicResource MutedTextBrush}" VerticalAlignment="Center">
+                                    <Path Data="{StaticResource CheckIcon}" Classes="icon" Width="10" Height="10"
+                                          Stroke="{DynamicResource AccentBrush}" IsVisible="{Binding SkipLeaveConfirmation}" />
+                                </Border>
+                                <TextBlock Grid.Column="1" Text="Don't ask me again" FontSize="13" Margin="10,0,0,0"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+                        </Button>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                            <Button Classes="barseg" Content="Cancel" Command="{Binding CloseDialogCommand}" />
+                            <Button Classes="barseg" Command="{Binding ConfirmLeaveCommand}">
+                                <TextBlock Text="Leave" FontSize="14" Foreground="{DynamicResource DangerTextBrush}" />
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Panel>
+    </Panel>
+</UserControl>
