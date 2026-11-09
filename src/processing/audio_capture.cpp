@@ -27,6 +27,15 @@ WAVEFORMATEX windows_format(AudioFormat format)
     return fmt;
 }
 
+AudioFormat from_windows_format(WAVEFORMATEX wformat)
+{
+    AudioFormat fmt;
+    fmt.bitsPerSamp = wformat.wBitsPerSample;
+    fmt.multiChannel = wformat.nChannels > 1;
+    fmt.samplesPerSec = wformat.nSamplesPerSec;
+    return fmt;
+}
+
 // Generated with Claude
 // Creates the audio client
 IAudioClient *ActivateProcessLoopback(DWORD pid)
@@ -91,13 +100,14 @@ IAudioClient *ActivateDeviceLoopback(LPWSTR device_id)
 }
 #endif
 
-ProcessAudioReader::ProcessAudioReader(uint32_t pid)
+ProcessAudioReader::ProcessAudioReader(uint32_t pid, AudioFormat format)
 {
 #ifdef _WIN32
     // Need to initialize before creating the audio client
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     m_client = ActivateProcessLoopback((DWORD)pid);
     m_stream_flags = AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
+    m_fmt = windows_format(format);
 #endif
 }
 
@@ -108,6 +118,23 @@ ProcessAudioReader::ProcessAudioReader(wchar_t *device_id)
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     m_client = ActivateDeviceLoopback((LPWSTR)device_id);
     m_stream_flags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
+
+    // Get default device format instead of taking format as input
+    WAVEFORMATEX *temp_fmt = nullptr;
+    HRESULT hr = m_client->GetMixFormat(&temp_fmt);
+    if (FAILED(hr))
+    {
+        std::cout << "Failed to get mix format" << std::endl;
+        free(m_client);
+        CoUninitialize();
+        return;
+    }
+    // TODO: See if we want to enable higher bitrate mic audio
+    // Force audio into 16 bit format
+    AudioFormat temp_afmt = from_windows_format(*temp_fmt);
+    temp_afmt.bitsPerSamp = 16;
+    m_fmt = windows_format(temp_afmt);
+    CoTaskMemFree(temp_fmt);
 #endif
 }
 
@@ -119,12 +146,12 @@ void ProcessAudioReader::setup_buffer(AudioFormat format)
     m_buffSize = buffSize;
 }
 
-bool ProcessAudioReader::start(uint32_t buffer_time, AudioFormat format, Callback callback)
+bool ProcessAudioReader::start(uint32_t buffer_time, Callback callback)
 {
     m_cb = std::move(callback);
-    setup_buffer(format);
 #ifdef _WIN32
-    return this->start_capture_windows(buffer_time, format);
+    setup_buffer(from_windows_format(m_fmt));
+    return this->start_capture_windows(buffer_time);
 #endif
 
     return false;
@@ -140,10 +167,8 @@ void ProcessAudioReader::stop()
 #ifdef _WIN32
 
 // Generated with Claude
-bool ProcessAudioReader::start_capture_windows(uint32_t buffer_time_nanos, AudioFormat format)
+bool ProcessAudioReader::start_capture_windows(uint32_t buffer_time_nanos)
 {
-    m_fmt = windows_format(format);
-
     m_audioEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr); // auto-reset
     m_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);   // manual-reset
 

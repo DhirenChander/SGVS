@@ -35,11 +35,11 @@ public:
     {
     }
     // PID 0 => Read all audio (except for the SGVS process)
-    ProcessAudioReader(uint32_t pid);
+    ProcessAudioReader(uint32_t pid, AudioFormat format);
     ProcessAudioReader(wchar_t *device_id);
     // Starts reading audio under the given format, and calls the callback with the starting buffer index and the number of frames
     // This automatically starts running on the capture function on a separate thread
-    bool start(uint32_t buffer_time, AudioFormat format, Callback callback);
+    bool start(uint32_t buffer_time, Callback callback);
     void stop();
     // Returns a pointer to the first byte of the frame at buffer[(head + frameSize * ind) % buffSize]
     uint8_t *get_buffered_frame(uint32_t head, uint16_t ind);
@@ -68,7 +68,7 @@ private:
     void setup_buffer(AudioFormat format);
     void handle_audio_buffer(uint8_t *data, uint32_t frames, const size_t frameSize, uint32_t flags);
 #ifdef _WIN32
-    bool start_capture_windows(uint32_t buffer_time, AudioFormat format);
+    bool start_capture_windows(uint32_t buffer_time);
     void stop_capture_windows();
     void capture_process_audio_windows();
 #endif
