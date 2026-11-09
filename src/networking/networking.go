@@ -8,6 +8,7 @@ import (
 )
 
 const managementChannelName = "transceiver_management"
+const voiceAudioChannelName = "voice_audio"
 
 var StunServers = []string{
 	"stun.l.google.com:19302",
@@ -24,17 +25,22 @@ var ICEConfiguration = webrtc.Configuration{
 }
 
 // Setting up connections
+// Switch to named return?
 func generateOffer() (
 	*webrtc.PeerConnection,
 	*webrtc.DataChannel,
 	chan struct{}, //Signals when dataChannel is open (by closing itself)
 	chan webrtc.DataChannelMessage, //Messages are sent to here (should this be an input instead of output?)
+	*webrtc.TrackLocalStaticSample, //Voice audio track
+	*webrtc.RTPSender, //Voice audio sender
+	chan *webrtc.TrackRemote, //Voice audio channel
+	chan *webrtc.RTPReceiver, //Voice audio receiver
 	error) {
 
 	// create a peer connection
 	pc, err := webrtc.NewPeerConnection(ICEConfiguration)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 	logPeerConnectionState(pc, "host")
 
@@ -51,8 +57,23 @@ func generateOffer() (
 	dataChannel, err := pc.CreateDataChannel(managementChannelName, nil)
 	if err != nil {
 		_ = pc.Close()
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
+
+	voiceTrack, voiceSender, err := AddVoiceTrack(pc)
+
+	remoteAudioChan := make(chan *webrtc.TrackRemote, 1)
+	remoteAudioReceiverChan := make(chan *webrtc.RTPReceiver, 1)
+
+	//When the remote adds their audio track
+	pc.OnTrack(func(remoteTrack *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+		if remoteTrack.ID() != voiceAudioChannelName {
+			return
+		}
+
+		remoteAudioChan <- remoteTrack
+		remoteAudioReceiverChan <- receiver
+	})
 
 	dataChanOpen := make(chan struct{}, 1)
 	dcMessages := make(chan webrtc.DataChannelMessage, 1)
@@ -70,7 +91,7 @@ func generateOffer() (
 	// create a first offer that does not contain any local candidates
 	offer, err := pc.CreateOffer(nil)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	// gatherComplete is a channel that will be closed when
@@ -80,7 +101,7 @@ func generateOffer() (
 	// apply the offer
 	err = pc.SetLocalDescription(offer)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	// wait for gathering of local candidates to complete
@@ -95,11 +116,13 @@ func generateOffer() (
 	// Check that it contains at least one candidate
 	// Potentially move this check outside of this function if we need to differentiate it or act differently
 	if !strings.Contains(offer2.SDP, "\na=candidate:") {
-		return nil, nil, nil, nil, fmt.Errorf("No SDP candidates found, offer is not usable")
+		return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("No SDP candidates found, offer is not usable")
 	}
 
 	keepConnection = true
-	return pc, dataChannel, dataChanOpen, dcMessages, nil
+	return pc, dataChannel, dataChanOpen, dcMessages,
+		voiceTrack, voiceSender, remoteAudioChan, remoteAudioReceiverChan,
+		nil
 }
 
 func generateAnswer(offerSDP string) (
@@ -109,11 +132,16 @@ func generateAnswer(offerSDP string) (
 
 	chan struct{}, //Signals when dataChannel is open (by closing itself)
 	chan webrtc.DataChannelMessage, //Messages are sent to here (should this be an input instead of output?)
+	*webrtc.TrackLocalStaticSample, //Voice audio track
+	*webrtc.RTPSender, //Voice audio sender
+	chan *webrtc.TrackRemote, //Voice audio channel
+	chan *webrtc.RTPReceiver, //Voice audio receiver
+
 	error) {
 
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	pc, err := webrtc.NewPeerConnection(ICEConfiguration)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 	logPeerConnectionState(pc, "attendee")
 
@@ -156,18 +184,36 @@ func generateAnswer(offerSDP string) (
 		dcReady <- dc
 	})
 
+	remoteAudioChan := make(chan *webrtc.TrackRemote, 1)
+	remoteAudioReceiverChan := make(chan *webrtc.RTPReceiver, 1)
+
+	//When the remote (host for now) adds their audio track
+	pc.OnTrack(func(remoteTrack *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+		if remoteTrack.ID() != voiceAudioChannelName {
+			return
+		}
+
+		remoteAudioChan <- remoteTrack
+		remoteAudioReceiverChan <- receiver
+	})
+
 	if err := pc.SetRemoteDescription(remoteOffer); err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
+	}
+
+	voiceTrack, voiceSender, err := AddVoiceTrack(pc)
+	if err != nil {
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	gatherComplete := webrtc.GatheringCompletePromise(pc)
 	if err := pc.SetLocalDescription(answer); err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	// wait for gathering of candidates to complete
@@ -175,11 +221,14 @@ func generateAnswer(offerSDP string) (
 
 	localAnswer := pc.LocalDescription()
 	if localAnswer == nil {
-		return nil, nil, nil, nil, fmt.Errorf("Local answer could not be generated")
+		return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("Local answer could not be generated")
 	}
 
 	keepConnection = true
-	return pc, dcReady, dataChanOpen, dcMessages, nil
+
+	return pc, dcReady, dataChanOpen, dcMessages,
+		voiceTrack, voiceSender, remoteAudioChan, remoteAudioReceiverChan,
+		nil
 }
 
 func applyAnswer(pc *webrtc.PeerConnection, SDP string) error {
@@ -209,8 +258,8 @@ func AddVoiceTrack(pc *webrtc.PeerConnection) (
 
 	track, err := webrtc.NewTrackLocalStaticSample(
 		defaultAudioCapability,
-		"voice-audio",
-		"voice-audio-stream",
+		voiceAudioChannelName,
+		voiceAudioChannelName+"_stream",
 	)
 	if err != nil {
 		return nil, nil, err
@@ -221,15 +270,19 @@ func AddVoiceTrack(pc *webrtc.PeerConnection) (
 		return nil, nil, err
 	}
 
-	// Read from the buffer forever
-	// go func() {
-	//     buf := make([]byte, 1500)
-	//     for {
-	//         if _, _, err := sender.Read(buf); err != nil {
-	//             return
-	//         }
-	//     }
-	// }()
+	// Drain the incoming RTCP data until it error
+	// 		For now just discard the data,
+	// RTCP data is sent here, not the audio data
+	// Use this to read Receiver Reports and updates on network conditions
+	go func() {
+		buf := make([]byte, 1500)
+		for {
+			//Use ReadRTCP later to get formatted info
+			if _, _, err := sender.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
 
 	return track, sender, nil
 
