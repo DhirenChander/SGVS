@@ -6,7 +6,8 @@
 #include <stdint.h>
 #include <stdatomic.h>
 #include <inttypes.h>
-#include <wchar.h>
+#include <stdbool.h>
+
 #include "ringbuff.h"
 #include "encoding.h"
 
@@ -18,8 +19,9 @@
 typedef struct
 {
     Encoding encodings[MAX_ENCODINGS];
-    uint32_t video_selector; // PID when isProcess is true, Screen is with isProcess is false
+    uint32_t video_selector; // PID when isProcess is true, Screen ID when isProcess is false
     bool isProcess;
+    bool sharingScreen;
 } Config;
 
 typedef struct
@@ -52,5 +54,9 @@ bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t len);
 bool poll_encodings(FrameBuffer *fb, Encoding *out, uint8_t len, DWORD *out_err, uint32_t max_timeout);
 #endif
 Frame frame_sized_by_encoding(Encoding enc);
+void set_share_video(FrameBuffer *fb, bool v);
+bool try_read_config(FrameBuffer *fb, Config *out);
+bool blocking_read_config(FrameBuffer *fb, Config *out, uint32_t max_timeout);
+void force_read_config(FrameBuffer *fb, Config *out);
 
 #endif

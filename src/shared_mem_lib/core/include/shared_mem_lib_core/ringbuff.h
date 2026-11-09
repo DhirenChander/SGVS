@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <stdatomic.h>
 #include <inttypes.h>
-#include <wchar.h>
+#include <stdbool.h>
 #include "ring.h"
 
 #define RINGBUFF_H
@@ -23,8 +23,8 @@ typedef struct
 
 bool push(RingBuffer *rb, uint8_t *data, size_t size);
 bool open_ring(RingBuffer *rb);
-bool try_pop(RingBuffer *rb, uint8_t *out, size_t* out_size, size_t max_size);
-bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t* out_size, size_t max_size, uint32_t max_timeout);
+bool try_pop(RingBuffer *rb, uint8_t *out, size_t *out_size, size_t max_size);
+bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t *out_size, size_t max_size, uint32_t max_timeout);
 void free_ringbuffer(RingBuffer *rb);
 
 #endif

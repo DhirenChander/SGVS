@@ -5,15 +5,14 @@
 #include <stdint.h>
 #include <stdatomic.h>
 #include <inttypes.h>
-#include <wchar.h>
 #include "shared_mem_lib_core/ringbuff.h"
 
-bool try_pop(RingBuffer *rb, uint8_t *out, size_t* out_size, size_t size)
+bool try_pop(RingBuffer *rb, uint8_t *out, size_t *out_size, size_t size)
 {
     return blocking_pop(rb, out, out_size, size, 0x0);
 }
 
-bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t* out_size, size_t max_size, uint32_t max_timeout)
+bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t *out_size, size_t max_size, uint32_t max_timeout)
 {
     if (rb == nullptr || out == nullptr || max_size == 0)
     {
@@ -33,6 +32,7 @@ bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t* out_size, size_t max_siz
             return false;
         }
 
+#ifdef _WIN32
         DWORD waitResult = WaitForSingleObject(rb->ev, (DWORD)max_timeout);
 
         switch (waitResult)
@@ -52,11 +52,13 @@ bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t* out_size, size_t max_siz
             printf("Unexpected wait result: %lu\n", waitResult);
             return false;
         }
+#endif
 
         uint32_t head = atomic_load(&rb->ring->head);
         uint32_t tail = atomic_load(&rb->ring->tail);
 
         // Shouldn't happen in a spsc scenario, but still need to check
+        // Can occur in an unsupported OS
         if (head == tail)
         {
             printf("Buffer was empty after timeout.\n");

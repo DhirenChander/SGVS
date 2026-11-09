@@ -1,8 +1,10 @@
 #ifndef RING_H
 
-#if defined(_WIN32) || defined(_WIN64)
-#include <windows.h>
+// Needed for MSVC support
+#ifndef nullptr
+#define nullptr NULL
 #endif
+
 #include <stdint.h>
 #include <inttypes.h>
 

@@ -1,11 +1,12 @@
 #include "shared_mem_lib_core/encoding.h"
-#include "openssl/rand.h"
+#include <openssl/rand.h>
+#include <stdint.h>
 
 uint64_t generate_id()
 {
     uint64_t out;
     // This should be fine for unique ids, collisions are unlikely
-    if (RAND_bytes((unsigned char*)&out, sizeof(uint64_t)) != 1)
+    if (RAND_bytes((unsigned char *)&out, sizeof(uint64_t)) != 1)
     {
         printf("Failed to generate id, returning 0");
         return 0;
@@ -14,7 +15,8 @@ uint64_t generate_id()
     return out;
 }
 
-Encoding new_video_encoding(uint16_t max_bit_rate, uint16_t min_bit_rate, uint16_t frame_height, uint16_t frame_width, uint8_t frame_rate) {
+Encoding new_video_encoding(uint16_t max_bit_rate, uint16_t min_bit_rate, uint16_t frame_height, uint16_t frame_width, uint8_t frame_rate)
+{
     Encoding enc;
     enc.id = generate_id();
     enc.data.video_enc.max_bit_rate = max_bit_rate;
@@ -25,14 +27,15 @@ Encoding new_video_encoding(uint16_t max_bit_rate, uint16_t min_bit_rate, uint16
     return enc;
 }
 
-Encoding new_audio_encoding(bool is_input) {
+Encoding new_audio_encoding(bool is_input)
+{
     Encoding enc;
     enc.id = generate_id();
     enc.data.audio_enc.is_input = is_input;
     return enc;
 }
 
-Encoding nil_encoding()
+Encoding nil_encoding(void)
 {
     Encoding enc;
     enc.id = 0;

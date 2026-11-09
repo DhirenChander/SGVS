@@ -198,20 +198,23 @@ bool blocking_pop_frame(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max_
     out->encoding = enc;
     size_t true_size;
 
-    if (!blocking_pop(&fb->rings[rb_ind], out->data, &true_size, out->size, max_timeout)) {
+    if (!blocking_pop(&fb->rings[rb_ind], out->data, &true_size, out->size, max_timeout))
+    {
         return false;
     }
 
     out->size = true_size;
-    out->data = (uint8_t*)realloc(out->data, true_size);
+    out->data = (uint8_t *)realloc(out->data, true_size);
 
     return true;
 }
 
-bool push_frame(FrameBuffer *fb, Frame *f) {
+bool push_frame(FrameBuffer *fb, Frame *f)
+{
     int rb_ind = ringbuff_by_encoding(fb, f->encoding);
 
-    if (rb_ind == -1) {
+    if (rb_ind == -1)
+    {
         printf("No ring buffer present for this encoding.");
         return false;
     }
@@ -219,7 +222,8 @@ bool push_frame(FrameBuffer *fb, Frame *f) {
     return push(&fb->rings[rb_ind], f->data, f->size);
 }
 
-bool new_framebuffer(FrameBuffer *out) {
+bool new_framebuffer(FrameBuffer *out)
+{
     out->rings = malloc(0);
     out->ring_count = 0;
 
@@ -228,8 +232,8 @@ bool new_framebuffer(FrameBuffer *out) {
 
 #ifdef _WIN32
     out->conf_map = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
-                                 (DWORD)(conf_size >> 32), (DWORD)(conf_size & 0xFFFFFFFF),
-                                 L"Local\\sgvs_conf");
+                                       (DWORD)(conf_size >> 32), (DWORD)(conf_size & 0xFFFFFFFF),
+                                       L"Local\\sgvs_conf");
     if (out->conf_map == nullptr)
     {
         return false;
@@ -256,7 +260,8 @@ bool new_framebuffer(FrameBuffer *out) {
     config = (Config *)MapViewOfFile(out->conf_map, FILE_MAP_ALL_ACCESS, 0, 0, conf_size);
 #endif
 
-    if (config == nullptr) {
+    if (config == nullptr)
+    {
         return false;
     }
 
@@ -264,7 +269,8 @@ bool new_framebuffer(FrameBuffer *out) {
     return true;
 }
 
-void free_framebuffer(FrameBuffer *fb) {
+void free_framebuffer(FrameBuffer *fb)
+{
     free(fb->rings);
 #ifdef _WIN32
     UnmapViewOfFile(&fb->config);
@@ -273,4 +279,50 @@ void free_framebuffer(FrameBuffer *fb) {
     CloseHandle(fb->conf_ev);
 #endif
     free(fb);
+}
+
+void set_share_video(FrameBuffer *fb, bool v)
+{
+    fb->config.sharingScreen = v;
+#ifdef _WIN32
+    SetEvent(fb->conf_ev);
+#endif
+}
+
+bool try_read_config(FrameBuffer *fb, Config *out)
+{
+    return blocking_read_config(fb, out, 0);
+}
+
+bool blocking_read_config(FrameBuffer *fb, Config *out, uint32_t max_timeout)
+{
+#ifdef _WIN32
+    DWORD waitResult = WaitForSingleObject(fb->conf_ev, (DWORD)max_timeout);
+
+    switch (waitResult)
+    {
+    case WAIT_OBJECT_0:
+        break;
+
+    case WAIT_TIMEOUT:
+        printf("The wait operation timed out, buffer was not filled in the requested timeout.\n");
+        return false;
+
+    case WAIT_FAILED:
+        printf("WaitForSingleObject failed with error (%lu)\n", GetLastError());
+        return false;
+
+    default:
+        printf("Unexpected wait result: %lu\n", waitResult);
+        return false;
+    }
+#endif
+
+    force_read_config(fb, out);
+    return true;
+}
+
+void force_read_config(FrameBuffer *fb, Config *out)
+{
+    *out = fb->config;
 }
