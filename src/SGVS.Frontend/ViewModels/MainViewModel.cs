@@ -10,7 +10,7 @@ public partial class MainViewModel : ViewModelBase
     // pages navigate by handing the next page to the callback
     public MainViewModel()
     {
-        CurrentView = new MeetingViewModel(new FakeMeetingService(), new ClipboardService(), page => CurrentView = page);
+        CurrentView = new MeetingViewModel(new FakeMeetingService(), page => CurrentView = page);
     }
 
     [ObservableProperty]

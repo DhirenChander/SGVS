@@ -12,15 +12,17 @@ public sealed class FakeMeetingService : IMeetingService
 
     public FakeMeetingService()
     {
-        // display names aren't decided yet, "Alex" is only here so your avatar has an initial
-        Self = new Participant { Name = "Alex", IsSelf = true, Tone = AvatarTone.Teal };
+        // display names aren't decided yet. Aurko is you, Austin is the one streaming
+        Self = new Participant { Name = "Aurko", IsSelf = true, Tone = AvatarTone.Teal };
 
         Members = new ReadOnlyObservableCollection<Participant>(
         [
-            new Participant { Name = "Sam", Tone = AvatarTone.Amber, IsStreamer = true, StreamPreview = _preview },
             Self,
-            new Participant { Name = "Priya", Tone = AvatarTone.Sand },
-            new Participant { Name = "Jo", Tone = AvatarTone.Neutral },
+            new Participant { Name = "Austin", Tone = AvatarTone.Amber, IsStreamer = true, StreamPreview = _preview },
+            new Participant { Name = "Dhiren", Tone = AvatarTone.Sand },
+            new Participant { Name = "Leo", Tone = AvatarTone.Neutral },
+            new Participant { Name = "Carter", Tone = AvatarTone.Teal },
+            new Participant { Name = "Oliver", Tone = AvatarTone.Amber },
         ]);
     }
 

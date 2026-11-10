@@ -1,4 +1,3 @@
-using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -12,11 +11,7 @@ public class Participant : ObservableObject
 
     public required string Name { get; init; }
 
-    // ring + initials color in the member rail. no facecam in this design, so this is
-    // the only per-person visual there is
-    public IBrush AvatarBrush { get; init; } = Brushes.Gray;
-
-    // avatar color on the Meeting screen, mapped to a token in Styles/Resources.axaml
+    // avatar color on the Meeting gallery and the Watch member rail, mapped to a token in Styles/Resources.axaml
     public AvatarTone Tone { get; init; } = AvatarTone.Neutral;
 
     // sharing their screen right now. settable because people start and stop mid-call

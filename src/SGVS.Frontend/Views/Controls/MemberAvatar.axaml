@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:m="using:SGVS.Frontend.Models"
+             xmlns:conv="using:SGVS.Frontend.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="76" d:DesignHeight="76"
+             x:Class="SGVS.Frontend.Views.Controls.MemberAvatar"
+             x:DataType="m:Participant">
+
+    <!-- a member's round avatar: their tone color at 20% for the circle, the initial solid.
+         used by the Meeting gallery (big) and the Watch member rail (small). it's drawn once at the
+         Figma size (76) and the Viewbox scales it to whatever Width/Height the host gives it, so the
+         color, centering and letter proportions can't drift apart between the two screens -->
+    <Viewbox Stretch="Uniform">
+        <Panel Width="76" Height="76">
+            <Ellipse Fill="{Binding Tone, Converter={x:Static conv:AvatarToneBrushConverter.Instance}}"
+                     Opacity="0.2" />
+            <TextBlock Text="{Binding Initials}" FontSize="30" FontWeight="Medium"
+                       Foreground="{Binding Tone, Converter={x:Static conv:AvatarToneBrushConverter.Instance}}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Panel>
+    </Viewbox>
+</UserControl>
