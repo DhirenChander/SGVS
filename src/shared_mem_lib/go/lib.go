@@ -15,6 +15,11 @@ type Config C.Config
 type Frame C.Frame
 type FrameBuffer C.FrameBuffer
 
+type GCFrame struct {
+	raw   Frame
+	bytes []byte
+}
+
 func (fb *FrameBuffer) c() *C.FrameBuffer { return (*C.FrameBuffer)(fb) }
 
 func NewFrameBuffer(out *FrameBuffer) bool {
@@ -80,11 +85,14 @@ func (f *Frame) GetFrameSize() uint64 {
 	return uint64(C.get_frame_size((*C.Frame)(f)))
 }
 
-func NewFrame(enc Encoding) Frame {
+func NewGCFrame(enc Encoding) GCFrame {
 	f := FrameSizedByEncoding(enc)
 	buff := make([]byte, f.GetFrameSize())
 	f.SetFrameData(buff)
-	return f
+
+	return GCFrame{
+		f, buff,
+	}
 }
 
 //Encoding new_video_encoding(uint16_t max_bit_rate, uint16_t min_bit_rate, uint16_t frame_height, uint16_t frame_width, uint8_t frame_rate);
