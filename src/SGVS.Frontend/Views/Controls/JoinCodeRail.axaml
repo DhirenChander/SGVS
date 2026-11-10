@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SGVS.Frontend.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="72" d:DesignHeight="120"
+             x:Class="SGVS.Frontend.Views.Controls.JoinCodeRail"
+             x:DataType="vm:JoinCodeViewModel"
+             Width="72">
+
+    <Design.DataContext>
+        <vm:JoinCodeViewModel />
+    </Design.DataContext>
+
+    <!-- the host places this bottom-right. it lives outside StreamOverlay on purpose, the
+         idle auto-hide must never take the code away -->
+    <StackPanel>
+        <!-- collapsed: just the key icon -->
+        <Button Classes="iconbtn" Width="72" Height="40" IsVisible="{Binding !IsRevealed}"
+                Command="{Binding ToggleRevealCommand}" ToolTip.Tip="Show join code" AutomationProperties.Name="Show join code">
+            <Panel Width="20" Height="20">
+                <Path Data="{StaticResource SgvsKeyIcon}" Classes="icon" Stroke="{DynamicResource SgvsTextMutedBrush}" />
+            </Panel>
+        </Button>
+
+        <!-- revealed: the code split over two lines (matches the mockup). clicking the code
+             copies it, with a brief "Copied!" swap-in for feedback. the button below hides
+             it again, back to the key icon -->
+        <StackPanel IsVisible="{Binding IsRevealed}" Spacing="6" HorizontalAlignment="Center" Margin="0,6">
+            <!-- Background="Transparent" is load-bearing: a Panel with no background at all only
+                 hit-tests the actual glyph ink, not the gap between the two code lines, so most
+                 clicks in the "clickable area" would silently miss -->
+            <Panel Background="Transparent" Cursor="Hand" PointerPressed="OnCodePressed" ToolTip.Tip="Click to copy">
+                <StackPanel Spacing="2" IsVisible="{Binding !IsCopied}">
+                    <TextBlock Text="{Binding FirstHalf}" FontFamily="{DynamicResource SgvsCodeFont}"
+                               FontSize="14" LetterSpacing="0.84" HorizontalAlignment="Center" />
+                    <TextBlock Text="{Binding SecondHalf}" FontFamily="{DynamicResource SgvsCodeFont}"
+                               FontSize="14" LetterSpacing="0.84" HorizontalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Text="Copied!" FontSize="13" FontWeight="Medium" HorizontalAlignment="Center"
+                           Foreground="{DynamicResource SgvsAccentBrush}" IsVisible="{Binding IsCopied}" />
+            </Panel>
+            <Button Classes="iconbtn" Click="OnHideClick" ToolTip.Tip="Hide join code" AutomationProperties.Name="Hide join code">
+                <Panel Width="18" Height="18">
+                    <!-- the chevron flipped, "collapse" is the same shape as "open" upside down -->
+                    <Path Data="{StaticResource SgvsChevronUpIcon}" Classes="icon" Stroke="{DynamicResource SgvsTextMutedBrush}"
+                          RenderTransform="scaleY(-1)" />
+                </Panel>
+            </Button>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

@@ -10,8 +10,8 @@
         Title="SGVS" Width="1280" Height="760" MinWidth="960" MinHeight="600"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaTitleBarHeightHint="-1"
-        FontFamily="SF Pro Display, Segoe UI Variable Display, Inter, Segoe UI, sans-serif"
-        Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}">
+        FontFamily="{DynamicResource SgvsUiFont}"
+        Background="{DynamicResource SgvsGroundBrush}" Foreground="{DynamicResource SgvsTextBrush}">
 
     <Design.DataContext>
         <!-- This only sets the DataContext for the previewer in an IDE,
@@ -40,20 +40,20 @@
                         <!-- a flat line has no height for Stretch=Uniform to scale against
                              (it'll just vanish), so this is a Line like the mute slash is,
                              not a Path - same reason, same fix -->
-                        <Line StartPoint="2.91667,7" EndPoint="11.0833,7" Stroke="{DynamicResource MutedTextBrush}"
+                        <Line StartPoint="2.91667,7" EndPoint="11.0833,7" Stroke="{DynamicResource SgvsTextMutedBrush}"
                               StrokeThickness="1.5" StrokeLineCap="Round" />
                     </Panel>
                 </Button>
                 <Button Classes="titlebar" Width="44" Height="36" Click="OnMaximizeClick" AutomationProperties.Name="Maximize">
                     <Panel Width="14" Height="14">
-                        <Path Data="{StaticResource WindowMaximizeIcon}" Classes="icon"
-                              Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.5" />
+                        <Path Data="{StaticResource SgvsWindowMaximizeIcon}" Classes="icon"
+                              Stroke="{DynamicResource SgvsTextMutedBrush}" StrokeThickness="1.5" />
                     </Panel>
                 </Button>
                 <Button Classes="titlebar" Width="44" Height="36" Click="OnCloseClick" AutomationProperties.Name="Close">
                     <Panel Width="14" Height="14">
-                        <Path Data="{StaticResource WindowCloseIcon}" Classes="icon"
-                              Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.5" />
+                        <Path Data="{StaticResource SgvsWindowCloseIcon}" Classes="icon"
+                              Stroke="{DynamicResource SgvsTextMutedBrush}" StrokeThickness="1.5" />
                     </Panel>
                 </Button>
             </StackPanel>

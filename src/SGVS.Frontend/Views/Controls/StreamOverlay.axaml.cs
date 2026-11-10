@@ -6,6 +6,7 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 using SGVS.Frontend.ViewModels;
 // System.IO.Path (implicit usings) and Avalonia.Controls.Shapes.Path collide on the bare
 // name "Path" - this file only ever means the shape, so alias it rather than qualify every use
@@ -15,30 +16,51 @@ namespace SGVS.Frontend.Views.Controls;
 
 public partial class StreamOverlay : UserControl
 {
+    // control chrome fades out after this long with the mouse sitting still, same idea as
+    // youtube/twitch - comes back on the next move
+    private static readonly TimeSpan HideDelay = TimeSpan.FromSeconds(2.5);
+    private readonly DispatcherTimer _hideTimer = new() { Interval = HideDelay };
+
+    // true while a flyout is open - the timer still ticks but this stops it hiding anything
+    private bool _suppressAutoHide;
+
     public StreamOverlay()
     {
         InitializeComponent();
+
+        _hideTimer.Tick += (_, _) =>
+        {
+            // flyouts are popups and the dialog lives outside ChromeGroup, so neither feeds the
+            // pointer movement that restarts this timer. KeepControlsVisible is the settings toggle
+            if (_suppressAutoHide || DataContext is OverlayViewModel { IsDialogOpen: true } or OverlayViewModel { KeepControlsVisible: true })
+                return;
+            ControlsVisible = false;
+            _hideTimer.Stop();
+        };
+        Loaded += (_, _) => NotifyActivity();
+        Unloaded += (_, _) => _hideTimer.Stop();
 
         // the resolution menu and the stream-source list are both built here rather than
         // from an ItemsControl - see the comment above ResolutionMenuItems in the axaml
         // for why
         DataContextChanged += (_, _) =>
         {
-            if (DataContext is not WatchViewModel vm) return;
+            if (DataContext is not OverlayViewModel vm) return;
             RebuildResolutionRows(vm);
             RebuildStreamSourceOptions(vm);
             RebuildSettingsOptions(vm);
             vm.PropertyChanged += OnViewModelPropertyChanged;
+            NotifyActivity();
         };
 
-        // both flyouts are popups, not children of ChromeGroup, so hovering either one
-        // doesn't feed WatchView's PointerMoved-driven auto-hide timer at all. without
-        // this, moving the mouse onto an open list makes the bar it's attached to vanish
-        // out from under it. simplest fix: while either is open, don't hide anything
-        ResolutionButton.Flyout!.Opened += (_, _) => FlyoutOpened?.Invoke(this, EventArgs.Empty);
-        ResolutionButton.Flyout!.Closed += (_, _) => FlyoutClosed?.Invoke(this, EventArgs.Empty);
-        GearButton.Flyout!.Opened += (_, _) => FlyoutOpened?.Invoke(this, EventArgs.Empty);
-        GearButton.Flyout!.Closed += (_, _) => FlyoutClosed?.Invoke(this, EventArgs.Empty);
+        // both flyouts are popups, not children of ChromeGroup, so hovering one doesn't
+        // count as pointer movement for the auto-hide timer above. without this, moving the
+        // mouse onto an open list makes the bar it's attached to vanish out from under it.
+        // simplest fix: while either is open, don't hide anything
+        ResolutionButton.Flyout!.Opened += (_, _) => _suppressAutoHide = true;
+        ResolutionButton.Flyout!.Closed += (_, _) => OnFlyoutClosed();
+        GearButton.Flyout!.Opened += (_, _) => _suppressAutoHide = true;
+        GearButton.Flyout!.Closed += (_, _) => OnFlyoutClosed();
     }
 
     // lets WatchView hide/show the chrome for the auto-hide behaviour without needing a
@@ -52,27 +74,41 @@ public partial class StreamOverlay : UserControl
 
     public event EventHandler? FullscreenRequested;
 
-    public event EventHandler? FlyoutOpened;
+    // hosts call this on pointer movement: shows the controls and restarts the idle countdown
+    public void NotifyActivity()
+    {
+        ControlsVisible = true;
+        _hideTimer.Stop();
+        _hideTimer.Start();
+    }
 
-    public event EventHandler? FlyoutClosed;
+    private void OnFlyoutClosed()
+    {
+        _suppressAutoHide = false;
+        NotifyActivity(); // fresh countdown instead of hiding right away
+    }
 
     private void OnFullscreenClick(object? sender, RoutedEventArgs e) => FullscreenRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnDialogScrimPressed(object? sender, Avalonia.Input.PointerPressedEventArgs e)
     {
-        if (DataContext is WatchViewModel vm) vm.CloseDialogCommand.Execute(null);
+        if (DataContext is OverlayViewModel vm) vm.CloseDialogCommand.Execute(null);
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (DataContext is not WatchViewModel vm) return;
-        if (e.PropertyName == nameof(WatchViewModel.SelectedResolution)) RefreshResolutionChecks(vm);
-        if (e.PropertyName == nameof(WatchViewModel.SelectedStreamSource)) RefreshStreamSourceChecks(vm);
+        if (DataContext is not OverlayViewModel vm) return;
+        if (e.PropertyName == nameof(OverlayViewModel.SelectedResolution)) RefreshResolutionChecks(vm);
+        if (e.PropertyName == nameof(OverlayViewModel.SelectedStreamSource)) RefreshStreamSourceChecks(vm);
+
+        // closing a dialog or turning "keep visible" off deserves a fresh countdown too
+        if (e.PropertyName == nameof(OverlayViewModel.DialogKind) && !vm.IsDialogOpen) NotifyActivity();
+        if (e.PropertyName == nameof(OverlayViewModel.KeepControlsVisible) && !vm.KeepControlsVisible) NotifyActivity();
     }
 
     // mock source list for the start-stream dialog - same "radio row built in code"
     // pattern as the resolution menu, just rendered inline instead of in a flyout
-    private void RebuildStreamSourceOptions(WatchViewModel vm)
+    private void RebuildStreamSourceOptions(OverlayViewModel vm)
     {
         StreamSourceOptions.Children.Clear();
 
@@ -93,7 +129,7 @@ public partial class StreamOverlay : UserControl
         }
     }
 
-    private void RefreshStreamSourceChecks(WatchViewModel vm)
+    private void RefreshStreamSourceChecks(OverlayViewModel vm)
     {
         foreach (var child in StreamSourceOptions.Children)
         {
@@ -102,7 +138,7 @@ public partial class StreamOverlay : UserControl
         }
     }
 
-    private void RebuildResolutionRows(WatchViewModel vm)
+    private void RebuildResolutionRows(OverlayViewModel vm)
     {
         ResolutionMenuItems.Children.Clear();
 
@@ -111,9 +147,9 @@ public partial class StreamOverlay : UserControl
             var label = new TextBlock { Text = resolution, FontSize = 14, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
             var check = new Path
             {
-                Data = (StreamGeometry)this.FindResource("CheckIcon")!,
+                Data = (StreamGeometry)this.FindResource("SgvsCheckIcon")!,
                 Classes = { "icon" },
-                Stroke = (IBrush)this.FindResource("AccentBrush")!,
+                Stroke = (IBrush)this.FindResource("SgvsAccentBrush")!,
                 Width = 14,
                 Height = 14,
                 IsVisible = false,
@@ -139,7 +175,7 @@ public partial class StreamOverlay : UserControl
 
     // flips the checkmark, text color and the standing teal tint on whichever row
     // matches SelectedResolution
-    private void RefreshResolutionChecks(WatchViewModel vm)
+    private void RefreshResolutionChecks(OverlayViewModel vm)
     {
         foreach (var child in ResolutionMenuItems.Children)
         {
@@ -148,19 +184,21 @@ public partial class StreamOverlay : UserControl
 
             button.Classes.Set("selected", isSelected);
             if (row.Children[0] is TextBlock label)
-                label.Foreground = (IBrush)this.FindResource(isSelected ? "AccentBrush" : "TextBrush")!;
+                label.Foreground = (IBrush)this.FindResource(isSelected ? "SgvsAccentBrush" : "SgvsTextBrush")!;
             if (row.Children[1] is Path check)
                 check.IsVisible = isSelected;
         }
     }
 
-    // frontend-only prefs - no backend to persist these yet, see WatchViewModel. built
+    // frontend-only prefs - no backend to persist these yet, see OverlayViewModel. built
     // the same way as the resolution/source rows above: a plain resrow Button per entry,
     // this time with a hand-built toggle pill instead of a checkmark on the right
-    private void RebuildSettingsOptions(WatchViewModel vm)
+    private void RebuildSettingsOptions(OverlayViewModel vm)
     {
         SettingsOptions.Children.Clear();
-        SettingsOptions.Children.Add(BuildSettingsToggleRow("Show members", vm.ShowMembers, v => vm.ShowMembers = v));
+        // the member rail only exists on the Watch screen
+        if (vm.ShowViewerControls)
+            SettingsOptions.Children.Add(BuildSettingsToggleRow("Show members", vm.ShowMembers, v => vm.ShowMembers = v));
         SettingsOptions.Children.Add(BuildSettingsToggleRow("Show join code", vm.ShowJoinCode, v => vm.ShowJoinCode = v));
         SettingsOptions.Children.Add(BuildSettingsToggleRow("Keep controls visible", vm.KeepControlsVisible, v => vm.KeepControlsVisible = v));
     }
@@ -190,7 +228,7 @@ public partial class StreamOverlay : UserControl
 
     private void ApplyToggleVisual(Border track, Ellipse knob, bool isOn)
     {
-        track.Background = (IBrush)this.FindResource(isOn ? "AccentBrush" : "ToggleOffBrush")!;
+        track.Background = (IBrush)this.FindResource(isOn ? "SgvsAccentBrush" : "SgvsToggleOffBrush")!;
         knob.Margin = new Thickness(isOn ? 18 : 2, 0, 0, 0);
     }
 }

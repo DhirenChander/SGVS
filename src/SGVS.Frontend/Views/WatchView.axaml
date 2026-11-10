@@ -17,22 +17,22 @@
     <!-- no title-bar margin hack here anymore - MainWindow draws its own 36px bar on top
          of whatever view is current, so every element below just leaves 36px at the top
          itself (see the Stream border and member rail margins) -->
-    <Panel Background="{DynamicResource BgBrush}">
+    <Panel Background="{DynamicResource SgvsGroundBrush}">
 
         <!-- the stream: placeholder image with the control overlay on top -->
         <Border x:Name="StreamBorder" Margin="8,36,72,9" CornerRadius="8" ClipToBounds="True"
                 BoxShadow="0 12 34 0 #80000000">
             <Panel x:Name="StreamHost" Background="Black">
                 <Image x:Name="StreamImage" Source="{Binding StreamFrame}" Stretch="UniformToFill" />
-                <!-- FlyoutOpened/FlyoutClosed are wired in code-behind (needs a closure
-                     over _suppressAutoHide), not here -->
-                <controls:StreamOverlay x:Name="Overlay" FullscreenRequested="OnFullscreenRequested" />
+                <!-- the bar, gear and dialogs. they run on the shared OverlayViewModel -->
+                <controls:StreamOverlay x:Name="Overlay" DataContext="{Binding Overlay}"
+                                        FullscreenRequested="OnFullscreenRequested" />
             </Panel>
         </Border>
 
-        <!-- member rail: one ring per person, initials only. no camera tiles and no
-             header text in this design - just a colored ring with a gradient "live" ring
-             drawn around whoever is currently streaming -->
+        <!-- member rail: one small avatar per person, the same one the Meeting gallery shows. no camera
+             tiles and no header text in this design - just a gradient "live" ring drawn around
+             whoever is currently streaming -->
         <ItemsControl x:Name="MembersRail" Width="72" HorizontalAlignment="Right" VerticalAlignment="Center"
                       Margin="0,36,0,74" ItemsSource="{Binding Participants}">
             <ItemsControl.ItemsPanel>
@@ -43,62 +43,18 @@
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="m:Participant">
                     <Panel Width="44" Height="44" ToolTip.Tip="{Binding Name}">
-                        <Ellipse Width="50" Height="50" StrokeThickness="1.5" Stroke="{StaticResource LiveRingBrush}"
+                        <Ellipse Width="50" Height="50" StrokeThickness="1.5" Stroke="{StaticResource SgvsLiveStrokeBrush}"
                                  HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsStreamer}" />
-                        <Ellipse StrokeThickness="1.5" Stroke="{Binding AvatarBrush}" />
-                        <!-- VerticalAlignment="Center" centers the font's line box, not the
-                             glyph - the line box has more reserved space above the cap
-                             height than below the baseline, so the letter renders a couple
-                             pixels high. measured it dead center horizontally and ~1.6px
-                             high at this font size, hence the small top margin -->
-                        <TextBlock Text="{Binding Initials}" FontSize="17" FontWeight="Medium" Margin="0,3,0,0"
-                                   Foreground="{Binding AvatarBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   TextAlignment="Center" />
+                        <!-- same avatar as the Meeting gallery, just smaller -->
+                        <controls:MemberAvatar />
                     </Panel>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <!-- join-code rail, bottom-right. lives outside the stream border on purpose -
-             it's never supposed to be hidden by the auto-hide timer,
-             so it isn't part of StreamOverlay at all -->
-        <Border x:Name="CodeRail" Width="72" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,14">
-            <StackPanel>
-                <!-- collapsed: just the key icon -->
-                <Button Classes="iconbtn" Width="72" Height="40" IsVisible="{Binding !IsCodeRevealed}"
-                        Command="{Binding ToggleCodeCommand}" ToolTip.Tip="Show join code" AutomationProperties.Name="Show join code">
-                    <Panel Width="20" Height="20">
-                        <Path Data="{StaticResource KeyIcon}" Classes="icon" Stroke="{DynamicResource MutedTextBrush}" />
-                    </Panel>
-                </Button>
-
-                <!-- revealed: the code split over two lines (matches the mockup). clicking
-                     the code itself copies it (with a brief "Copied!" swap-in for
-                     feedback); the button below hides the code again, back to the key icon -->
-                <StackPanel IsVisible="{Binding IsCodeRevealed}" Spacing="6" HorizontalAlignment="Center" Margin="0,6">
-                    <!-- Background="Transparent" is load-bearing: a Panel with no background
-                         at all only hit-tests the actual glyph ink, not the gaps between the
-                         two code lines, so most clicks in the "clickable area" would silently
-                         miss - same thing StreamHost needs Background="Black" for -->
-                    <Panel Background="Transparent" Cursor="Hand" PointerPressed="OnCodeTextPressed" ToolTip.Tip="Click to copy">
-                        <StackPanel Spacing="2" IsVisible="{Binding !IsCodeCopied}">
-                            <TextBlock Text="{Binding JoinCodeFirstHalf}" FontFamily="JetBrains Mono,Consolas,monospace"
-                                       FontSize="14" LetterSpacing="0.84" HorizontalAlignment="Center" />
-                            <TextBlock Text="{Binding JoinCodeSecondHalf}" FontFamily="JetBrains Mono,Consolas,monospace"
-                                       FontSize="14" LetterSpacing="0.84" HorizontalAlignment="Center" />
-                        </StackPanel>
-                        <TextBlock Text="Copied!" FontSize="13" FontWeight="Medium" HorizontalAlignment="Center"
-                                   Foreground="{DynamicResource AccentBrush}" IsVisible="{Binding IsCodeCopied}" />
-                    </Panel>
-                    <Button Classes="iconbtn" Click="OnHideCodeClick" ToolTip.Tip="Hide join code" AutomationProperties.Name="Hide join code">
-                        <Panel Width="18" Height="18">
-                            <!-- CaretUpIcon flipped - "collapse" is the same shape as "open", upside down -->
-                            <Path Data="{StaticResource CaretUpIcon}" Classes="icon" Stroke="{DynamicResource MutedTextBrush}"
-                                  RenderTransform="scaleY(-1)" />
-                        </Panel>
-                    </Button>
-                </StackPanel>
-            </StackPanel>
-        </Border>
+        <!-- join-code rail, bottom-right. lives outside the stream border on purpose,
+             it's never supposed to be hidden by the auto-hide timer -->
+        <controls:JoinCodeRail x:Name="CodeRail" DataContext="{Binding JoinCode}"
+                               HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,14" />
     </Panel>
 </UserControl>

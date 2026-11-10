@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
@@ -15,15 +15,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- stand-in stream image is a loose file, not embedded resources -->
+    <!-- the stand-in stream frame is a loose file, not an embedded resource -->
     <AvaloniaResource Include="Assets\**" Exclude="Assets\Placeholders\**" />
   </ItemGroup>
 
-  <!-- stand-in stream media until real call data exists.
-       copied next to the exe (Link keeps the folder names the view models look for) -->
+  <!-- stand-in stream frame until real call data exists.
+       copied next to the exe (Link keeps the folder name FakeMeetingService looks for) -->
   <ItemGroup>
-    <Content Include="Assets\Placeholders\StreamImage\**" Link="StreamImage\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <!-- frame shown on live tiles in the meeting gallery (the landscape from the Figma mockup) -->
+    <!-- frame shown for anyone streaming, on their gallery tile and on the Watch screen (the landscape from the Figma mockup) -->
     <Content Include="Assets\Placeholders\StreamPreview\**" Link="StreamPreview\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
-using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SGVS.Frontend.Models;
 using SGVS.Frontend.Services;
@@ -11,34 +10,42 @@ namespace SGVS.Frontend.ViewModels;
 // in a call: everyone's tile in a gallery, start/stop your own stream, watch someone else's. shown by MeetingView
 public partial class MeetingViewModel : ViewModelBase
 {
-    // how long the check mark stays after copying the code
-    private static readonly TimeSpan CopiedFeedback = TimeSpan.FromSeconds(1.5);
-
     private readonly IMeetingService _meeting;
-    private readonly IClipboardService _clipboard;
     private readonly Action<ViewModelBase> _navigate;
-    private CancellationTokenSource? _copiedReset;
 
     // for the XAML previewer only
-    public MeetingViewModel() : this(new FakeMeetingService(), new ClipboardService(), _ => { })
+    public MeetingViewModel() : this(new FakeMeetingService(), _ => { })
     {
     }
 
     // navigate swaps the page MainWindow shows (see MainViewModel)
-    public MeetingViewModel(IMeetingService meeting, IClipboardService clipboard, Action<ViewModelBase> navigate)
+    public MeetingViewModel(IMeetingService meeting, Action<ViewModelBase> navigate)
     {
         _meeting = meeting;
-        _clipboard = clipboard;
         _navigate = navigate;
 
         // ReadOnlyObservableCollection only exposes the event through the interface
         ((INotifyCollectionChanged)Members).CollectionChanged += (_, _) => OnPropertyChanged(nameof(GalleryColumns));
         _meeting.Self.PropertyChanged += OnSelfChanged;
+
+        JoinCode = new JoinCodeViewModel(_meeting.Code);
+
+        // control bar + gear. Meeting has no viewer controls, Start stream and Leave act on the call
+        Overlay = new OverlayViewModel(_meeting.Self, showViewerControls: false,
+            startStream: _meeting.StartStreamAsync, stopStream: _meeting.StopStreamAsync, leave: LeaveMeeting,
+            stopWatching: null)
+        {
+            IsStreaming = _meeting.Self.IsStreamer,
+        };
     }
 
-    public ReadOnlyObservableCollection<Participant> Members => _meeting.Members;
+    // bar, gear and dialogs drawn by StreamOverlay
+    public OverlayViewModel Overlay { get; }
 
-    public string MeetingCode => _meeting.Code;
+    // the key icon / code rail at the bottom-right
+    public JoinCodeViewModel JoinCode { get; }
+
+    public ReadOnlyObservableCollection<Participant> Members => _meeting.Members;
 
     // 1 person fills the screen, 2-4 is 2x2 like the mockup, then 3 and 4 across
     public int GalleryColumns => Members.Count switch
@@ -49,82 +56,22 @@ public partial class MeetingViewModel : ViewModelBase
         _ => 4,
     };
 
-    // follows the service, so a stream that drops on its own also flips the button back
-    public bool IsStreaming => _meeting.Self.IsStreamer;
-
-    // the glass Screen / App menu above Start stream
-    [ObservableProperty]
-    public partial bool IsShareMenuOpen { get; set; }
-
-    // key icon swapped for the code
-    [ObservableProperty]
-    public partial bool IsCodeRevealed { get; set; }
-
-    // copy icon swapped for a check, briefly
-    [ObservableProperty]
-    public partial bool IsCodeCopied { get; set; }
-
+    // opens their stream. Stop watching on that page comes back to this same page
     [RelayCommand]
-    private void ToggleShareMenu() => IsShareMenuOpen = !IsShareMenuOpen;
+    private void Watch(Participant member) =>
+        _navigate(new WatchViewModel(member, _meeting, () => _navigate(this)));
 
-    public void CloseShareMenu() => IsShareMenuOpen = false;
-
-    [RelayCommand]
-    private async Task StartStream(ShareSource source)
-    {
-        IsShareMenuOpen = false;
-        await _meeting.StartStreamAsync(source);
-    }
-
-    [RelayCommand]
-    private Task StopStream() => _meeting.StopStreamAsync();
-
-    // the Watching screen doesn't take a stream yet, so it opens with its own placeholder
-    [RelayCommand]
-    private void Watch(Participant member) => _navigate(new WatchViewModel());
-
-    [RelayCommand]
-    private async Task Leave()
+    // what the overlay's Leave calls once confirmed. tells the service, then closes the app
+    // (there's no Start screen to go back to yet)
+    private async Task LeaveMeeting()
     {
         await _meeting.LeaveAsync();
-        _navigate(new StartViewModel());
-    }
-
-    // settings screen doesn't exist yet, the gear does nothing for now
-    [RelayCommand]
-    private void OpenSettings()
-    {
-    }
-
-    [RelayCommand]
-    private void RevealCode() => IsCodeRevealed = true;
-
-    public void HideCode()
-    {
-        _copiedReset?.Cancel();
-        IsCodeCopied = false;
-        IsCodeRevealed = false;
-    }
-
-    // concurrent so clicking again during the check mark restarts it instead of being ignored
-    [RelayCommand(AllowConcurrentExecutions = true)]
-    private async Task CopyCode()
-    {
-        if (!await _clipboard.TrySetTextAsync(MeetingCode)) return;
-
-        _copiedReset?.Cancel();
-        var reset = _copiedReset = new CancellationTokenSource();
-        IsCodeCopied = true;
-
-        try { await Task.Delay(CopiedFeedback, reset.Token); }
-        catch (OperationCanceledException) { return; }
-
-        IsCodeCopied = false;
+        Shutdown();
     }
 
     private void OnSelfChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(Participant.IsStreamer))
-            OnPropertyChanged(nameof(IsStreaming));
+            Overlay.IsStreaming = _meeting.Self.IsStreamer;
     }
 }
