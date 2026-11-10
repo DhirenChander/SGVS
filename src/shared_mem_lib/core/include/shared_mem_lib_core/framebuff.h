@@ -8,6 +8,7 @@
 #include <inttypes.h>
 #include <stdbool.h>
 
+#include "frame.h"
 #include "ringbuff.h"
 #include "encoding.h"
 
@@ -36,13 +37,6 @@ typedef struct
 #endif
 } FrameBuffer;
 
-typedef struct
-{
-    Encoding encoding;
-    size_t size;
-    uint8_t *data;
-} Frame;
-
 bool new_framebuffer(FrameBuffer *out);
 void free_framebuffer(FrameBuffer *fb);
 bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count);
@@ -54,10 +48,11 @@ bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t len);
 #if defined(_WIN32) || defined(_WIN64)
 bool poll_encodings(FrameBuffer *fb, Encoding *out, uint8_t len, DWORD *out_err, uint32_t max_timeout);
 #endif
-Frame frame_sized_by_encoding(Encoding enc);
+
+// Config methods
 void set_share_video(FrameBuffer *fb, bool v);
-bool try_read_config(FrameBuffer *fb, Config *out);
-bool blocking_read_config(FrameBuffer *fb, Config *out, uint32_t max_timeout);
-void force_read_config(FrameBuffer *fb, Config *out);
+bool get_sharing_video(FrameBuffer *fb);
+void set_front_end_encoding(FrameBuffer *fb, Encoding enc);
+Encoding get_front_end_encoding(FrameBuffer *fb);
 
 #endif

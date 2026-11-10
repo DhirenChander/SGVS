@@ -183,7 +183,7 @@ int ringbuff_by_encoding(FrameBuffer *fb, Encoding enc)
 
 bool try_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max_frame_count)
 {
-    return blocking_pop_frame(fb, enc, out, max_frame_count, 0x0);
+    return blocking_pop_frames(fb, enc, out, max_frame_count, 0x0);
 }
 
 bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max_frame_count, uint32_t max_timeout)
@@ -206,7 +206,7 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max
         raw_out[i].len = out[i].size;
     }
 
-    if (!blocking_pop(&fb->rings[rb_ind], out->data, &out_count, max_frame_count, max_timeout))
+    if (!blocking_pop(&fb->rings[rb_ind], raw_out, &out_count, max_frame_count, max_timeout))
     {
         return false;
     }
@@ -309,40 +309,17 @@ void set_share_video(FrameBuffer *fb, bool v)
 #endif
 }
 
-bool try_read_config(FrameBuffer *fb, Config *out)
+bool get_sharing_video(FrameBuffer *fb)
 {
-    return blocking_read_config(fb, out, 0);
+    return fb->config.sharing_screen;
 }
 
-bool blocking_read_config(FrameBuffer *fb, Config *out, uint32_t max_timeout)
+void set_front_end_encoding(FrameBuffer *fb, Encoding enc)
 {
-#ifdef _WIN32
-    DWORD waitResult = WaitForSingleObject(fb->conf_ev, (DWORD)max_timeout);
-
-    switch (waitResult)
-    {
-    case WAIT_OBJECT_0:
-        break;
-
-    case WAIT_TIMEOUT:
-        printf("The wait operation timed out, buffer was not filled in the requested timeout.\n");
-        return false;
-
-    case WAIT_FAILED:
-        printf("WaitForSingleObject failed with error (%lu)\n", GetLastError());
-        return false;
-
-    default:
-        printf("Unexpected wait result: %lu\n", waitResult);
-        return false;
-    }
-#endif
-
-    force_read_config(fb, out);
-    return true;
+    fb->config.front_end_video = enc;
 }
 
-void force_read_config(FrameBuffer *fb, Config *out)
+Encoding get_front_end_encoding(FrameBuffer *fb)
 {
-    *out = fb->config;
+    return fb->config.front_end_video;
 }

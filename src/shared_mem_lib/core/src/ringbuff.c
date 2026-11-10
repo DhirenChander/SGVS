@@ -166,7 +166,7 @@ bool open_ring(RingBuffer *rb, uint64_t slot_size, uint32_t slot_count)
     }
 
     uint8_t *raw_map = (uint8_t *)MapViewOfFile(rb->map, FILE_MAP_ALL_ACCESS, 0, 0, size);
-    ring = raw_map;
+    ring = (Ring *)raw_map;
 
     const uint8_t null_ring[sizeof(Ring)] = {0};
 
