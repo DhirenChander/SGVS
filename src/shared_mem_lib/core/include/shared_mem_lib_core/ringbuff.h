@@ -14,6 +14,8 @@
 typedef struct
 {
     Ring *ring;
+    size_t *lens;
+    uint8_t *data;
     uint64_t id;
 #if defined(_WIN32) || defined(_WIN64)
     HANDLE map;

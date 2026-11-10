@@ -202,8 +202,8 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max
     for (int i = 0; i < max_frame_count; i++)
     {
         // Bytes is a pointer, so by copying to the raw slot, the data auto copies to the outframes.
-        raw_out[i].bytes = raw_out[i].bytes;
-        raw_out[i].size = raw_out[i].size;
+        raw_out[i].bytes = out[i].data;
+        raw_out[i].len = out[i].size;
     }
 
     if (!blocking_pop(&fb->rings[rb_ind], out->data, &out_count, max_frame_count, max_timeout))
@@ -213,7 +213,7 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max
 
     for (int i = 0; i < out_count; i++)
     {
-        out[i].size = raw_out[i].size;
+        out[i].size = raw_out[i].len;
         out[i].encoding = enc;
         out[i].data = (uint8_t *)realloc(out->data, out[i].size);
     }
@@ -236,7 +236,7 @@ bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count)
     for (int i = 0; i < frame_count; i++)
     {
         data[i].bytes = f[i].data;
-        data[i].size = f[i].size;
+        data[i].len = f[i].size;
     }
 
     return push(&fb->rings[rb_ind], data, frame_count);

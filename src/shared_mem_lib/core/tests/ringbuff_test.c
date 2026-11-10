@@ -6,6 +6,7 @@
 void setUp(void) {}
 void tearDown(void) {}
 
+uint8_t *get_slot(RingBuffer *rb, uint32_t ind);
 void test_ringbuff_push(void);
 void test_ringbuff_try_pop(void);
 
@@ -29,10 +30,10 @@ void test_ringbuff_push(void)
     const size_t case_count = 2;
     struct TestCase cases[2] = {
         {.data = (Slot[]){
-             {.bytes = (uint8_t[]){0x12, 0x43, 0xFF, 0x54}, .size = 4}},
+             {.bytes = (uint8_t[]){0x12, 0x43, 0xFF, 0x54}, .len = 4}},
          .len = 1,
          .size = 4},
-        {.data = (Slot[]){{.bytes = (uint8_t[]){0x12, 0x43, 0xFF, 0x54}, .size = 4}, {.bytes = (uint8_t[]){0xF2, 0xF3}, .size = 2}, {.bytes = (uint8_t[]){0xA4}, .size = 1}}, .len = 3, .size = 4},
+        {.data = (Slot[]){{.bytes = (uint8_t[]){0x12, 0x43, 0xFF, 0x54}, .len = 4}, {.bytes = (uint8_t[]){0xF2, 0xF3}, .len = 2}, {.bytes = (uint8_t[]){0xA4}, .len = 1}}, .len = 3, .size = 4},
     };
 
     for (int i = 0; i < case_count; i++)
@@ -48,8 +49,8 @@ void test_ringbuff_push(void)
 
         for (int j = 0; j < cases[i].len; j++)
         {
-            TEST_ASSERT_EQUAL(cases[i].data[j].size, rb.ring->buff[j].size);
-            TEST_ASSERT_EQUAL_MEMORY(cases[i].data[j].bytes, rb.ring->buff[j].bytes, cases[i].data[j].size);
+            TEST_ASSERT_EQUAL(cases[i].data[j].len, rb.lens[j]);
+            TEST_ASSERT_EQUAL_MEMORY(cases[i].data[j].bytes, get_slot(&rb, j), cases[i].data[j].len);
         }
 
         RingBuffer rb_2;
@@ -71,10 +72,10 @@ void test_ringbuff_try_pop(void)
     const size_t case_count = 2;
     struct TestCase cases[2] = {
         {.data = (Slot[]){
-             {.bytes = (uint8_t[]){0x12, 0x43, 0xFF, 0x54}, .size = 4}},
+             {.bytes = (uint8_t[]){0x12, 0x43, 0xFF, 0x54}, .len = 4}},
          .len = 1,
          .size = 4},
-        {.data = (Slot[]){{.bytes = (uint8_t[]){0x12, 0x43, 0xFF, 0x54}, .size = 4}, {.bytes = (uint8_t[]){0xF2, 0xF3}, .size = 2}, {.bytes = (uint8_t[]){0xA4}, .size = 1}}, .len = 3, .size = 4},
+        {.data = (Slot[]){{.bytes = (uint8_t[]){0x12, 0x43, 0xFF, 0x54}, .len = 4}, {.bytes = (uint8_t[]){0xF2, 0xF3}, .len = 2}, {.bytes = (uint8_t[]){0xA4}, .len = 1}}, .len = 3, .size = 4},
     };
 
     for (int i = 0; i < case_count; i++)
@@ -96,7 +97,7 @@ void test_ringbuff_try_pop(void)
         {
             uint8_t *buff = (uint8_t *)malloc(cases[i].size);
             out[j].bytes = buff;
-            out[j].size = cases[i].size;
+            out[j].len = cases[i].size;
         }
 
         uint32_t out_count = 0;
@@ -108,8 +109,8 @@ void test_ringbuff_try_pop(void)
 
         for (int j = 0; j < cases[i].len; j++)
         {
-            TEST_ASSERT_EQUAL_MEMORY(cases[i].data[j].bytes, out[j].bytes, cases[i].data[j].size);
-            TEST_ASSERT_EQUAL(cases[i].data[j].size, out[j].size);
+            TEST_ASSERT_EQUAL_MEMORY(cases[i].data[j].bytes, out[j].bytes, cases[i].data[j].len);
+            TEST_ASSERT_EQUAL(cases[i].data[j].len, out[j].len);
         }
 
         Slot fail_out;

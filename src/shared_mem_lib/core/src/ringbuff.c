@@ -7,6 +7,11 @@
 #include <inttypes.h>
 #include "shared_mem_lib_core/ringbuff.h"
 
+uint8_t *get_slot(RingBuffer *rb, uint32_t ind)
+{
+    return &rb->data[ind * rb->ring->slot_size];
+}
+
 bool try_pop(RingBuffer *rb, Slot *out, uint32_t *out_count, uint32_t max_slots_out)
 {
     return blocking_pop(rb, out, out_count, max_slots_out, 0x0);
@@ -73,12 +78,13 @@ bool blocking_pop(RingBuffer *rb, Slot *out, uint32_t *out_count, uint32_t max_s
 
     for (int i = 0; i < *out_count; i++)
     {
-        fprintf(stderr, "Copying %d, %d...\n", i, rb->ring->buff[(tail + i) % rb->ring->slot_count].size);
+        size_t len = rb->lens[(tail + i) % rb->ring->slot_count];
+        fprintf(stderr, "Copying %d, %d...\n", i, len);
         // Deep copy each slot
-        Slot *slot = &rb->ring->buff[(tail + i) % rb->ring->slot_count];
-        memcpy(out[i].bytes, slot->bytes, slot->size);
-        out[i].size = slot->size;
-        fprintf(stderr, "Size: %d...\n", out[i].size);
+        uint8_t *slot = get_slot(rb, (tail + i) % rb->ring->slot_count);
+        memcpy(out[i].bytes, slot, len);
+        out[i].len = len;
+        fprintf(stderr, "Size: %d...\n", out[i].len);
     }
 
     atomic_store(&rb->ring->tail, next);
@@ -112,13 +118,13 @@ bool push(RingBuffer *rb, Slot *data, uint32_t size)
 
     for (int i = 0; i < size; i++)
     {
-        if (data[i].size > rb->ring->slot_size)
+        if (data[i].len > rb->ring->slot_size)
             return false;
 
-        Slot *slot = &rb->ring->buff[(head + i) % rb->ring->slot_count];
-        memcpy(slot->bytes, data[i].bytes, data[i].size);
-        slot->size = data[i].size;
-        fprintf(stderr, "Slot Size: %d...\n", slot->size);
+        uint8_t *slot = get_slot(rb, (head + i) % rb->ring->slot_count);
+        memcpy(slot, data[i].bytes, data[i].len);
+        rb->lens[(head + i) % rb->ring->slot_count] = data[i].len;
+        fprintf(stderr, "Slot Size: %d...\n", rb->lens[(head + i) % rb->ring->slot_count]);
     }
 
     atomic_store(&rb->ring->head, next);
@@ -132,7 +138,7 @@ bool push(RingBuffer *rb, Slot *data, uint32_t size)
 
 bool open_ring(RingBuffer *rb, uint64_t slot_size, uint32_t slot_count)
 {
-    uint64_t size = sizeof(Ring) + sizeof(Slot) * slot_count + slot_size * slot_count;
+    uint64_t size = sizeof(Ring) + (sizeof(size_t) + slot_size) * slot_count;
     Ring *ring = nullptr;
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -167,21 +173,14 @@ bool open_ring(RingBuffer *rb, uint64_t slot_size, uint32_t slot_count)
     // Initial map value, map is not initialized
     if (!memcmp(raw_map, null_ring, sizeof(Ring)))
     {
-
         ring->slot_size = slot_size;
         ring->slot_count = slot_count;
         atomic_store(&ring->head, 0);
         atomic_store(&ring->tail, 0);
     }
 
-    // Memory is layed out in the following way
-    // Ring | Slot 0 | Slot 1 | ... | Slot (n - 1) | Data 0 | Data 1 | ... | Data (n-1)
-    ring->buff = (Slot *)(raw_map + sizeof(Ring));
-
-    for (int i = 0; i < slot_count; i++)
-    {
-        ring->buff[i].bytes = (uint8_t *)(raw_map + sizeof(Ring) + sizeof(Slot) * slot_count + i * slot_size);
-    }
+    rb->lens = (size_t *)(raw_map + sizeof(Ring));
+    rb->data = (uint8_t *)(raw_map + sizeof(Ring) + sizeof(size_t) * slot_count);
 #endif
 
     if (ring == nullptr)
