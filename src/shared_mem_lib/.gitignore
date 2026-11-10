@@ -1,0 +1,72 @@
+# C++ build artifacts
+*.o
+*.obj
+*.lo
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.dll.a
+*.exe
+*.out
+*.app
+
+# Compiled object / debug files
+*.gch
+*.pch
+*.pdb
+*.idb
+*.ilk
+*.exp
+*.su
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+Makefile
+*.cmake.stamp
+
+# Make
+*.d
+*.dSYM/
+
+# Visual Studio
+.vs/
+*.vcxproj.user
+*.sln.docstates
+Debug/
+Release/
+x64/
+x86/
+
+# Code::Blocks
+*.depend
+*.layout
+
+# Eclipse
+.cproject
+.project
+.settings/
+
+# CLion / JetBrains
+.idea/
+cmake-build-*/
+
+# Dependencies / package managers
+vcpkg_installed/
+conan/
+conanbuildinfo.*
+
+# Test / coverage
+*.gcno
+*.gcda
+*.gcov
+
+# Runtime output
+*.log
