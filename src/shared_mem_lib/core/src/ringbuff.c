@@ -165,6 +165,8 @@ bool open_ring(RingBuffer *rb, uint64_t slot_size, uint32_t slot_count)
         return false;
     }
 
+    // Shared memory layout:
+    // Ring | Lens[0] | Lens[1] | ... | Lens[n] | Data[0] | Data[1] | ... | Data[n]
     uint8_t *raw_map = (uint8_t *)MapViewOfFile(rb->map, FILE_MAP_ALL_ACCESS, 0, 0, size);
     ring = (Ring *)raw_map;
 

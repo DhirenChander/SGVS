@@ -68,6 +68,11 @@ public unsafe struct Frame
     public byte* data;
 }
 
+public struct GCFrame {
+    public Frame f;
+    public byte[] data;
+}
+
 // Define WINDOWS in your project (<DefineConstants>) when targeting Windows,
 // so the layout matches the C struct's #ifdef _WIN32 fields.
 [StructLayout(LayoutKind.Sequential)]
@@ -126,17 +131,33 @@ public static unsafe class Native
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "frame_sized_by_encoding")]
     public static extern Frame FrameSizedByEncoding(Encoding enc);
 
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "set_frame_data")]
+    public static extern void SetFrameData(ref Frame f, ref byte[] data);
+
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "get_frame_size")]
+    public static extern ulong GetFrameSize(ref Frame f);
+
+    public static extern GCFrame(Encoding enc) {
+        Frame f = FrameSizedByEncoding(enc);
+        ulong size = GetFrameSize(ref f);
+        byte[] data = new byte[size];
+        SetFrameData(ref f, ref data);
+        
+        GCFrame gcF;
+        gcF.f = f;
+        gcF.data = data;
+        return gcF;
+    }
+
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "set_share_video")]
     public static extern void SetShareVideo(ref FrameBuffer fb, [MarshalAs(UnmanagedType.U1)] bool v);
 
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "try_read_config")]
-    [return: MarshalAs(UnmanagedType.U1)]
-    public static extern bool TryReadConfig(ref FrameBuffer fb, out Config output);
-
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "blocking_read_config")]
-    [return: MarshalAs(UnmanagedType.U1)]
-    public static extern bool BlockingReadConfig(ref FrameBuffer fb, out Config output, uint maxTimeout);
-
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "force_read_config")]
-    public static extern void ForceReadConfig(ref FrameBuffer fb, out Config output);
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "get_sharing_video")]
+    public static extern bool GetSharingVideo(ref FrameBuffer fb);
+    
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "set_front_end_encoding")]
+    void SetFrontEndEncoding(ref FrameBuffer fb, Encoding enc);
+    
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "get_front_end_encoding")]
+    Encoding GetFrontEndEncoding(ref FrameBuffer fb);
 }
