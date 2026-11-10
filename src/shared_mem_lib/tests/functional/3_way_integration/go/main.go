@@ -1,11 +1,10 @@
 package main
 
-import (
-	"shared_mem_lib"
-)
+import "fmt"
 
 func main() {
-	var fb shared_mem_lib.FrameBuffer
+	fmt.Print("Hello world")
+	/*var fb shared_mem_lib.FrameBuffer
 	shared_mem_lib.NewFrameBuffer(&fb)
 
 	enc := shared_mem_lib.NewVideoEncoding(10000, 10000, 1080, 1920, 60)
@@ -17,5 +16,11 @@ func main() {
 		f.Bytes[i] = 0x10
 	}
 
-	fb.PushFrames([]shared_mem_lib.Frame{f.Raw})
+	frames := make([]shared_mem_lib.GCFrame, 120)
+
+	for ; fb.BlockingPopFrames(enc, frames, 2000); {
+
+	}
+
+	fb.PushFrames([]shared_mem_lib.Frame{f.Raw})*/
 }

@@ -181,12 +181,12 @@ int ringbuff_by_encoding(FrameBuffer *fb, Encoding enc)
     return -1;
 }
 
-bool try_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max_frame_count)
+bool try_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *out_count, uint32_t max_frame_count)
 {
-    return blocking_pop_frames(fb, enc, out, max_frame_count, 0x0);
+    return blocking_pop_frames(fb, enc, out, out_count, max_frame_count, 0x0);
 }
 
-bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max_frame_count, uint32_t max_timeout)
+bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *out_count, uint32_t max_frame_count, uint32_t max_timeout)
 {
     int rb_ind = ringbuff_by_encoding(fb, enc);
 
@@ -196,7 +196,6 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max
         return false;
     }
 
-    uint32_t out_count;
     Slot *raw_out = (Slot *)malloc(max_frame_count * sizeof(Slot));
 
     for (int i = 0; i < max_frame_count; i++)
@@ -206,7 +205,7 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max
         raw_out[i].len = out[i].size;
     }
 
-    if (!blocking_pop(&fb->rings[rb_ind], raw_out, &out_count, max_frame_count, max_timeout))
+    if (!blocking_pop(&fb->rings[rb_ind], raw_out, out_count, max_frame_count, max_timeout))
     {
         return false;
     }

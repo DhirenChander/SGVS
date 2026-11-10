@@ -37,27 +37,33 @@ func (fb *FrameBuffer) PushFrames(f []Frame) bool {
 	return bool(C.push_frames(fb.c(), (*C.Frame)(&f[0]), C.uint32_t(len(f))))
 }
 
-func (fb *FrameBuffer) TryPopFrames(enc Encoding, out []Frame) bool {
-	return bool(C.try_pop_frames(fb.c(), C.Encoding(enc), (*C.Frame)(&out[0]), C.uint32_t(len(out))))
+func (fb *FrameBuffer) TryPopFrames(enc Encoding, out []Frame, outCount *uint32) bool {
+	return bool(C.try_pop_frames(fb.c(), C.Encoding(enc), (*C.Frame)(&out[0]), (*C.uint32_t)(outCount), C.uint32_t(len(out))))
 }
 
-func (fb *FrameBuffer) BlockingPopFrames(enc Encoding, out []GCFrame, maxTimeout uint32) bool {
-	rawOut := make([]Frame, len(out))
+// BlockingPopFrames reallocates each frame and the buffer as a whole, to minimize space
+func (fb *FrameBuffer) BlockingPopFrames(enc Encoding, maxFrames uint32, maxTimeout uint32) (bool, []GCFrame) {
+	var outLen uint32
+	out := make([]GCFrame, maxFrames)
+	rawOut := make([]Frame, maxFrames)
 
-	for i := 0; i < len(out); i++ {
+	for i := 0; i < maxFrames; i++ {
+		out[i] = NewGCFrame(enc);
 		rawOut[i] = out[i].Raw
 	}
 
-	if !bool(C.blocking_pop_frames(fb.c(), C.Encoding(enc), (*C.Frame)(&rawOut[0]), C.uint32_t(len(out)), C.uint32_t(maxTimeout))) {
-		return false
+	if !bool(C.blocking_pop_frames(fb.c(), C.Encoding(enc), (*C.Frame)(&rawOut[0]), (*C.uint32_t)(&outLen), C.uint32_t(maxFrames), C.uint32_t(maxTimeout))) {
+		return (false, nil)
 	}
+
+	out = slices.Clone(out[:outLen])
 
 	for i := 0; i < len(out); i++ {
 		out[i].Bytes = slices.Clone(out[i].Bytes[:out[i].Raw.GetFrameSize()])
 		out[i].Raw.SetFrameData(out[i].Bytes)
 	}
 
-	return true
+	return (true, out)
 }
 
 func (fb *FrameBuffer) RequestEncoding(enc Encoding) bool {
