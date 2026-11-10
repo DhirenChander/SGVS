@@ -1,8 +1,190 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SGVS.Frontend.ViewModels"
+             xmlns:m="using:SGVS.Frontend.Models"
+             xmlns:s="using:SGVS.Frontend.Services"
+             xmlns:conv="using:SGVS.Frontend.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
-             x:Class="SGVS.Frontend.Views.MeetingView">
-  Welcome to Avalonia!
+             mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="720"
+             x:Class="SGVS.Frontend.Views.MeetingView"
+             x:DataType="vm:MeetingViewModel"
+             Background="{DynamicResource SgvsGroundBrush}"
+             Foreground="{DynamicResource SgvsTextBrush}"
+             FontFamily="{DynamicResource SgvsUiFont}">
+
+    <!-- built from Figma "In-Meeting" (frames 30:155, 30:218, 30:279, 30:356, 30:420). sizes are the Figma ones -->
+
+    <Design.DataContext>
+        <vm:MeetingViewModel />
+    </Design.DataContext>
+
+    <UserControl.Styles>
+        <!-- names over a stream get a soft shadow so they read on bright frames -->
+        <Style Selector="TextBlock.tilename.overstream">
+            <Setter Property="Effect" Value="{DynamicResource SgvsTileNameShadow}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Panel>
+        <!-- gallery. one tile per member, the grid widens as people join.
+             top 44 leaves room for the title bar (36) plus the 8px gap -->
+        <ItemsControl ItemsSource="{Binding Members}" Margin="24,44,24,78">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Columns="{Binding GalleryColumns}" ColumnSpacing="8" RowSpacing="8" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="m:Participant">
+                    <Panel>
+                        <!-- not streaming: avatar on a flat tile -->
+                        <Border IsVisible="{Binding !IsStreamer}" Background="{DynamicResource SgvsSurfaceBrush}"
+                                CornerRadius="{DynamicResource SgvsRadiusControl}">
+                            <Panel Width="76" Height="76" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Ellipse Fill="{Binding Tone, Converter={x:Static conv:AvatarToneBrushConverter.Instance}}"
+                                         Opacity="0.2" />
+                                <TextBlock Text="{Binding Initials}" FontSize="30" FontWeight="Medium"
+                                           Foreground="{Binding Tone, Converter={x:Static conv:AvatarToneBrushConverter.Instance}}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Panel>
+                        </Border>
+
+                        <!-- streaming: their latest frame with the gradient edge. outer border carries the shadow,
+                             inner one clips the frame to the rounded corners -->
+                        <Border IsVisible="{Binding IsStreamer}" Background="{DynamicResource SgvsSurfaceBrush}"
+                                CornerRadius="{DynamicResource SgvsRadiusControl}"
+                                BoxShadow="{DynamicResource SgvsLiveTileShadow}">
+                            <Border CornerRadius="{DynamicResource SgvsRadiusControl}" ClipToBounds="True">
+                                <Panel>
+                                    <Image Source="{Binding StreamPreview}" Stretch="UniformToFill" />
+                                    <!-- drawn on top of the frame like Figma's inside stroke -->
+                                    <Border BorderBrush="{DynamicResource SgvsLiveStrokeBrush}" BorderThickness="1.5"
+                                            CornerRadius="{DynamicResource SgvsRadiusControl}" />
+                                    <!-- your own stream has no Watch button -->
+                                    <Button Classes="flat accent" IsVisible="{Binding !IsSelf}"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                                            Command="{Binding $parent[ItemsControl].((vm:MeetingViewModel)DataContext).WatchCommand}"
+                                            CommandParameter="{Binding}"
+                                            AutomationProperties.Name="{Binding Name, StringFormat='Watch {0}'}">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Panel Width="18" Height="18">
+                                                <Path Classes="lineicon onaccent" Data="{StaticResource SgvsEyeIcon}" />
+                                            </Panel>
+                                            <TextBlock Classes="label" Text="Watch" Foreground="{DynamicResource SgvsOnAccentBrush}" />
+                                        </StackPanel>
+                                    </Button>
+                                </Panel>
+                            </Border>
+                        </Border>
+
+                        <TextBlock Classes="tilename" Classes.overstream="{Binding IsStreamer}" Text="{Binding TileLabel}"
+                                   Margin="12,0,0,10" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                   IsHitTestVisible="False" />
+                    </Panel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- settings, bottom-left. placeholder until there's a settings screen -->
+        <Button Classes="flat square" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="20,0,0,20"
+                Command="{Binding OpenSettingsCommand}" ToolTip.Tip="Settings" AutomationProperties.Name="Settings">
+            <Panel Width="22" Height="22">
+                <Path Classes="lineicon" Data="{StaticResource SgvsSettingsIcon}" />
+            </Panel>
+        </Button>
+
+        <!-- bottom bar, centered -->
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                    Margin="0,0,0,18">
+            <Panel>
+                <!-- glass Screen / App menu. hangs 8px above the button with the left edges lined up.
+                     the zero-size Canvas keeps it out of the bar's layout -->
+                <Canvas HorizontalAlignment="Left" VerticalAlignment="Top" IsVisible="{Binding IsShareMenuOpen}">
+                    <Border x:Name="StreamMenu" Canvas.Left="0" Canvas.Bottom="8" Width="196" Padding="4"
+                            Background="{DynamicResource SgvsGlassBrush}" BorderBrush="{DynamicResource SgvsGlassEdgeBrush}"
+                            BorderThickness="1" CornerRadius="{DynamicResource SgvsRadiusControl}"
+                            BoxShadow="{DynamicResource SgvsMenuShadow}">
+                        <StackPanel>
+                            <!-- named for screen readers, otherwise they announce the StackPanel type -->
+                            <Button Classes="flat menuitem" Command="{Binding StartStreamCommand}"
+                                    CommandParameter="{x:Static s:ShareSource.Screen}"
+                                    AutomationProperties.Name="Share screen">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Panel Width="18" Height="18">
+                                        <Path Classes="lineicon" Data="{StaticResource SgvsDeskIcon}" />
+                                    </Panel>
+                                    <TextBlock Text="Screen" FontSize="14" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="flat menuitem" Command="{Binding StartStreamCommand}"
+                                    CommandParameter="{x:Static s:ShareSource.App}"
+                                    AutomationProperties.Name="Share app">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Panel Width="18" Height="18">
+                                        <Path Classes="lineicon" Data="{StaticResource SgvsAppIcon}" />
+                                    </Panel>
+                                    <TextBlock Text="App" FontSize="14" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </Canvas>
+
+                <Button x:Name="StartStreamButton" Classes="flat bar" IsVisible="{Binding !IsStreaming}"
+                        Command="{Binding ToggleShareMenuCommand}" AutomationProperties.Name="Start stream">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Panel Width="18" Height="18">
+                            <Path Classes="lineicon text" Data="{StaticResource SgvsShareIcon}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Start stream" />
+                        <Panel Width="14" Height="14" VerticalAlignment="Center">
+                            <Path Classes="lineicon" Data="{StaticResource SgvsChevronUpIcon}" />
+                        </Panel>
+                    </StackPanel>
+                </Button>
+
+                <Button Classes="flat bar" IsVisible="{Binding IsStreaming}"
+                        Command="{Binding StopStreamCommand}" AutomationProperties.Name="Stop stream">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Panel Width="18" Height="18">
+                            <Path Classes="lineicon text" Data="{StaticResource SgvsStopIcon}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Stop stream" />
+                    </StackPanel>
+                </Button>
+            </Panel>
+
+            <Button Classes="flat bar" Command="{Binding LeaveCommand}" AutomationProperties.Name="Leave meeting">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Panel Width="18" Height="18">
+                        <Path Classes="lineicon danger" Data="{StaticResource SgvsLeaveIcon}" />
+                    </Panel>
+                    <TextBlock Classes="label" Text="Leave" Foreground="{DynamicResource SgvsDangerTextBrush}" />
+                </StackPanel>
+            </Button>
+        </StackPanel>
+
+        <!-- meeting code, bottom-right: key icon -> code -> click to copy. grows to the left -->
+        <Panel x:Name="CodeReveal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,20,20">
+            <Button Classes="flat square" IsVisible="{Binding !IsCodeRevealed}" Command="{Binding RevealCodeCommand}"
+                    ToolTip.Tip="Show meeting code" AutomationProperties.Name="Show meeting code">
+                <Panel Width="20" Height="20">
+                    <Path Classes="lineicon" Data="{StaticResource SgvsKeyIcon}" />
+                </Panel>
+            </Button>
+            <Button Classes="flat code" IsVisible="{Binding IsCodeRevealed}" Command="{Binding CopyCodeCommand}"
+                    ToolTip.Tip="Copy code" AutomationProperties.Name="Copy meeting code">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <!-- 6% letter spacing at 14px -->
+                    <TextBlock Text="{Binding MeetingCode}" FontFamily="{DynamicResource SgvsCodeFont}" FontSize="14"
+                               LetterSpacing="0.84" VerticalAlignment="Center" />
+                    <Panel Width="18" Height="18" VerticalAlignment="Center">
+                        <Path Classes="lineicon" Data="{StaticResource SgvsCopyIcon}" IsVisible="{Binding !IsCodeCopied}" />
+                        <Path Classes="lineicon accent" Data="{StaticResource SgvsCheckIcon}" IsVisible="{Binding IsCodeCopied}" />
+                    </Panel>
+                </StackPanel>
+            </Button>
+        </Panel>
+    </Panel>
 </UserControl>

@@ -23,6 +23,8 @@
        copied next to the exe (Link keeps the folder names the view models look for) -->
   <ItemGroup>
     <Content Include="Assets\Placeholders\StreamImage\**" Link="StreamImage\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- frame shown on live tiles in the meeting gallery (the landscape from the Figma mockup) -->
+    <Content Include="Assets\Placeholders\StreamPreview\**" Link="StreamPreview\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
