@@ -1,8 +1,11 @@
 // Generated with Claude
-package framebuffer
+package shared_mem_lib
  
 /*
-#include "framebuff.h"
+#cgo CFLAGS: -I../core/include
+#cgo LDFLAGS: -L../core/lib -lshared_mem_client
+#include "shared_mem_lib_core/encoding.h"
+#include "shared_mem_lib_core/framebuff.h"
 */
 import "C"
  
