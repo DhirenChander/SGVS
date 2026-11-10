@@ -66,14 +66,14 @@ namespace shared_mem_client
             return ::push_frames(&fb_, f, frame_count);
         }
 
-        bool try_pop_frames(Encoding encoding, Frame *out, uint32_t max_frame_count)
+        bool try_pop_frames(Encoding encoding, Frame *out, uint32_t *out_count, uint32_t max_frame_count)
         {
-            return ::try_pop_frames(&fb_, encoding, out, max_frame_count);
+            return ::try_pop_frames(&fb_, encoding, out, out_count, max_frame_count);
         }
 
-        bool blocking_pop_frames(Encoding encoding, Frame *out, uint32_t max_frame_count, uint32_t max_timeout)
+        bool blocking_pop_frames(Encoding encoding, Frame *out, uint32_t *out_count, uint32_t max_frame_count, uint32_t max_timeout)
         {
-            return ::blocking_pop_frames(&fb_, encoding, out, max_frame_count, max_timeout);
+            return ::blocking_pop_frames(&fb_, encoding, out, out_count, max_frame_count, max_timeout);
         }
 
         bool request_encoding(Encoding encoding)

@@ -33,8 +33,14 @@ func (fb *FrameBuffer) Free() {
 	C.free_framebuffer(fb.c())
 }
 
-func (fb *FrameBuffer) PushFrames(f []Frame) bool {
-	return bool(C.push_frames(fb.c(), (*C.Frame)(&f[0]), C.uint32_t(len(f))))
+func (fb *FrameBuffer) PushFrames(fs []GCFrame) bool {
+	inRaw := make([]Frame, len(fs))
+
+	for i := 0; i < len(fs); i++ {
+		inRaw[i] = fs[i].Raw
+	}
+
+	return bool(C.push_frames(fb.c(), (*C.Frame)(&inRaw[0]), C.uint32_t(len(f))))
 }
 
 func (fb *FrameBuffer) TryPopFrames(enc Encoding, out []Frame, outCount *uint32) bool {
