@@ -38,15 +38,15 @@ typedef struct
 typedef struct
 {
     Encoding encoding;
-    uint8_t size;
+    size_t size;
     uint8_t *data;
 } Frame;
 
 bool new_framebuffer(FrameBuffer *out);
 void free_framebuffer(FrameBuffer *fb);
-bool push_frame(FrameBuffer *fb, Frame *f);
-bool try_pop_frame(FrameBuffer *fb, Encoding encoding, Frame *out);
-bool blocking_pop_frame(FrameBuffer *fb, Encoding encoding, Frame *out, uint32_t max_timeout);
+bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count);
+bool try_pop_frames(FrameBuffer *fb, Encoding encoding, Frame *out, uint32_t max_frame_count);
+bool blocking_pop_frames(FrameBuffer *fb, Encoding encoding, Frame *out, uint32_t max_frame_count, uint32_t max_timeout);
 bool request_encoding(FrameBuffer *fb, Encoding encoding);
 bool remove_encoding(FrameBuffer *fb, Encoding encoding);
 bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t len);

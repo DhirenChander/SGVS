@@ -31,7 +31,8 @@ bool add_ring(FrameBuffer *fb, Encoding enc)
     }
 
     fb->rings[fb->ring_count - 1].id = enc.id;
-    return open_ring(&fb->rings[fb->ring_count - 1]);
+    // TODO: Make this dependent on the encoding
+    return open_ring(&fb->rings[fb->ring_count - 1], (enc.type == Audio) ? 16 : 500000, (enc.type == Audio) ? 96001 : 121);
 }
 
 bool remove_ring(FrameBuffer *fb, Encoding enc)
@@ -180,12 +181,12 @@ int ringbuff_by_encoding(FrameBuffer *fb, Encoding enc)
     return -1;
 }
 
-bool try_pop_frame(FrameBuffer *fb, Encoding enc, Frame *out)
+bool try_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max_frame_count)
 {
-    return blocking_pop_frame(fb, enc, out, 0x0);
+    return blocking_pop_frame(fb, enc, out, max_frame_count, 0x0);
 }
 
-bool blocking_pop_frame(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max_timeout)
+bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max_frame_count, uint32_t max_timeout)
 {
     int rb_ind = ringbuff_by_encoding(fb, enc);
 
@@ -195,21 +196,32 @@ bool blocking_pop_frame(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max_
         return false;
     }
 
-    out->encoding = enc;
-    size_t true_size;
+    uint32_t out_count;
+    Slot *raw_out = (Slot *)malloc(max_frame_count * sizeof(Slot));
 
-    if (!blocking_pop(&fb->rings[rb_ind], out->data, &true_size, out->size, max_timeout))
+    for (int i = 0; i < max_frame_count; i++)
+    {
+        // Bytes is a pointer, so by copying to the raw slot, the data auto copies to the outframes.
+        raw_out[i].bytes = raw_out[i].bytes;
+        raw_out[i].size = raw_out[i].size;
+    }
+
+    if (!blocking_pop(&fb->rings[rb_ind], out->data, &out_count, max_frame_count, max_timeout))
     {
         return false;
     }
 
-    out->size = true_size;
-    out->data = (uint8_t *)realloc(out->data, true_size);
+    for (int i = 0; i < out_count; i++)
+    {
+        out[i].size = raw_out[i].size;
+        out[i].encoding = enc;
+        out[i].data = (uint8_t *)realloc(out->data, out[i].size);
+    }
 
     return true;
 }
 
-bool push_frame(FrameBuffer *fb, Frame *f)
+bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count)
 {
     int rb_ind = ringbuff_by_encoding(fb, f->encoding);
 
@@ -219,7 +231,15 @@ bool push_frame(FrameBuffer *fb, Frame *f)
         return false;
     }
 
-    return push(&fb->rings[rb_ind], f->data, f->size);
+    Slot *data = (Slot *)malloc(frame_count * sizeof(Slot));
+
+    for (int i = 0; i < frame_count; i++)
+    {
+        data[i].bytes = f[i].data;
+        data[i].size = f[i].size;
+    }
+
+    return push(&fb->rings[rb_ind], data, frame_count);
 }
 
 bool new_framebuffer(FrameBuffer *out)

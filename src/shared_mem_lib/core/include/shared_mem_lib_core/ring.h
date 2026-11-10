@@ -18,21 +18,20 @@ using std::atomic_uint_least32_t;
 
 #define RING_H
 
-#define SLOT_SIZE 500000
-#define RING_SIZE 120
-
 typedef struct
 {
     size_t size;
-    uint8_t bytes[SLOT_SIZE];
+    uint8_t *bytes;
 } Slot;
 
 // Need a struct for the underlying data to ensure function definitions do not get included in the data mapping
 typedef struct
 {
-    Slot buff[RING_SIZE];
+    Slot *buff;
     atomic_uint_least32_t head;
     atomic_uint_least32_t tail;
+    uint64_t slot_size;
+    uint32_t slot_count; // One slot will always be left empty
 } Ring;
 
 #endif

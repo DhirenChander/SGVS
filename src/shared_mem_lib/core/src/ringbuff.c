@@ -7,21 +7,22 @@
 #include <inttypes.h>
 #include "shared_mem_lib_core/ringbuff.h"
 
-bool try_pop(RingBuffer *rb, uint8_t *out, size_t *out_size, size_t size)
+bool try_pop(RingBuffer *rb, Slot *out, uint32_t *out_count, uint32_t max_slots_out)
 {
-    return blocking_pop(rb, out, out_size, size, 0x0);
+    return blocking_pop(rb, out, out_count, max_slots_out, 0x0);
 }
 
-bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t *out_size, size_t max_size, uint32_t max_timeout)
+bool blocking_pop(RingBuffer *rb, Slot *out, uint32_t *out_count, uint32_t max_slots_out, uint32_t max_timeout)
 {
-    if (rb == nullptr || out == nullptr || max_size == 0)
+    printf("Popping %d...\n", max_slots_out);
+
+    if (rb == nullptr || out == nullptr || max_slots_out == 0)
     {
         return false;
     }
 
     uint32_t head = atomic_load(&rb->ring->head);
     uint32_t tail = atomic_load(&rb->ring->tail);
-    uint32_t next = (tail + 1) % RING_SIZE;
 
     // Block on the event
     if (head == tail)
@@ -54,8 +55,8 @@ bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t *out_size, size_t max_siz
         }
 #endif
 
-        uint32_t head = atomic_load(&rb->ring->head);
-        uint32_t tail = atomic_load(&rb->ring->tail);
+        head = atomic_load(&rb->ring->head);
+        tail = atomic_load(&rb->ring->tail);
 
         // Shouldn't happen in a spsc scenario, but still need to check
         // Can occur in an unsupported OS
@@ -66,22 +67,34 @@ bool blocking_pop(RingBuffer *rb, uint8_t *out, size_t *out_size, size_t max_siz
         }
     }
 
-    Slot *slot = &rb->ring->buff[tail];
-    uint8_t cpy_size = min(max_size, slot->size);
+    uint32_t available = (head - tail) % rb->ring->slot_count;
+    *out_count = min(available, max_slots_out);
+    uint32_t next = (tail + *out_count) % rb->ring->slot_count;
 
-    memcpy(out, slot->bytes, cpy_size);
-    *out_size = cpy_size;
+    for (int i = 0; i < *out_count; i++)
+    {
+        fprintf(stderr, "Copying %d, %d...\n", i, rb->ring->buff[(tail + i) % rb->ring->slot_count].size);
+        // Deep copy each slot
+        Slot *slot = &rb->ring->buff[(tail + i) % rb->ring->slot_count];
+        memcpy(out[i].bytes, slot->bytes, slot->size);
+        out[i].size = slot->size;
+        fprintf(stderr, "Size: %d...\n", out[i].size);
+    }
 
     atomic_store(&rb->ring->tail, next);
 
-#if defined(_WIN32) || defined(_WIN64)
-    SetEvent(rb->ev);
+    // Re-raise the signal if there are items left
+    if (available > *out_count)
+    {
+#ifdef _WIN32
+        SetEvent(rb->ev);
 #endif
+    }
 
     return true;
 }
 
-bool push(RingBuffer *rb, uint8_t *data, size_t size)
+bool push(RingBuffer *rb, Slot *data, uint32_t size)
 {
     if (rb == nullptr || data == nullptr || size == 0)
     {
@@ -91,13 +104,22 @@ bool push(RingBuffer *rb, uint8_t *data, size_t size)
     uint32_t head = atomic_load(&rb->ring->head);
     // Need to wait for acquiring tail lock from shared process, head doesn't matter
     uint32_t tail = atomic_load(&rb->ring->tail);
-    uint32_t next = (head + 1) % RING_SIZE;
-    if (next == tail || size > SLOT_SIZE)
+
+    if (size > (tail - (head + 1)) % rb->ring->slot_count)
         return false; // full: caller drops
 
-    Slot *slot = &rb->ring->buff[head];
-    slot->size = size;
-    memcpy(slot->bytes, data, size);
+    uint32_t next = (head + size) % rb->ring->slot_count;
+
+    for (int i = 0; i < size; i++)
+    {
+        if (data[i].size > rb->ring->slot_size)
+            return false;
+
+        Slot *slot = &rb->ring->buff[(head + i) % rb->ring->slot_count];
+        memcpy(slot->bytes, data[i].bytes, data[i].size);
+        slot->size = data[i].size;
+        fprintf(stderr, "Slot Size: %d...\n", slot->size);
+    }
 
     atomic_store(&rb->ring->head, next);
 
@@ -108,9 +130,9 @@ bool push(RingBuffer *rb, uint8_t *data, size_t size)
     return true;
 }
 
-bool open_ring(RingBuffer *rb)
+bool open_ring(RingBuffer *rb, uint64_t slot_size, uint32_t slot_count)
 {
-    uint64_t size = sizeof(Ring);
+    uint64_t size = sizeof(Ring) + sizeof(Slot) * slot_count + slot_size * slot_count;
     Ring *ring = nullptr;
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -137,7 +159,29 @@ bool open_ring(RingBuffer *rb)
         return false;
     }
 
-    ring = (Ring *)MapViewOfFile(rb->map, FILE_MAP_ALL_ACCESS, 0, 0, size);
+    uint8_t *raw_map = (uint8_t *)MapViewOfFile(rb->map, FILE_MAP_ALL_ACCESS, 0, 0, size);
+    ring = raw_map;
+
+    const uint8_t null_ring[sizeof(Ring)] = {0};
+
+    // Initial map value, map is not initialized
+    if (!memcmp(raw_map, null_ring, sizeof(Ring)))
+    {
+
+        ring->slot_size = slot_size;
+        ring->slot_count = slot_count;
+        atomic_store(&ring->head, 0);
+        atomic_store(&ring->tail, 0);
+    }
+
+    // Memory is layed out in the following way
+    // Ring | Slot 0 | Slot 1 | ... | Slot (n - 1) | Data 0 | Data 1 | ... | Data (n-1)
+    ring->buff = (Slot *)(raw_map + sizeof(Ring));
+
+    for (int i = 0; i < slot_count; i++)
+    {
+        ring->buff[i].bytes = (uint8_t *)(raw_map + sizeof(Ring) + sizeof(Slot) * slot_count + i * slot_size);
+    }
 #endif
 
     if (ring == nullptr)
