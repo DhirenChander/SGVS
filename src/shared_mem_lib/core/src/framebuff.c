@@ -303,7 +303,7 @@ void free_framebuffer(FrameBuffer *fb)
 
 void set_share_video(FrameBuffer *fb, bool v)
 {
-    fb->config.sharingScreen = v;
+    fb->config.sharing_screen = v;
 #ifdef _WIN32
     SetEvent(fb->conf_ev);
 #endif

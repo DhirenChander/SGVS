@@ -19,9 +19,10 @@
 typedef struct
 {
     Encoding encodings[MAX_ENCODINGS];
+    Encoding front_end_video;
     uint32_t video_selector; // PID when isProcess is true, Screen ID when isProcess is false
-    bool isProcess;
-    bool sharingScreen;
+    bool is_process;
+    bool sharing_screen;
 } Config;
 
 typedef struct
