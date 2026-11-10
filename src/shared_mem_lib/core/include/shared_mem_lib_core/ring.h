@@ -7,14 +7,7 @@
 
 #include <stdint.h>
 #include <inttypes.h>
-
-#ifdef __cplusplus
-#include <atomic>
-// Bring the type alias into the global namespace for C++ compatibility
-using std::atomic_uint_least32_t;
-#else
 #include <stdatomic.h>
-#endif
 
 #define RING_H
 typedef struct

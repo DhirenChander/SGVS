@@ -215,7 +215,8 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t max
     {
         out[i].size = raw_out[i].len;
         out[i].encoding = enc;
-        out[i].data = (uint8_t *)realloc(out->data, out[i].size);
+        // Removed due to UB when trying to realloc GC managed pointers
+        // out[i].data = (uint8_t *)realloc(out->data, out[i].size);
     }
 
     return true;

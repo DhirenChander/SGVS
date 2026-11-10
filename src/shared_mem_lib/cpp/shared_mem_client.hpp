@@ -8,13 +8,38 @@
 #include <cstdint>
 #include <stdio.h>
 
-#include "../core/framebuff.h"
+#include "shared_mem_lib_core/framebuff.h"
 
 namespace shared_mem_client
 {
     using Frame = ::Frame;
     using Encoding = ::Encoding;
     using Config = ::Config;
+
+    Frame frame_sized_by_encoding(Encoding enc)
+    {
+        return ::frame_sized_by_encoding(enc);
+    }
+
+    void set_frame_data(Frame *f, uint8_t *data)
+    {
+        return ::set_frame_data(f, data);
+    }
+
+    size_t get_frame_size(Frame *f)
+    {
+        return ::get_frame_size(f);
+    }
+
+    Encoding new_video_encoding(uint16_t max_bit_rate, uint16_t min_bit_rate, uint16_t frame_height, uint16_t frame_width, uint8_t frame_rate)
+    {
+        return ::new_video_encoding(max_bit_rate, min_bit_rate, frame_height, frame_width, frame_rate);
+    }
+
+    Encoding new_audio_encoding(bool is_input)
+    {
+        return ::new_audio_encoding(is_input);
+    }
 
     class SharedMemoryFrameBuffer
     {
@@ -73,29 +98,24 @@ namespace shared_mem_client
         }
 #endif
 
-        static Frame frame_sized_by_encoding(Encoding enc)
-        {
-            return ::frame_sized_by_encoding(enc);
-        }
-
         void set_share_video(bool v)
         {
             ::set_share_video(&fb_, v);
         }
 
-        bool try_read_config(Config *out)
+        bool get_sharing_video()
         {
-            return ::try_read_config(&fb_, out);
+            return ::get_sharing_video(&fb_);
         }
 
-        bool blocking_read_config(Config *out, uint32_t max_timeout)
+        void set_front_end_encoding(Encoding enc)
         {
-            return ::blocking_read_config(&fb_, out, max_timeout);
+            return ::set_front_end_encoding(&fb_, enc);
         }
 
-        void force_read_config(Config *out)
+        Encoding get_front_end_encoding()
         {
-            ::force_read_config(&fb_, out);
+            return ::get_front_end_encoding(&fb_);
         }
 
     private:

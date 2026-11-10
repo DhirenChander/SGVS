@@ -3,12 +3,15 @@ package shared_mem_lib
 
 /*
 #cgo CFLAGS: -I../core/include
-#cgo LDFLAGS: -L../core/lib -lshared_mem_client -lcrypto
+#cgo LDFLAGS: -L./lib -lshared_mem_client -lcrypto
 #include "shared_mem_lib_core/encoding.h"
 #include "shared_mem_lib_core/framebuff.h"
 */
 import "C"
-import "unsafe"
+import (
+	"slices"
+	"unsafe"
+)
 
 type Encoding C.Encoding
 type Config C.Config
@@ -16,8 +19,8 @@ type Frame C.Frame
 type FrameBuffer C.FrameBuffer
 
 type GCFrame struct {
-	raw   Frame
-	bytes []byte
+	Raw   Frame
+	Bytes []byte
 }
 
 func (fb *FrameBuffer) c() *C.FrameBuffer { return (*C.FrameBuffer)(fb) }
@@ -38,8 +41,23 @@ func (fb *FrameBuffer) TryPopFrames(enc Encoding, out []Frame) bool {
 	return bool(C.try_pop_frames(fb.c(), C.Encoding(enc), (*C.Frame)(&out[0]), C.uint32_t(len(out))))
 }
 
-func (fb *FrameBuffer) BlockingPopFrames(enc Encoding, out []Frame, maxTimeout uint32) bool {
-	return bool(C.blocking_pop_frames(fb.c(), C.Encoding(enc), (*C.Frame)(&out[0]), C.uint32_t(len(out)), C.uint32_t(maxTimeout)))
+func (fb *FrameBuffer) BlockingPopFrames(enc Encoding, out []GCFrame, maxTimeout uint32) bool {
+	rawOut := make([]Frame, len(out))
+
+	for i := 0; i < len(out); i++ {
+		rawOut[i] = out[i].Raw
+	}
+
+	if !bool(C.blocking_pop_frames(fb.c(), C.Encoding(enc), (*C.Frame)(&rawOut[0]), C.uint32_t(len(out)), C.uint32_t(maxTimeout))) {
+		return false
+	}
+
+	for i := 0; i < len(out); i++ {
+		out[i].Bytes = slices.Clone(out[i].Bytes[:out[i].Raw.GetFrameSize()])
+		out[i].Raw.SetFrameData(out[i].Bytes)
+	}
+
+	return true
 }
 
 func (fb *FrameBuffer) RequestEncoding(enc Encoding) bool {
@@ -95,12 +113,12 @@ func NewGCFrame(enc Encoding) GCFrame {
 	}
 }
 
-//Encoding new_video_encoding(uint16_t max_bit_rate, uint16_t min_bit_rate, uint16_t frame_height, uint16_t frame_width, uint8_t frame_rate);
+// Encoding new_video_encoding(uint16_t max_bit_rate, uint16_t min_bit_rate, uint16_t frame_height, uint16_t frame_width, uint8_t frame_rate);
 func NewVideoEncoding(maxBitRate, minBitRate, frameHeight, frameWidth uint16, frameRate uint8) Encoding {
 	return Encoding(C.new_video_encoding(C.uint16_t(maxBitRate), C.uint16_t(minBitRate), C.uint16_t(frameHeight), C.uint16_t(frameWidth), C.uint8_t(frameRate)))
 }
 
-//Encoding new_audio_encoding(bool is_input);
+// Encoding new_audio_encoding(bool is_input);
 func NewAudioEncoding(isInput bool) Encoding {
 	return Encoding(C.new_audio_encoding(C.bool(isInput)))
 }
