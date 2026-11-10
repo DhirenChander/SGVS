@@ -95,7 +95,7 @@ func testCallAndResponse(host bool) *webrtc.PeerConnection {
 func setupPcAsHost() (
 	*webrtc.PeerConnection,
 	*webrtc.DataChannel,
-	chan struct{}, //Signals when dataChannel is open (by closing itself)
+	chan bool, //Signals when dataChannel is open
 	chan webrtc.DataChannelMessage, //Messages are sent here
 	error) {
 
@@ -155,7 +155,7 @@ func setupPcAsHost() (
 func setupPcAsAttendee() (
 	*webrtc.PeerConnection,
 	chan *webrtc.DataChannel,
-	chan struct{}, //Signals when dataChannel is open (by closing itself)
+	chan bool, //Signals when dataChannel is open (by closing itself)
 	chan webrtc.DataChannelMessage, //Messages are sent here
 	error) {
 

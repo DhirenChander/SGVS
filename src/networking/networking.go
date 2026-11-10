@@ -4,6 +4,10 @@ import (
 	"fmt"
 	"strings"
 
+	"shared_mem_lib"
+
+	"github.com/pion/webrtc/v4/pkg/media"
+
 	"github.com/pion/webrtc/v4"
 )
 
@@ -26,10 +30,11 @@ var ICEConfiguration = webrtc.Configuration{
 
 // Setting up connections
 // Switch to named return?
+// Or wrap objects together in a struct?
 func generateOffer() (
 	*webrtc.PeerConnection,
 	*webrtc.DataChannel,
-	chan struct{}, //Signals when dataChannel is open (by closing itself)
+	chan bool, //Signals when dataChannel is open
 	chan webrtc.DataChannelMessage, //Messages are sent to here (should this be an input instead of output?)
 	*webrtc.TrackLocalStaticSample, //Voice audio track
 	*webrtc.RTPSender, //Voice audio sender
@@ -75,7 +80,7 @@ func generateOffer() (
 		remoteAudioReceiverChan <- receiver
 	})
 
-	dataChanOpen := make(chan struct{}, 1)
+	dataChanOpen := make(chan bool, 1)
 	dcMessages := make(chan webrtc.DataChannelMessage, 1)
 
 	dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
@@ -83,9 +88,8 @@ func generateOffer() (
 	})
 
 	dataChannel.OnOpen(func() {
-		//Close channel to signal dataChannel is open
+		dataChanOpen <- true
 		close(dataChanOpen)
-
 	})
 
 	// create a first offer that does not contain any local candidates
@@ -130,7 +134,7 @@ func generateAnswer(offerSDP string) (
 	chan *webrtc.DataChannel, //Return a channel that will recieve the DataChannel once it is created
 	//                          Because channel is only received once host finished setup, we cannot wait for channel here
 
-	chan struct{}, //Signals when dataChannel is open (by closing itself)
+	chan bool, //Signals when dataChannel is open
 	chan webrtc.DataChannelMessage, //Messages are sent to here (should this be an input instead of output?)
 	*webrtc.TrackLocalStaticSample, //Voice audio track
 	*webrtc.RTPSender, //Voice audio sender
@@ -160,7 +164,7 @@ func generateAnswer(offerSDP string) (
 		SDP:  offerSDP,
 	}
 
-	dataChanOpen := make(chan struct{}, 1)
+	dataChanOpen := make(chan bool, 1)
 	dcMessages := make(chan webrtc.DataChannelMessage, 1)
 
 	dcReady := make(chan *webrtc.DataChannel, 1)
@@ -177,7 +181,7 @@ func generateAnswer(offerSDP string) (
 		})
 
 		dc.OnOpen(func() {
-			//Signal that the data channel is open by closing this channel
+			dataChanOpen <- true
 			close(dataChanOpen)
 		})
 
@@ -251,7 +255,7 @@ func AddVoiceTrack(pc *webrtc.PeerConnection) (
 
 	defaultAudioCapability :=
 		webrtc.RTPCodecCapability{
-			MimeType:  webrtc.MimeTypeOpus, //TODO: confirm with others which encoding we will use
+			MimeType:  webrtc.MimeTypeOpus,
 			ClockRate: 48000,
 			Channels:  2,
 		}
@@ -270,9 +274,9 @@ func AddVoiceTrack(pc *webrtc.PeerConnection) (
 		return nil, nil, err
 	}
 
-	// Drain the incoming RTCP data until it error
+	// Drain the incoming RTCP data until it errors
 	// 		For now just discard the data,
-	// RTCP data is sent here, not the audio data
+	// not the audio data, only data about connection stability and performance
 	// Use this to read Receiver Reports and updates on network conditions
 	go func() {
 		buf := make([]byte, 1500)
@@ -285,6 +289,67 @@ func AddVoiceTrack(pc *webrtc.PeerConnection) (
 	}()
 
 	return track, sender, nil
+
+}
+
+func relayIncomingAudioToApplication(track *webrtc.TrackRemote, fb *shared_mem_lib.FrameBuffer) error {
+
+	var enc shared_mem_lib.Encoding
+	ok := fb.RequestEncoding(enc)
+	if !ok {
+		return fmt.Errorf("Failed to get encoding")
+	}
+
+	go func() {
+		for {
+			packet, _, err := track.ReadRTP()
+			if err != nil {
+				return
+			}
+
+			//Split into segments?
+			//Currently put everything into a single frame
+			gcFrame := shared_mem_lib.NewGCFrame(enc)
+			gcFrame.Bytes = packet.Payload
+
+			fb.
+		}
+	}()
+
+	return nil
+
+}
+
+// Add way to stop sending frames?
+// Add a channel to signal something has failed?
+func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared_mem_lib.FrameBuffer) error {
+
+	const timeOut = 10 //seconds
+	const maxAudioFrames = 1000
+
+	var enc shared_mem_lib.Encoding
+	ok := fb.RequestEncoding(enc)
+
+	if !ok {
+		return fmt.Errorf("Failed to get encoding")
+	}
+
+	go func() {
+		for ok, err := true, error(nil); ok && err == nil; {
+			var framesToSend []shared_mem_lib.GCFrame = make([]shared_mem_lib.GCFrame, maxAudioFrames)
+			ok = fb.BlockingPopFrames(enc, framesToSend, timeOut) //resizes frames to only have
+
+			for i := 0; i < len(framesToSend); i++ {
+				var media media.Sample = media.Sample{
+					Data: framesToSend[i].Bytes,
+					//Do we need timestamp and duration info?
+				}
+				err = track.WriteSample(media)
+			}
+		}
+	}()
+
+	return nil
 
 }
 

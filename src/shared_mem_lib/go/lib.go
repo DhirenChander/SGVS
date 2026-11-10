@@ -17,7 +17,7 @@ type FrameBuffer C.FrameBuffer
 
 type GCFrame struct {
 	raw   Frame
-	bytes []byte
+	Bytes []byte
 }
 
 func (fb *FrameBuffer) c() *C.FrameBuffer { return (*C.FrameBuffer)(fb) }
@@ -30,7 +30,7 @@ func (fb *FrameBuffer) Free() {
 	C.free_framebuffer(fb.c())
 }
 
-func (fb *FrameBuffer) PushFrames(f []Frame) bool {
+func (fb *FrameBuffer) PushFrames(f []GCFrame) bool {
 	return bool(C.push_frames(fb.c(), (*C.Frame)(&f[0]), C.uint32_t(len(f))))
 }
 
@@ -38,7 +38,7 @@ func (fb *FrameBuffer) TryPopFrames(enc Encoding, out []Frame) bool {
 	return bool(C.try_pop_frames(fb.c(), C.Encoding(enc), (*C.Frame)(&out[0]), C.uint32_t(len(out))))
 }
 
-func (fb *FrameBuffer) BlockingPopFrames(enc Encoding, out []Frame, maxTimeout uint32) bool {
+func (fb *FrameBuffer) BlockingPopFrames(enc Encoding, out []GCFrame, maxTimeout uint32) bool {
 	return bool(C.blocking_pop_frames(fb.c(), C.Encoding(enc), (*C.Frame)(&out[0]), C.uint32_t(len(out)), C.uint32_t(maxTimeout)))
 }
 
