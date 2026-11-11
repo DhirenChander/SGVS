@@ -14,7 +14,7 @@
             <Setter Property="Width" Value="162" />
             <Setter Property="Height" Value="40" />
             <Setter Property="Padding" Value="12,0,42,0" />
-            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="FontSize" Value="16" />
             <Setter Property="Foreground" Value="#FFD4D4D4" />
