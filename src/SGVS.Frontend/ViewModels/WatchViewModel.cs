@@ -8,25 +8,25 @@ namespace SGVS.Frontend.ViewModels;
 public class WatchViewModel : ViewModelBase
 {
     // for the XAML previewer only, watches whoever is streaming in the fake call
-    public WatchViewModel() : this(Watched(new FakeMeetingService()), new FakeMeetingService(), () => { })
+    public WatchViewModel() : this(Watched(new FakeMeetingService()), new FakeMeetingService(), () => { }, () => { })
     {
     }
 
     // member: whose stream this is. meeting: the same call the Meeting page shows, so both pages
-    // list the same people. stopWatching: what the Stop watching button does (back to Meeting)
-    public WatchViewModel(Participant member, IMeetingService meeting, Action stopWatching)
+    // list the same people. stopWatching: what the Stop watching button does (back to Meeting). goToStart: what Leave does
+    public WatchViewModel(Participant member, IMeetingService meeting, Action stopWatching, Action goToStart)
     {
         Participants = meeting.Members;
         StreamFrame = member.StreamPreview;
         JoinCode = new JoinCodeViewModel(meeting.Code);
 
         // control bar + gear. Start stream is null since there's nothing to start from here
-        // yet, and Leave closes the app
+        // yet, and Leave goes back to Start
         Overlay = new OverlayViewModel(meeting.Self, showViewerControls: true, startStream: null, stopStream: null,
-            leave: () =>
+            leave: async () =>
             {
-                Shutdown();
-                return Task.CompletedTask;
+                await meeting.LeaveAsync();
+                goToStart();
             },
             stopWatching: stopWatching);
     }

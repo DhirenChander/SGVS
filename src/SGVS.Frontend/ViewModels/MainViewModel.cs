@@ -26,6 +26,6 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private void GoToMeetingPage()
     {
-        CurrentView = new MeetingViewModel(new FakeMeetingService(), page => CurrentView = page);
+        CurrentView = new MeetingViewModel(new FakeMeetingService(), page => CurrentView = page, () => GoToStartPage());
     }
 }

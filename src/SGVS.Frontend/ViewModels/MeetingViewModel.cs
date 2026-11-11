@@ -12,17 +12,19 @@ public partial class MeetingViewModel : ViewModelBase
 {
     private readonly IMeetingService _meeting;
     private readonly Action<ViewModelBase> _navigate;
+    private readonly Action _goToStart;
 
     // for the XAML previewer only
-    public MeetingViewModel() : this(new FakeMeetingService(), _ => { })
+    public MeetingViewModel() : this(new FakeMeetingService(), _ => { }, () => { })
     {
     }
 
-    // navigate swaps the page MainWindow shows (see MainViewModel)
-    public MeetingViewModel(IMeetingService meeting, Action<ViewModelBase> navigate)
+    // navigate swaps the page MainWindow shows (see MainViewModel). goToStart is what Leave does after the call ends
+    public MeetingViewModel(IMeetingService meeting, Action<ViewModelBase> navigate, Action goToStart)
     {
         _meeting = meeting;
         _navigate = navigate;
+        _goToStart = goToStart;
 
         // ReadOnlyObservableCollection only exposes the event through the interface
         ((INotifyCollectionChanged)Members).CollectionChanged += (_, _) => OnPropertyChanged(nameof(GalleryColumns));
@@ -59,14 +61,13 @@ public partial class MeetingViewModel : ViewModelBase
     // opens their stream. Stop watching on that page comes back to this same page
     [RelayCommand]
     private void Watch(Participant member) =>
-        _navigate(new WatchViewModel(member, _meeting, () => _navigate(this)));
+        _navigate(new WatchViewModel(member, _meeting, () => _navigate(this), _goToStart));
 
-    // what the overlay's Leave calls once confirmed. tells the service, then closes the app
-    // (there's no Start screen to go back to yet)
+    // what the overlay's Leave calls once confirmed. tells the service, then goes back to the Start screen
     private async Task LeaveMeeting()
     {
         await _meeting.LeaveAsync();
-        Shutdown();
+        _goToStart();
     }
 
     private void OnSelfChanged(object? sender, PropertyChangedEventArgs e)
