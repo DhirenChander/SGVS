@@ -1,8 +1,112 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SGVS.Frontend.ViewModels"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
-             x:Class="SGVS.Frontend.Views.StartView">
-  Welcome to Avalonia!
+             mc:Ignorable="d"
+             d:DesignWidth="700"
+             d:DesignHeight="450"
+             x:Class="SGVS.Frontend.Views.StartView"
+             x:DataType="vm:StartViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="TextBox.meeting-code">
+            <Setter Property="Width" Value="162" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Padding" Value="12,0,42,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="Foreground" Value="#FFD4D4D4" />
+            <Setter Property="Background" Value="#FF1E1E1E" />
+            <Setter Property="BorderBrush" Value="#FF777777" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Watermark" Value="Meeting code" />
+        </Style>
+        <Style Selector="TextBox.meeting-code:focus">
+            <Setter Property="BorderBrush" Value="#FFB8DADA" />
+        </Style>
+        <Style Selector="Button.meeting-arrow">
+            <Setter Property="Width" Value="40" />
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Foreground" Value="#FF1E1E1E" />
+            <Setter Property="Background" Value="#FF53C9C9" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter x:Name="PART_ContentPresenter"
+                                      Background="{TemplateBinding Background}"
+                                      BorderBrush="{TemplateBinding BorderBrush}"
+                                      BorderThickness="{TemplateBinding BorderThickness}"
+                                      CornerRadius="{TemplateBinding CornerRadius}"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Padding="{TemplateBinding Padding}"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.meeting-arrow:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#FF78DADA" />
+        </Style>
+        <Style Selector="Button.new-meeting">
+            <Setter Property="Width" Value="162" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Foreground" Value="#FFD4D4D4" />
+            <Setter Property="Background" Value="#FF2C2927" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter x:Name="PART_ContentPresenter"
+                                      Background="{TemplateBinding Background}"
+                                      BorderBrush="{TemplateBinding BorderBrush}"
+                                      BorderThickness="{TemplateBinding BorderThickness}"
+                                      CornerRadius="{TemplateBinding CornerRadius}"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Padding="{TemplateBinding Padding}"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.new-meeting:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#FF3A3735" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Background="#FF1E1E1E">
+        <StackPanel HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="8">
+            <Grid Width="162"
+                  Height="40">
+                <TextBox Classes="meeting-code" />
+                <Button Classes="meeting-arrow"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Margin="0,0,1,0"
+                        Content="→"
+                        Command="{Binding ShowMeetingCommand}" />
+            </Grid>
+            <Button Classes="new-meeting"
+                    Command="{Binding ShowMeetingCommand}"
+                    Content="New meeting" />
+        </StackPanel>
+
+        <TextBlock HorizontalAlignment="Left"
+                   VerticalAlignment="Bottom"
+                   Margin="22,0,0,15"
+                   Foreground="#FFD4D4D4"
+                   FontSize="13"
+                   Text="⚙"
+                   Opacity="0.9" />
+    </Grid>
 </UserControl>

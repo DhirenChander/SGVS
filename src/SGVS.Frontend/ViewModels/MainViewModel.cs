@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using SGVS.Frontend.Services;
 
 namespace SGVS.Frontend.ViewModels;
@@ -10,9 +11,21 @@ public partial class MainViewModel : ViewModelBase
     // pages navigate by handing the next page to the callback
     public MainViewModel()
     {
-        CurrentView = new MeetingViewModel(new FakeMeetingService(), page => CurrentView = page);
+        CurrentView = new StartViewModel(() => GoToMeetingPage());
     }
 
     [ObservableProperty]
     public partial ViewModelBase CurrentView { get; set; }
+
+    [RelayCommand]
+    private void GoToStartPage()
+    {
+        CurrentView = new StartViewModel(() => GoToMeetingPage());
+    }
+
+    [RelayCommand]
+    private void GoToMeetingPage()
+    {
+        CurrentView = new MeetingViewModel(new FakeMeetingService(), page => CurrentView = page);
+    }
 }
