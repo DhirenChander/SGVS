@@ -36,11 +36,11 @@ func (fb *FrameBuffer) Free() {
 func (fb *FrameBuffer) PushFrames(fs []GCFrame) bool {
 	inRaw := make([]Frame, len(fs))
 
-	for i := 0; i < len(fs); i++ {
+	for i := range fs {
 		inRaw[i] = fs[i].Raw
 	}
 
-	return bool(C.push_frames(fb.c(), (*C.Frame)(&inRaw[0]), C.uint32_t(len(f))))
+	return bool(C.push_frames(fb.c(), (*C.Frame)(&inRaw[0]), C.uint32_t(len(fs))))
 }
 
 func (fb *FrameBuffer) TryPopFrames(enc Encoding, out []Frame, outCount *uint32) bool {
@@ -53,13 +53,12 @@ func (fb *FrameBuffer) BlockingPopFrames(enc Encoding, maxFrames uint32, maxTime
 	out := make([]GCFrame, maxFrames)
 	rawOut := make([]Frame, maxFrames)
 
-	for i := 0; i < maxFrames; i++ {
-		out[i] = NewGCFrame(enc);
-		rawOut[i] = out[i].Raw
+	for i := uint32(0); i < maxFrames; i++ {
+		out[i] = NewGCFrame(enc)
 	}
 
 	if !bool(C.blocking_pop_frames(fb.c(), C.Encoding(enc), (*C.Frame)(&rawOut[0]), (*C.uint32_t)(&outLen), C.uint32_t(maxFrames), C.uint32_t(maxTimeout))) {
-		return (false, nil)
+		return false, nil
 	}
 
 	out = slices.Clone(out[:outLen])
@@ -69,7 +68,7 @@ func (fb *FrameBuffer) BlockingPopFrames(enc Encoding, maxFrames uint32, maxTime
 		out[i].Raw.SetFrameData(out[i].Bytes)
 	}
 
-	return (true, out)
+	return true, out
 }
 
 func (fb *FrameBuffer) RequestEncoding(enc Encoding) bool {

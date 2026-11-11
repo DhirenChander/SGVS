@@ -292,7 +292,7 @@ func AddVoiceTrack(pc *webrtc.PeerConnection) (
 
 }
 
-func relayIncomingAudioToApplication(track *webrtc.TrackRemote, fb *shared_mem_lib.FrameBuffer) error {
+func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.FrameBuffer) error {
 
 	var enc shared_mem_lib.Encoding
 	ok := fb.RequestEncoding(enc)
@@ -304,27 +304,30 @@ func relayIncomingAudioToApplication(track *webrtc.TrackRemote, fb *shared_mem_l
 		for {
 			packet, _, err := track.ReadRTP()
 			if err != nil {
+				fmt.Println("Error reading incoming audio")
 				return
 			}
 
 			//Split into segments?
-			//Currently put everything into a single frame
+			//Currently puts everything into a single frame
 			gcFrame := shared_mem_lib.NewGCFrame(enc)
 			gcFrame.Bytes = packet.Payload
 
-			fb.
+			//cast to array of frames
+			allFrames := []shared_mem_lib.GCFrame{gcFrame}
+
+			fb.PushFrames(allFrames)
 		}
 	}()
 
 	return nil
-
 }
 
 // Add way to stop sending frames?
 // Add a channel to signal something has failed?
 func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared_mem_lib.FrameBuffer) error {
 
-	const timeOut = 10 //seconds
+	const timeOutMs = 10000
 	const maxAudioFrames = 1000
 
 	var enc shared_mem_lib.Encoding
@@ -335,9 +338,10 @@ func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared
 	}
 
 	go func() {
-		for ok, err := true, error(nil); ok && err == nil; {
+		var err error
+		for ok, err = true, nil; ok && err == nil; {
 			var framesToSend []shared_mem_lib.GCFrame = make([]shared_mem_lib.GCFrame, maxAudioFrames)
-			ok = fb.BlockingPopFrames(enc, framesToSend, timeOut) //resizes frames to only have
+			ok, framesToSend = fb.BlockingPopFrames(enc, maxAudioFrames, timeOutMs) //BlockingPopFrames resizes slice to only be as long as needed
 
 			for i := 0; i < len(framesToSend); i++ {
 				var media media.Sample = media.Sample{
@@ -345,12 +349,22 @@ func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared
 					//Do we need timestamp and duration info?
 				}
 				err = track.WriteSample(media)
+				if err != nil {
+					break
+				}
 			}
+		}
+
+		if !ok {
+			fmt.Println("Error popping audio frames")
+		}
+
+		if err != nil {
+			fmt.Println("Error relaying outgoing audio: " + err.Error())
 		}
 	}()
 
 	return nil
-
 }
 
 // Generated with AI
