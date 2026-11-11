@@ -1,11 +1,15 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"shared_mem_lib"
 
+	"github.com/pion/interceptor/pkg/jitterbuffer"
 	"github.com/pion/webrtc/v4/pkg/media"
 
 	"github.com/pion/webrtc/v4"
@@ -294,13 +298,24 @@ func AddVoiceTrack(pc *webrtc.PeerConnection) (
 
 func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.FrameBuffer) error {
 
-	var enc shared_mem_lib.Encoding
-	ok := fb.RequestEncoding(enc)
-	if !ok {
-		return fmt.Errorf("Failed to get encoding")
-	}
+	const minimumBufferedPackets = 5 // -> 50ms delay
+	const audioFrameDuration = 10 * time.Millisecond
 
+	enc := shared_mem_lib.NewAudioEncoding(true)
+	jb := jitterbuffer.New(jitterbuffer.WithMinimumPacketCount(minimumBufferedPackets))
+
+	playbackStarted := make(chan struct{})
+	var hasStarted atomic.Bool
+
+	//
+	jb.Listen(jitterbuffer.BeginPlayback, func(event jitterbuffer.Event, buf *jitterbuffer.JitterBuffer) {
+		hasStarted.Store(true)
+		close(playbackStarted)
+	})
+
+	readDone := make(chan struct{}) //Will stop playing from jitter buffer when this closes
 	go func() {
+		defer close(readDone)
 		for {
 			packet, _, err := track.ReadRTP()
 			if err != nil {
@@ -308,15 +323,57 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 				return
 			}
 
-			//Split into segments?
-			//Currently puts everything into a single frame
-			gcFrame := shared_mem_lib.NewGCFrame(enc)
-			gcFrame.Bytes = packet.Payload
+			sequenceNum := packet.Header.SequenceNumber
+			if hasStarted.Load() {
+				if int16(sequenceNum-jb.PlayoutHead()) < 0 {
+					//We have already played past this packet, arrived too late
+					continue
+				}
 
-			//cast to array of frames
-			allFrames := []shared_mem_lib.GCFrame{gcFrame}
+				//			sequence is mod 16, so subtract then cast to signed int
+			} else if int16(sequenceNum-jb.PlayoutHead()) < 0 {
+				//During initial buffer filling, if packets arrive earlier
+				//than playoutHead, move head backwards
+				//May or may not happen on first packet retrieval, but doesn't matter (first push sets head automatically)
+				jb.SetPlayoutHead(sequenceNum)
+			}
+			jb.Push(packet)
+		}
+	}()
 
-			fb.PushFrames(allFrames)
+	go func() {
+		select { //Wait until initial buffer fill is complete
+		case <-playbackStarted:
+		case <-readDone:
+			return
+		}
+
+		ticker := time.NewTicker(audioFrameDuration)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-readDone:
+				return
+			//Potential addition: speed up timer temporarily if buffer is overflowing?
+			case <-ticker.C:
+				packet, err := jb.Pop()
+				if errors.Is(err, jitterbuffer.ErrBufferUnderrun) {
+					jb.SetPlayoutHead(jb.PlayoutHead() + 1)
+					continue
+				}
+				if err != nil {
+					fmt.Printf("Error reading from audio jitter buffer: %v\n", err)
+					return
+				}
+
+				gcFrame := shared_mem_lib.NewGCFrame(enc)
+				gcFrame.Bytes = packet.Payload
+				if !fb.PushFrames([]shared_mem_lib.GCFrame{gcFrame}) {
+					fmt.Println("Error pushing audio frame to shared buffer")
+					return
+				}
+			}
 		}
 	}()
 
@@ -328,27 +385,28 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared_mem_lib.FrameBuffer) error {
 
 	const timeOutMs = 10000
-	const maxAudioFrames = 1000
+	const maxAudioFrames = 100 // 10ms per frame -> 1 seconds
 
-	var enc shared_mem_lib.Encoding
-	ok := fb.RequestEncoding(enc)
+	//Hard code for now
+	const audioFrameDuration = 10 * time.Millisecond
 
-	if !ok {
-		return fmt.Errorf("Failed to get encoding")
-	}
+	enc := shared_mem_lib.NewAudioEncoding(true)
 
 	go func() {
-		var err error
-		for ok, err = true, nil; ok && err == nil; {
+		err := error(nil)
+		ok := true
+		for ok && err == nil {
 			var framesToSend []shared_mem_lib.GCFrame = make([]shared_mem_lib.GCFrame, maxAudioFrames)
 			ok, framesToSend = fb.BlockingPopFrames(enc, maxAudioFrames, timeOutMs) //BlockingPopFrames resizes slice to only be as long as needed
 
 			for i := 0; i < len(framesToSend); i++ {
 				var media media.Sample = media.Sample{
-					Data: framesToSend[i].Bytes,
-					//Do we need timestamp and duration info?
+					Data:     framesToSend[i].Bytes,
+					Duration: audioFrameDuration,
 				}
 				err = track.WriteSample(media)
+				// framesToSend[i].Close()
+				// (check if anything is still using bytes by reference)
 				if err != nil {
 					break
 				}
