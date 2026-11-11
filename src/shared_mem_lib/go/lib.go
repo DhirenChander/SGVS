@@ -9,8 +9,8 @@ package shared_mem_lib
 */
 import "C"
 import (
+	"runtime"
 	"slices"
-	"unsafe"
 )
 
 type Encoding C.Encoding
@@ -19,8 +19,9 @@ type Frame C.Frame
 type FrameBuffer C.FrameBuffer
 
 type GCFrame struct {
-	Raw   Frame
-	Bytes []byte
+	Raw    *Frame
+	Bytes  []byte
+	pinner runtime.Pinner
 }
 
 func (fb *FrameBuffer) c() *C.FrameBuffer { return (*C.FrameBuffer)(fb) }
@@ -33,14 +34,19 @@ func (fb *FrameBuffer) Free() {
 	C.free_framebuffer(fb.c())
 }
 
+// bool align_rings_to_config(FrameBuffer *fb);
+func (fb *FrameBuffer) AlignRingsToConfig() bool {
+	return bool(C.align_rings_to_config((*C.FrameBuffer)(fb)))
+}
+
 func (fb *FrameBuffer) PushFrames(fs []GCFrame) bool {
 	inRaw := make([]Frame, len(fs))
 
 	for i := 0; i < len(fs); i++ {
-		inRaw[i] = fs[i].Raw
+		inRaw[i] = *fs[i].Raw
 	}
 
-	return bool(C.push_frames(fb.c(), (*C.Frame)(&inRaw[0]), C.uint32_t(len(f))))
+	return bool(C.push_frames(fb.c(), (*C.Frame)(&inRaw[0]), C.uint32_t(len(fs))))
 }
 
 func (fb *FrameBuffer) TryPopFrames(enc Encoding, out []Frame, outCount *uint32) bool {
@@ -53,13 +59,13 @@ func (fb *FrameBuffer) BlockingPopFrames(enc Encoding, maxFrames uint32, maxTime
 	out := make([]GCFrame, maxFrames)
 	rawOut := make([]Frame, maxFrames)
 
-	for i := 0; i < maxFrames; i++ {
-		out[i] = NewGCFrame(enc);
-		rawOut[i] = out[i].Raw
+	for i := uint32(0); i < maxFrames; i++ {
+		out[i] = NewGCFrame(enc)
+		rawOut[i] = *out[i].Raw
 	}
 
 	if !bool(C.blocking_pop_frames(fb.c(), C.Encoding(enc), (*C.Frame)(&rawOut[0]), (*C.uint32_t)(&outLen), C.uint32_t(maxFrames), C.uint32_t(maxTimeout))) {
-		return (false, nil)
+		return false, nil
 	}
 
 	out = slices.Clone(out[:outLen])
@@ -69,7 +75,19 @@ func (fb *FrameBuffer) BlockingPopFrames(enc Encoding, maxFrames uint32, maxTime
 		out[i].Raw.SetFrameData(out[i].Bytes)
 	}
 
-	return (true, out)
+	return true, out
+}
+
+// bool blocking_read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len, uint32_t max_timeout);
+func (fb *FrameBuffer) BlockingReadEncodings(maxLen uint8, maxTimeout uint32) ([]Encoding, bool) {
+	encs := make([]Encoding, maxLen)
+	var outLen uint8
+
+	if !bool(C.blocking_read_encodings(fb.c(), (*C.Encoding)(&encs[0]), (*C.uint8_t)(&outLen), C.uint8_t(maxLen), C.uint32_t(maxTimeout))) {
+		return nil, false
+	}
+
+	return encs[:outLen], true
 }
 
 func (fb *FrameBuffer) RequestEncoding(enc Encoding) bool {
@@ -78,10 +96,6 @@ func (fb *FrameBuffer) RequestEncoding(enc Encoding) bool {
 
 func (fb *FrameBuffer) RemoveEncoding(enc Encoding) bool {
 	return bool(C.remove_encoding(fb.c(), C.Encoding(enc)))
-}
-
-func (fb *FrameBuffer) ReadEncodings(out []Encoding) bool {
-	return bool(C.read_encodings(fb.c(), (*C.Encoding)(&out[0]), C.uint8_t(len(out))))
 }
 
 func (fb *FrameBuffer) SetShareVideo(v bool) {
@@ -93,14 +107,16 @@ func (fb *FrameBuffer) GetSharingVideo() bool {
 	return bool(C.get_sharing_video(fb.c()))
 }
 
-// void set_front_end_encoding(FrameBuffer *fb, Encoding enc);
-func (fb *FrameBuffer) SetFrontEndEncoding(enc Encoding) {
-	C.set_front_end_encoding(fb.c(), C.Encoding(enc))
-}
+// bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len);
+func (fb *FrameBuffer) ReadEncodings(maxLen uint8) ([]Encoding, bool) {
+	encs := make([]Encoding, maxLen)
+	var outLen uint8
 
-// Encoding get_front_end_encoding(FrameBuffer *fb);
-func (fb *FrameBuffer) GetFrontEndEncoding() Encoding {
-	return Encoding(C.get_front_end_encoding(fb.c()))
+	if !bool(C.read_encodings(fb.c(), (*C.Encoding)(&encs[0]), (*C.uint8_t)(&outLen), C.uint8_t(maxLen))) {
+		return nil, false
+	}
+
+	return encs[:outLen], true
 }
 
 func FrameSizedByEncoding(enc Encoding) Frame {
@@ -108,7 +124,7 @@ func FrameSizedByEncoding(enc Encoding) Frame {
 }
 
 func (f *Frame) SetFrameData(buff []byte) {
-	C.set_frame_data((*C.Frame)(f), (*C.uint8_t)(unsafe.Pointer(&buff[0])))
+	C.set_frame_data((*C.Frame)(f), (*C.uint8_t)(&buff[0]))
 }
 
 func (f *Frame) GetFrameSize() uint64 {
@@ -116,13 +132,20 @@ func (f *Frame) GetFrameSize() uint64 {
 }
 
 func NewGCFrame(enc Encoding) GCFrame {
+	g := GCFrame{}
+
 	f := FrameSizedByEncoding(enc)
+	g.Raw = &f
+	g.pinner.Pin(g.Raw)
+
 	buff := make([]byte, f.GetFrameSize())
 	f.SetFrameData(buff)
 
-	return GCFrame{
-		f, buff,
-	}
+	return g
+}
+
+func (g *GCFrame) Close() {
+	g.pinner.Unpin()
 }
 
 // Encoding new_video_encoding(uint16_t max_bit_rate, uint16_t min_bit_rate, uint16_t frame_height, uint16_t frame_width, uint8_t frame_rate);
@@ -133,4 +156,32 @@ func NewVideoEncoding(maxBitRate, minBitRate, frameHeight, frameWidth uint16, fr
 // Encoding new_audio_encoding(bool is_input);
 func NewAudioEncoding(isInput bool) Encoding {
 	return Encoding(C.new_audio_encoding(C.bool(isInput)))
+}
+
+func (e *Encoding) SetOutgoing() {
+	C.set_encoding_outgoing((*C.Encoding)(e))
+}
+
+func (e *Encoding) SetIncoming() {
+	C.set_encoding_incoming((*C.Encoding)(e))
+}
+
+func (e Encoding) IsAudio() bool {
+	return bool(C.is_audio_encoding(C.Encoding(e)))
+}
+
+func (e Encoding) IsVideo() bool {
+	return bool(C.is_video_encoding(C.Encoding(e)))
+}
+
+func (e Encoding) IsIncoming() bool {
+	return bool(C.is_incoming_encoding(C.Encoding(e)))
+}
+
+func (e Encoding) IsOutgoing() bool {
+	return bool(C.is_outgoing_encoding(C.Encoding(e)))
+}
+
+func EncodingEq(a, b Encoding) bool {
+	return bool(C.enc_eq(C.Encoding(a), C.Encoding(b)))
 }

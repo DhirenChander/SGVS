@@ -26,7 +26,7 @@ bool add_ring(FrameBuffer *fb, Encoding enc)
 
     if (fb->rings == nullptr)
     {
-        printf("Unable to allocate new ring for encoding: %lu", enc.id);
+        printf("Unable to allocate new ring for encoding: %llu\n", enc.id);
         return false;
     }
 
@@ -54,7 +54,7 @@ bool remove_ring(FrameBuffer *fb, Encoding enc)
 
 bool request_encoding(FrameBuffer *fb, Encoding enc)
 {
-    if (config_has_encoding(&fb->config, enc))
+    if (config_has_encoding(fb->config, enc))
     {
         return true;
     }
@@ -63,14 +63,14 @@ bool request_encoding(FrameBuffer *fb, Encoding enc)
 
     for (int i = 0; i < MAX_ENCODINGS; i++)
     {
-        if (enc_eq(fb->config.encodings[i], nil))
+        if (enc_eq(fb->config->encodings[i], nil))
         {
-            fb->config.encodings[i] = enc;
+            fb->config->encodings[i] = enc;
 
             if (!add_ring(fb, enc))
             {
                 // Clean up if ring creation fails
-                fb->config.encodings[i] = nil;
+                fb->config->encodings[i] = nil;
                 return false;
             }
 
@@ -85,26 +85,26 @@ bool request_encoding(FrameBuffer *fb, Encoding enc)
     return false;
 }
 
-bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t len)
+bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len)
 {
-    int mlen = max(len, MAX_ENCODINGS);
+    (*out_len) = 0;
     Encoding nil = nil_encoding();
 
-    for (int i = 0, j = 0; i < MAX_ENCODINGS && j < mlen; i++)
+    for (int i = 0; i < MAX_ENCODINGS && *out_len < max_len; i++)
     {
-        if (!enc_eq(fb->config.encodings[i], nil))
+        if (!enc_eq(fb->config->encodings[i], nil))
         {
-            out[j] = fb->config.encodings[i];
-            j++;
+            out[*out_len] = fb->config->encodings[i];
+            (*out_len)++;
         }
     }
 
     return true;
 }
 
-#if defined(_WIN32) || defined(_WIN64)
-bool poll_encodings(FrameBuffer *fb, Encoding *out, uint8_t len, DWORD *out_err, uint32_t max_timeout)
+bool blocking_read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len, uint32_t max_timeout)
 {
+#ifdef _WIN32
     DWORD waitResult = WaitForSingleObject(fb->encs_ev, (DWORD)max_timeout);
 
     switch (waitResult)
@@ -121,38 +121,33 @@ bool poll_encodings(FrameBuffer *fb, Encoding *out, uint8_t len, DWORD *out_err,
         break;
 
     default:
-        printf("Unexpected wait result: %lu\n", waitResult);
+        printf("Unexpected wait result: %llu\n", waitResult);
         break;
-    }
-
-    if (out_err != nullptr)
-    {
-        *out_err = waitResult;
     }
 
     if (waitResult != WAIT_OBJECT_0)
     {
         return false;
     }
-
-    return read_encodings(fb, out, len);
-}
 #endif
+
+    return read_encodings(fb, out, out_len, max_len);
+}
 
 bool remove_encoding(FrameBuffer *fb, Encoding enc)
 {
     for (int i = 0; i < MAX_ENCODINGS; i++)
     {
-        if (enc_eq(fb->config.encodings[i], enc))
+        if (enc_eq(fb->config->encodings[i], enc))
         {
-            fb->config.encodings[i] = nil_encoding();
+            fb->config->encodings[i] = nil_encoding();
 #if defined(_WIN32) || defined(_WIN64)
             SetEvent(fb->encs_ev);
 #endif
             if (!remove_ring(fb, enc))
             {
                 // Clean-up if ring removal fails
-                fb->config.encodings[i] = enc;
+                fb->config->encodings[i] = enc;
 #if defined(_WIN32) || defined(_WIN64)
                 SetEvent(fb->encs_ev);
 #endif
@@ -192,7 +187,7 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *ou
 
     if (rb_ind == -1)
     {
-        printf("No ring buffer present for this encoding.");
+        printf("No ring buffer present for this encoding: %llu\n", enc.id);
         return false;
     }
 
@@ -227,7 +222,7 @@ bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count)
 
     if (rb_ind == -1)
     {
-        printf("No ring buffer present for this encoding.");
+        printf("No ring buffer present for this encoding: %llu\n", f->encoding.id);
         return false;
     }
 
@@ -259,6 +254,21 @@ bool new_framebuffer(FrameBuffer *out)
         return false;
     }
 
+    DWORD err = GetLastError();
+
+    config = (Config *)MapViewOfFile(out->conf_map, FILE_MAP_ALL_ACCESS, 0, 0, conf_size);
+
+    if (config == nullptr)
+    {
+        return false;
+    }
+
+    if (err == 0)
+    {
+        memset(config, 0, conf_size);
+    }
+
+    // TODO: Change this to an event that is suitable to multiple waiters
     out->encs_ev = CreateEventW(nullptr, FALSE, FALSE, L"Local\\sgvs_conf_encs_ev");
     if (out->encs_ev == nullptr)
     {
@@ -276,16 +286,15 @@ bool new_framebuffer(FrameBuffer *out)
         out->conf_map = nullptr;
         return false;
     }
-
-    config = (Config *)MapViewOfFile(out->conf_map, FILE_MAP_ALL_ACCESS, 0, 0, conf_size);
 #endif
 
-    if (config == nullptr)
+    out->config = config;
+
+    if (!align_rings_to_config(out))
     {
         return false;
     }
 
-    out->config = *config;
     return true;
 }
 
@@ -301,9 +310,31 @@ void free_framebuffer(FrameBuffer *fb)
     free(fb);
 }
 
+bool align_rings_to_config(FrameBuffer *fb)
+{
+    Encoding nil = nil_encoding();
+
+    for (int i = 0; i < MAX_ENCODINGS; i++)
+    {
+        if (!enc_eq(fb->config->encodings[i], nil))
+        {
+            int ind = ringbuff_by_encoding(fb, fb->config->encodings[i]);
+
+            if (ind == -1)
+            {
+                if (!add_ring(fb, fb->config->encodings[i]))
+                    return false;
+            }
+        }
+    }
+
+    return true;
+    // TODO: Add code to delete old rings
+}
+
 void set_share_video(FrameBuffer *fb, bool v)
 {
-    fb->config.sharing_screen = v;
+    fb->config->sharing_screen = v;
 #ifdef _WIN32
     SetEvent(fb->conf_ev);
 #endif
@@ -311,15 +342,15 @@ void set_share_video(FrameBuffer *fb, bool v)
 
 bool get_sharing_video(FrameBuffer *fb)
 {
-    return fb->config.sharing_screen;
+    return fb->config->sharing_screen;
 }
 
 void set_front_end_encoding(FrameBuffer *fb, Encoding enc)
 {
-    fb->config.front_end_video = enc;
+    fb->config->front_end_video = enc;
 }
 
 Encoding get_front_end_encoding(FrameBuffer *fb)
 {
-    return fb->config.front_end_video;
+    return fb->config->front_end_video;
 }

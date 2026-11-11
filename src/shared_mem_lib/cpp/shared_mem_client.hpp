@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <stdio.h>
 
-#include "shared_mem_lib_core/framebuff.h"
+#include "../core/include/shared_mem_lib_core/framebuff.h"
 
 namespace shared_mem_client
 {
@@ -39,6 +39,41 @@ namespace shared_mem_client
     Encoding new_audio_encoding(bool is_input)
     {
         return ::new_audio_encoding(is_input);
+    }
+
+    void set_encoding_outgoing(Encoding *enc)
+    {
+        ::set_encoding_outgoing(enc);
+    }
+
+    void set_encoding_incoming(Encoding *enc)
+    {
+        ::set_encoding_incoming(enc);
+    }
+
+    bool is_audio_encoding(Encoding enc)
+    {
+        return ::is_audio_encoding(enc);
+    }
+
+    bool is_video_encoding(Encoding enc)
+    {
+        return ::is_video_encoding(enc);
+    }
+
+    bool is_incoming_encoding(Encoding enc)
+    {
+        return ::is_incoming_encoding(enc);
+    }
+
+    bool is_outgoing_encoding(Encoding enc)
+    {
+        return ::is_outgoing_encoding(enc);
+    }
+
+    bool enc_eq(Encoding a, Encoding b)
+    {
+        return ::enc_eq(a, b);
     }
 
     class SharedMemoryFrameBuffer
@@ -86,17 +121,11 @@ namespace shared_mem_client
             return ::remove_encoding(&fb_, encoding);
         }
 
-        bool read_encodings(Encoding *out, uint8_t len)
+        // blocking_read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len, uint32_t max_timeout)
+        bool blocking_read_encodings(Encoding *out, uint8_t *out_len, uint8_t max_len, uint32_t max_timeout)
         {
-            return ::read_encodings(&fb_, out, len);
+            return ::blocking_read_encodings(&fb_, out, out_len, max_len, max_timeout);
         }
-
-#if defined(_WIN32) || defined(_WIN64)
-        bool poll_encodings(Encoding *out, uint8_t len, DWORD *out_err, uint32_t max_timeout)
-        {
-            return ::poll_encodings(&fb_, out, len, out_err, max_timeout);
-        }
-#endif
 
         void set_share_video(bool v)
         {
@@ -108,14 +137,9 @@ namespace shared_mem_client
             return ::get_sharing_video(&fb_);
         }
 
-        void set_front_end_encoding(Encoding enc)
+        bool align_rings_to_config()
         {
-            return ::set_front_end_encoding(&fb_, enc);
-        }
-
-        Encoding get_front_end_encoding()
-        {
-            return ::get_front_end_encoding(&fb_);
+            return ::align_rings_to_config(&fb_);
         }
 
     private:

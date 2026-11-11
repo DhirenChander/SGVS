@@ -1,26 +1,68 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"shared_mem_lib"
+	"time"
+)
+
+func mock_processor(f *shared_mem_lib.GCFrame, fb *shared_mem_lib.FrameBuffer) {
+
+}
+
+func mock_receiver(enc shared_mem_lib.Encoding, fb *shared_mem_lib.FrameBuffer) {
+	for {
+		succ, frames := fb.BlockingPopFrames(enc, 120, 2000)
+		if succ {
+			fmt.Println("Received ", len(frames), "frames!")
+
+			for _, v := range frames {
+				fmt.Printf("Leading byte: ", v.Bytes[0])
+			}
+		} else {
+			fmt.Println("Failed to get frames")
+		}
+	}
+}
 
 func main() {
-	fmt.Print("Hello world")
-	/*var fb shared_mem_lib.FrameBuffer
+	fmt.Println("Starting Go Processor")
+	var fb shared_mem_lib.FrameBuffer
 	shared_mem_lib.NewFrameBuffer(&fb)
 
 	enc := shared_mem_lib.NewVideoEncoding(10000, 10000, 1080, 1920, 60)
 	fb.RequestEncoding(enc)
+	fb.AlignRingsToConfig()
 
 	f := shared_mem_lib.NewGCFrame(enc)
 
 	for i := 0; i < len(f.Bytes); i++ {
-		f.Bytes[i] = 0x10
+		f.Bytes[i] = 0xC3
 	}
 
-	frames := make([]shared_mem_lib.GCFrame, 120)
+	go mock_processor(&f, &fb)
 
-	for ; fb.BlockingPopFrames(enc, frames, 2000); {
+	recs := make(map[shared_mem_lib.Encoding]struct{})
 
+	recs[enc] = struct{}{}
+
+	for {
+		encs, succ := fb.ReadEncodings(10)
+		if succ {
+			fb.AlignRingsToConfig()
+			fmt.Println("Got: ", len(encs), " Encodings")
+			for _, v := range encs {
+				_, ok := recs[v]
+
+				if !ok {
+					recs[v] = struct{}{}
+					go mock_receiver(v, &fb)
+				}
+			}
+		} else {
+			fmt.Println("Failed to poll encodings")
+		}
+
+		time.Sleep(500 * time.Millisecond)
 	}
-
-	fb.PushFrames([]shared_mem_lib.Frame{f.Raw})*/
 }

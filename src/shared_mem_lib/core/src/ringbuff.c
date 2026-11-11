@@ -124,7 +124,7 @@ bool push(RingBuffer *rb, Slot *data, uint32_t size)
         uint8_t *slot = get_slot(rb, (head + i) % rb->ring->slot_count);
         memcpy(slot, data[i].bytes, data[i].len);
         rb->lens[(head + i) % rb->ring->slot_count] = data[i].len;
-        fprintf(stderr, "Slot Size: %d...\n", rb->lens[(head + i) % rb->ring->slot_count]);
+        // fprintf(stderr, "Slot Size: %d...\n", rb->lens[(head + i) % rb->ring->slot_count]);
     }
 
     atomic_store(&rb->ring->head, next);
@@ -145,8 +145,8 @@ bool open_ring(RingBuffer *rb, uint64_t slot_size, uint32_t slot_count)
     wchar_t map_name[64];
     wchar_t event_name[64];
 
-    swprintf(map_name, 64, L"Local\\sgvs_ring_%u", rb->id);
-    swprintf(event_name, 64, L"Local\\sgvs_ring_%u_ev", rb->id);
+    swprintf(map_name, 64, L"Local\\sgvs_ring_%llu", rb->id);
+    swprintf(event_name, 64, L"Local\\sgvs_ring_%llu_ev", rb->id);
 
     rb->map = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
                                  (DWORD)(size >> 32), (DWORD)(size & 0xFFFFFFFF),
@@ -155,6 +155,8 @@ bool open_ring(RingBuffer *rb, uint64_t slot_size, uint32_t slot_count)
     {
         return false;
     }
+
+    DWORD err = GetLastError();
 
     // Auto-reset event: a Set before the consumer waits is remembered, so no lost wakeups.
     rb->ev = CreateEventW(nullptr, FALSE, FALSE, event_name);
@@ -168,13 +170,22 @@ bool open_ring(RingBuffer *rb, uint64_t slot_size, uint32_t slot_count)
     // Shared memory layout:
     // Ring | Lens[0] | Lens[1] | ... | Lens[n] | Data[0] | Data[1] | ... | Data[n]
     uint8_t *raw_map = (uint8_t *)MapViewOfFile(rb->map, FILE_MAP_ALL_ACCESS, 0, 0, size);
+
+    if (raw_map == nullptr)
+    {
+        CloseHandle(rb->map);
+        CloseHandle(rb->ev);
+        rb->ev = nullptr;
+        rb->map = nullptr;
+        return false;
+    }
+
     ring = (Ring *)raw_map;
 
-    const uint8_t null_ring[sizeof(Ring)] = {0};
-
     // Initial map value, map is not initialized
-    if (!memcmp(raw_map, null_ring, sizeof(Ring)))
+    if (err == 0)
     {
+        memset(raw_map, 0, size);
         ring->slot_size = slot_size;
         ring->slot_count = slot_count;
         atomic_store(&ring->head, 0);
