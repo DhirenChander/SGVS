@@ -27,6 +27,11 @@ public enum EncodingType : int
     Audio
 }
 
+public enum EncodingDir : int {
+    Incoming,
+    Outgoing
+}
+
 [StructLayout(LayoutKind.Explicit)]
 public struct EncodingData
 {
@@ -40,20 +45,14 @@ public struct Encoding
     public EncodingData data;
     public ulong id;
     public EncodingType type;
-}
-
-// Encoding encodings[MAX_ENCODINGS]  (requires .NET 8+)
-[InlineArray(Config.MaxEncodings)]
-public struct EncodingArray
-{
-    private Encoding _element0;
+    public EncodingDir dir;
 }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct Config
 {
     public const int MaxEncodings = 10;
-    public EncodingArray encodings;
+    public Encoding[] encodings;
     public Encoding front_end_video;
     public uint video_selector; // PID when is_process, Screen ID otherwise
     public byte is_process;     // C bool
@@ -68,9 +67,26 @@ public unsafe struct Frame
     public byte* data;
 }
 
+// Safe Verion of Unsafe Frame
 public struct GCFrame {
-    public Frame f;
+    public Frame raw;
     public byte[] data;
+
+    public GCFrame(Encoding enc) {
+        GCFrame gcF;
+
+        unsafe {
+            Frame f = FrameSizedByEncoding(enc);
+            ulong size = GetFrameSize(ref f);
+            byte[] data = new byte[size];
+            SetFrameData(ref f, ref data);
+
+            gcF.Raw = f;
+            gcF.data = data;
+        }
+
+        return gcF;
+    }
 }
 
 // Define WINDOWS in your project (<DefineConstants>) when targeting Windows,
@@ -86,78 +102,114 @@ public unsafe struct FrameBuffer
 #endif
 }
 
-public static unsafe class Native
+/*
+bool new_framebuffer(FrameBuffer *out);
+void free_framebuffer(FrameBuffer *fb);
+bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count);
+bool try_pop_frames(FrameBuffer *fb, Encoding encoding, Frame *out, uint32_t *out_count, uint32_t max_frame_count);
+bool blocking_pop_frames(FrameBuffer *fb, Encoding encoding, Frame *out, uint32_t *out_count, uint32_t max_frame_count, uint32_t max_timeout);
+bool request_encoding(FrameBuffer *fb, Encoding encoding);
+bool remove_encoding(FrameBuffer *fb, Encoding encoding);
+bool blocking_read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len, uint32_t max_timeout);
+bool align_rings_to_config(FrameBuffer *fb);
+bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len);
+*/
+public interface IFrameBuffer {
+    bool PushFrames(Frame[] f);
+    (Frame[] frames, bool success) TryPopFrames(Encoding encoding, uint32_t max_frame_count);
+    (Frame[] frames, bool success) BlockingPopFrames(Encoding encoding, uint max_frame_count, uint max_timeout);
+    bool RequestEncoding(Encoding encoding);
+    bool RemoveEncoding(Encoding encoding);
+    (Encoding[] encodings, bool success) BlockingReadEncodings(uint max_len, uint max_timeout);
+    bool AlignRingsToConfig();
+    (Encoding[] encodings, bool success) ReadEncodings(uint max_len);
+}
+
+public static unsafe class SharedMemLib
 {
-    const string Lib = "framebuff";
+    const string Lib = "shared_mem_client";
     const CallingConvention CC = CallingConvention.Cdecl;
+
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "frame_sized_by_encoding")]
+    internal static extern Frame FrameSizedByEncoding(Encoding enc);
+
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "set_frame_data")]
+    internal static extern void SetFrameData(ref Frame f, ref byte[] data);
+
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "get_frame_size")]
+    internal static extern ulong GetFrameSize(ref Frame f);
+
+    // ---- FrameBuffer functions ----
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "new_framebuffer")]
     [return: MarshalAs(UnmanagedType.U1)]
-    public static extern bool NewFramebuffer(out FrameBuffer fb);
+    internal static extern bool NewFramebuffer(out FrameBuffer fb);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "free_framebuffer")]
-    public static extern void FreeFramebuffer(ref FrameBuffer fb);
+    internal static extern void FreeFramebuffer(ref FrameBuffer fb);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "push_frames")]
     [return: MarshalAs(UnmanagedType.U1)]
-    public static extern bool PushFrames(ref FrameBuffer fb, Frame[] f, uint frameCount);
+    internal static extern bool PushFrames(ref FrameBuffer fb, Frame* f, uint frameCount);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "try_pop_frames")]
     [return: MarshalAs(UnmanagedType.U1)]
-    public static extern bool TryPopFrames(ref FrameBuffer fb, Encoding encoding, [Out] Frame[] output, uint maxFrameCount);
+    internal static extern bool TryPopFrames(ref FrameBuffer fb, Encoding encoding, Frame* output, out uint outCount, uint maxFrameCount);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "blocking_pop_frames")]
     [return: MarshalAs(UnmanagedType.U1)]
-    public static extern bool BlockingPopFrames(ref FrameBuffer fb, Encoding encoding, [Out] Frame[] output, uint maxFrameCount, uint maxTimeout);
+    internal static extern bool BlockingPopFrames(ref FrameBuffer fb, Encoding encoding, Frame* output, out uint outCount, uint maxFrameCount, uint maxTimeout);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "request_encoding")]
     [return: MarshalAs(UnmanagedType.U1)]
-    public static extern bool RequestEncoding(ref FrameBuffer fb, Encoding encoding);
+    internal static extern bool RequestEncoding(ref FrameBuffer fb, Encoding encoding);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "remove_encoding")]
     [return: MarshalAs(UnmanagedType.U1)]
-    public static extern bool RemoveEncoding(ref FrameBuffer fb, Encoding encoding);
+    internal static extern bool RemoveEncoding(ref FrameBuffer fb, Encoding encoding);
+
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "blocking_read_encodings")]
+    [return: MarshalAs(UnmanagedType.U1)]
+    internal static extern bool BlockingReadEncodings(ref FrameBuffer fb, Encoding* output, out byte outLen, byte maxLen, uint maxTimeout);
+
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "align_rings_to_config")]
+    [return: MarshalAs(UnmanagedType.U1)]
+    internal static extern bool AlignRingsToConfig(ref FrameBuffer fb);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "read_encodings")]
     [return: MarshalAs(UnmanagedType.U1)]
-    public static extern bool ReadEncodings(ref FrameBuffer fb, [Out] Encoding[] output, byte len);
+    internal static extern bool ReadEncodings(ref FrameBuffer fb, Encoding* output, out byte outLen, byte maxLen);
 
-#if WINDOWS
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "poll_encodings")]
+    // ---- Encoding functions ----
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "new_video_encoding")]
+    public static extern Encoding NewVideoEncoding(ushort maxBitRate, ushort minBitRate, ushort frameHeight, ushort frameWidth, byte frameRate);
+
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "new_audio_encoding")]
+    public static extern Encoding NewAudioEncoding(bool isInput);
+
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "set_encoding_outgoing")]
+    public static extern void SetEncodingOutgoing(ref Encoding enc);
+
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "set_encoding_incoming")]
+    public static extern void SetEncodingIncoming(ref Encoding enc);
+
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "is_audio_encoding")]
     [return: MarshalAs(UnmanagedType.U1)]
-    public static extern bool PollEncodings(ref FrameBuffer fb, [Out] Encoding[] output, byte len, out uint outErr, uint maxTimeout);
-#endif
+    public static extern bool IsAudioEncoding(Encoding enc);
 
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "frame_sized_by_encoding")]
-    public static extern Frame FrameSizedByEncoding(Encoding enc);
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "is_video_encoding")]
+    [return: MarshalAs(UnmanagedType.U1)]
+    public static extern bool IsVideoEncoding(Encoding enc);
 
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "set_frame_data")]
-    public static extern void SetFrameData(ref Frame f, ref byte[] data);
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "is_incoming_encoding")]
+    [return: MarshalAs(UnmanagedType.U1)]
+    public static extern bool IsIncomingEncoding(Encoding enc);
 
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "get_frame_size")]
-    public static extern ulong GetFrameSize(ref Frame f);
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "is_outgoing_encoding")]
+    [return: MarshalAs(UnmanagedType.U1)]
+    public static extern bool IsOutgoingEncoding(Encoding enc);
 
-    public static extern GCFrame(Encoding enc) {
-        Frame f = FrameSizedByEncoding(enc);
-        ulong size = GetFrameSize(ref f);
-        byte[] data = new byte[size];
-        SetFrameData(ref f, ref data);
-        
-        GCFrame gcF;
-        gcF.f = f;
-        gcF.data = data;
-        return gcF;
-    }
-
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "set_share_video")]
-    public static extern void SetShareVideo(ref FrameBuffer fb, [MarshalAs(UnmanagedType.U1)] bool v);
-
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "get_sharing_video")]
-    public static extern bool GetSharingVideo(ref FrameBuffer fb);
-    
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "set_front_end_encoding")]
-    void SetFrontEndEncoding(ref FrameBuffer fb, Encoding enc);
-    
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "get_front_end_encoding")]
-    Encoding GetFrontEndEncoding(ref FrameBuffer fb);
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "enc_eq")]
+    [return: MarshalAs(UnmanagedType.U1)]
+    public static extern bool EncEq(Encoding a, Encoding b);
 }
