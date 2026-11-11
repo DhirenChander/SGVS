@@ -20,9 +20,9 @@ target_include_directories(shared_mem_client
 )
 
 if(MSVC)
-  target_compile_options(shared_mem_client PUBLIC /W4 /std:c17 /experimental:c11atomics)
+  target_compile_options(shared_mem_client PUBLIC /W4 /std:c17 /experimental:c11atomics /we4133)
 else()
-  target_compile_options(shared_mem_client PUBLIC -Wall -Wextra -Wpedantic)
+  target_compile_options(shared_mem_client PUBLIC -Wall -Wextra -Wpedantic -Werror=incompatible-pointer-types)
 endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)

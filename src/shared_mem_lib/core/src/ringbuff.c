@@ -213,6 +213,4 @@ void free_ringbuffer(RingBuffer *rb)
     CloseHandle(rb->map);
     CloseHandle(rb->ev);
 #endif
-
-    free(rb);
 }

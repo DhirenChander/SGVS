@@ -7,7 +7,17 @@ import (
 )
 
 func mock_processor(f *shared_mem_lib.GCFrame, fb *shared_mem_lib.FrameBuffer) {
+	for {
+		if !fb.PushFrames([]shared_mem_lib.GCFrame{*f, *f, *f}) {
+			fmt.Println("Failed to push 3 frames, waiting for buffer to be popped")
+		} else {
+			fmt.Println("Pushed 3 frames!")
+		}
 
+		time.Sleep(time.Millisecond * 100)
+	}
+
+	f.Close()
 }
 
 func mock_receiver(enc shared_mem_lib.Encoding, fb *shared_mem_lib.FrameBuffer) {
@@ -17,7 +27,7 @@ func mock_receiver(enc shared_mem_lib.Encoding, fb *shared_mem_lib.FrameBuffer) 
 			fmt.Println("Received ", len(frames), "frames!")
 
 			for _, v := range frames {
-				fmt.Printf("Leading byte: ", v.Bytes[0])
+				v.Close()
 			}
 		} else {
 			fmt.Println("Failed to get frames")

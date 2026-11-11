@@ -10,7 +10,6 @@ package shared_mem_lib
 import "C"
 import (
 	"runtime"
-	"slices"
 )
 
 type Encoding C.Encoding
@@ -59,23 +58,36 @@ func (fb *FrameBuffer) BlockingPopFrames(enc Encoding, maxFrames uint32, maxTime
 	out := make([]GCFrame, maxFrames)
 	rawOut := make([]Frame, maxFrames)
 
-	for i := uint32(0); i < maxFrames; i++ {
+	for i := range out {
 		out[i] = NewGCFrame(enc)
 		rawOut[i] = *out[i].Raw
 	}
 
-	if !bool(C.blocking_pop_frames(fb.c(), C.Encoding(enc), (*C.Frame)(&rawOut[0]), (*C.uint32_t)(&outLen), C.uint32_t(maxFrames), C.uint32_t(maxTimeout))) {
+	ok := bool(C.blocking_pop_frames(fb.c(), C.Encoding(enc), (*C.Frame)(&rawOut[0]),
+		(*C.uint32_t)(&outLen), C.uint32_t(maxFrames), C.uint32_t(maxTimeout)))
+
+	n := int(outLen)
+	if !ok || n > len(out) {
+		for i := range out {
+			out[i].pinner.Unpin()
+		}
 		return false, nil
 	}
 
-	out = slices.Clone(out[:outLen])
-
-	for i := 0; i < len(out); i++ {
-		out[i].Bytes = slices.Clone(out[i].Bytes[:out[i].Raw.GetFrameSize()])
-		out[i].Raw.SetFrameData(out[i].Bytes)
+	for i := 0; i < n; i++ {
+		size := int(rawOut[i].GetFrameSize())
+		if size > cap(out[i].Bytes) {
+			size = cap(out[i].Bytes)
+		}
+		*out[i].Raw = rawOut[i]
+		out[i].Bytes = out[i].Bytes[:size]
 	}
 
-	return true, out
+	for i := n; i < len(out); i++ {
+		out[i].pinner.Unpin()
+	}
+
+	return true, out[:n]
 }
 
 // bool blocking_read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len, uint32_t max_timeout);
@@ -119,8 +131,10 @@ func (fb *FrameBuffer) ReadEncodings(maxLen uint8) ([]Encoding, bool) {
 	return encs[:outLen], true
 }
 
-func FrameSizedByEncoding(enc Encoding) Frame {
-	return Frame(C.frame_sized_by_encoding(C.Encoding(enc)))
+func FrameSizedByEncoding(enc Encoding) (Frame, uint64) {
+	outSize := uint64(0)
+	f := Frame(C.frame_sized_by_encoding(C.Encoding(enc), (*C.size_t)(&outSize)))
+	return f, outSize
 }
 
 func (f *Frame) SetFrameData(buff []byte) {
@@ -134,12 +148,12 @@ func (f *Frame) GetFrameSize() uint64 {
 func NewGCFrame(enc Encoding) GCFrame {
 	g := GCFrame{}
 
-	f := FrameSizedByEncoding(enc)
+	f, size := FrameSizedByEncoding(enc)
 	g.Raw = &f
-	g.pinner.Pin(g.Raw)
 
-	buff := make([]byte, f.GetFrameSize())
-	f.SetFrameData(buff)
+	g.Bytes = make([]byte, size)
+	g.pinner.Pin(&g.Bytes[0])
+	f.SetFrameData(g.Bytes)
 
 	return g
 }

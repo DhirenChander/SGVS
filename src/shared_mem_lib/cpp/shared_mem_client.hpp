@@ -16,9 +16,9 @@ namespace shared_mem_client
     using Encoding = ::Encoding;
     using Config = ::Config;
 
-    Frame frame_sized_by_encoding(Encoding enc)
+    Frame frame_sized_by_encoding(Encoding enc, size_t *out_size)
     {
-        return ::frame_sized_by_encoding(enc);
+        return ::frame_sized_by_encoding(enc, out_size);
     }
 
     void set_frame_data(Frame *f, uint8_t *data)

@@ -15,7 +15,7 @@ extern "C"
         uint8_t *data;
     } Frame;
 
-    Frame frame_sized_by_encoding(Encoding enc);
+    Frame frame_sized_by_encoding(Encoding enc, size_t *out_size);
     void set_frame_data(Frame *f, uint8_t *data);
     size_t get_frame_size(Frame *f);
 

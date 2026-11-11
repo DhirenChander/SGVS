@@ -26,13 +26,13 @@ bool add_ring(FrameBuffer *fb, Encoding enc)
 
     if (fb->rings == nullptr)
     {
-        printf("Unable to allocate new ring for encoding: %llu\n", enc.id);
+        printf("Unable to allocate new ring for encoding: %" PRIu64 "\n", enc.id);
         return false;
     }
 
     fb->rings[fb->ring_count - 1].id = enc.id;
     // TODO: Make this dependent on the encoding
-    return open_ring(&fb->rings[fb->ring_count - 1], (enc.type == Audio) ? 16 : 500000, (enc.type == Audio) ? 96001 : 121);
+    return open_ring(&fb->rings[fb->ring_count - 1], (enc.type == Audio) ? 1275 : 500000, (enc.type == Audio) ? 201 : 121);
 }
 
 bool remove_ring(FrameBuffer *fb, Encoding enc)
@@ -121,7 +121,7 @@ bool blocking_read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, u
         break;
 
     default:
-        printf("Unexpected wait result: %llu\n", waitResult);
+        printf("Unexpected wait result: %lu\n", waitResult);
         break;
     }
 
@@ -187,7 +187,7 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *ou
 
     if (rb_ind == -1)
     {
-        printf("No ring buffer present for this encoding: %llu\n", enc.id);
+        printf("No ring buffer present for this encoding: %" PRIu64 "\n", enc.id);
         return false;
     }
 
@@ -205,13 +205,15 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *ou
         return false;
     }
 
-    for (int i = 0; i < out_count; i++)
+    for (int i = 0; i < *out_count; i++)
     {
         out[i].size = raw_out[i].len;
         out[i].encoding = enc;
         // Removed due to UB when trying to realloc GC managed pointers
         // out[i].data = (uint8_t *)realloc(out->data, out[i].size);
     }
+
+    free(raw_out);
 
     return true;
 }
@@ -222,7 +224,7 @@ bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count)
 
     if (rb_ind == -1)
     {
-        printf("No ring buffer present for this encoding: %llu\n", f->encoding.id);
+        printf("No ring buffer present for this encoding: %" PRIu64 "\n", f->encoding.id);
         return false;
     }
 
@@ -234,7 +236,11 @@ bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count)
         data[i].len = f[i].size;
     }
 
-    return push(&fb->rings[rb_ind], data, frame_count);
+    bool res = push(&fb->rings[rb_ind], data, frame_count);
+
+    free(data);
+
+    return res;
 }
 
 bool new_framebuffer(FrameBuffer *out)
@@ -300,6 +306,10 @@ bool new_framebuffer(FrameBuffer *out)
 
 void free_framebuffer(FrameBuffer *fb)
 {
+    for (int i = 0; i < fb->ring_count; i++)
+    {
+        free_ringbuffer(&fb->rings[i]);
+    }
     free(fb->rings);
 #ifdef _WIN32
     UnmapViewOfFile(&fb->config);
@@ -307,7 +317,6 @@ void free_framebuffer(FrameBuffer *fb)
     CloseHandle(fb->encs_ev);
     CloseHandle(fb->conf_ev);
 #endif
-    free(fb);
 }
 
 bool align_rings_to_config(FrameBuffer *fb)

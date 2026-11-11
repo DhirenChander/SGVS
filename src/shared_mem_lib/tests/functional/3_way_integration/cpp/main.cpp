@@ -20,19 +20,24 @@ void mock_processor(Frame *f, shared_mem_client::SharedMemoryFrameBuffer *fb)
 void mock_reciever(Encoding enc, shared_mem_client::SharedMemoryFrameBuffer *fb)
 {
     std::cout << "Recieving: " << std::hex << enc.id << std::dec << std::endl;
-    Frame out[120];
-    uint32_t out_count;
+    Frame out[120]{};
+
+    for (int i = 0; i < 120; i++)
+    {
+        size_t size = 0;
+        out[i] = frame_sized_by_encoding(enc, &size);
+        out[i].data = (uint8_t *)malloc(size);
+    }
+
+    uint32_t out_count = 0;
     while (true)
     {
         std::cout << "In Loop" << std::endl;
 
-        if (fb->blocking_pop_frames(enc, &out[0], &out_count, 120, 2000))
+        if (fb->blocking_pop_frames(enc, out, &out_count, 120, 2000))
         {
-            std::cout << "Recieved " << out_count << " frames!";
-            for (uint32_t i = 0; i < out_count; i++)
-            {
-                std::cout << "Leading Byte:" << std::hex << out[i].data[0] << std::dec << std::endl;
-            }
+            std::cout << "Recieved " << out_count << " frames!" << std::endl;
+            std::cout << "Leading Byte:" << std::hex << (int)out[0].data[0] << std::dec << std::endl;
         }
         else
         {
@@ -48,10 +53,11 @@ int main()
 
     shared_mem_client::Encoding enc = shared_mem_client::new_video_encoding(1000, 1000, 1080, 1920, 60);
 
-    shared_mem_client::Frame f = shared_mem_client::frame_sized_by_encoding(enc);
+    size_t size = 0;
+    shared_mem_client::Frame f = shared_mem_client::frame_sized_by_encoding(enc, &size);
 
-    f.data = (uint8_t *)malloc(f.size);
-    memset(f.data, 0xF1, f.size);
+    f.data = (uint8_t *)malloc(size);
+    memset(f.data, 0xF1, size);
 
     std::cout << "Requesting encoding..." << std::endl;
 
@@ -77,7 +83,7 @@ int main()
             // Align immediately if an update is seen
             fb.align_rings_to_config();
 
-            std::cout << "Got encodings: " << std::hex << out_len << std::dec << std::endl;
+            std::cout << "Got encodings: " << (int)out_len << std::endl;
             for (uint8_t i = 0; i < out_len; i++)
             {
                 if (recs.find(encs[i].id) == recs.end())
