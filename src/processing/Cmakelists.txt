@@ -1,0 +1,21 @@
+# Generated with Claude
+
+cmake_minimum_required(VERSION 3.20)
+project(ScreenCapture LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_executable(capture_demo
+    main.cpp
+    screen_capture.cpp
+    screen_capture.hpp
+)
+
+# C++/WinRT headers ship with the Windows SDK, so no NuGet package is needed.
+target_compile_definitions(capture_demo PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(capture_demo PRIVATE windowsapp d3d11 dxgi)
+
+if (MSVC)
+    target_compile_options(capture_demo PRIVATE /W4 /permissive- /EHsc)
+endif()
