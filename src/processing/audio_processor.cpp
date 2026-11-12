@@ -34,7 +34,8 @@ AudioProcessor::AudioProcessor(AudioProcessorConfig config, PacketCallback callb
     if (err != OPUS_OK || m_encoder == nullptr)
         throw std::runtime_error(std::string("Failed to create Opus encoder: ") + opus_strerror(err));
 
-    // Hard CBR: every packet is the same size, bitrate * 10 ms / 8 bytes
+    // Hard CBR: every packet is the same size, bitrate * 10 ms / 8 bytes rounded to the nearest byte
+    // (80 bytes at 64 kbps, 8 at 6 kbps)
     opus_encoder_ctl(m_encoder, OPUS_SET_VBR(0));
     opus_encoder_ctl(m_encoder, OPUS_SET_BITRATE((opus_int32)config.bitrate));
 }
