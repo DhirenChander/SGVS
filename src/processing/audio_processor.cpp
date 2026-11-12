@@ -23,9 +23,13 @@ AudioProcessor::AudioProcessor(AudioProcessorConfig config, PacketCallback callb
     if (!m_cb)
         throw std::invalid_argument("AudioProcessor needs a packet callback");
     if (m_inputChannels != 1 && m_inputChannels != 2)
-        throw std::invalid_argument("AudioProcessor input must be mono or stereo");
+        throw std::invalid_argument("AudioProcessor input must be mono or stereo, got " +
+                                    std::to_string(m_inputChannels) + " channels");
     if (!bitrate_in_range(config.bitrate))
         throw std::invalid_argument("AudioProcessor bitrate out of range: " + std::to_string(config.bitrate));
+    if (config.inputSampleRate != SAMPLE_RATE)
+        throw std::invalid_argument("AudioProcessor input must be 48000 Hz, got " +
+                                    std::to_string(config.inputSampleRate));
 
     int application = config.content == AudioContent::Voice ? OPUS_APPLICATION_VOIP : OPUS_APPLICATION_AUDIO;
 
@@ -35,9 +39,18 @@ AudioProcessor::AudioProcessor(AudioProcessorConfig config, PacketCallback callb
         throw std::runtime_error(std::string("Failed to create Opus encoder: ") + opus_strerror(err));
 
     // Hard CBR: every packet is the same size, bitrate * 10 ms / 8 bytes rounded to the nearest byte
-    // (80 bytes at 64 kbps, 8 at 6 kbps)
-    opus_encoder_ctl(m_encoder, OPUS_SET_VBR(0));
-    opus_encoder_ctl(m_encoder, OPUS_SET_BITRATE((opus_int32)config.bitrate));
+    // (80 bytes at 64 kbps, 8 at 6 kbps). If either setting doesn't take, packet sizes would be
+    // wrong without any other sign, so fail here instead.
+    err = opus_encoder_ctl(m_encoder, OPUS_SET_VBR(0));
+    if (err == OPUS_OK)
+        err = opus_encoder_ctl(m_encoder, OPUS_SET_BITRATE((opus_int32)config.bitrate));
+    if (err != OPUS_OK)
+    {
+        // The destructor doesn't run when the constructor throws
+        opus_encoder_destroy(m_encoder);
+        m_encoder = nullptr;
+        throw std::runtime_error(std::string("Failed to configure Opus encoder: ") + opus_strerror(err));
+    }
 }
 
 AudioProcessor::~AudioProcessor()
@@ -48,6 +61,9 @@ AudioProcessor::~AudioProcessor()
 
 bool AudioProcessor::push_pcm(const int16_t *samples, size_t frames)
 {
+    // Called from inside the callback: encoding now would overwrite the packet it is reading
+    if (m_inCallback)
+        return false;
     if (frames == 0)
         return true;
     if (samples == nullptr)
@@ -90,8 +106,12 @@ bool AudioProcessor::encode_pending()
     uint32_t requested = m_bitrate.load();
     if (requested != m_appliedBitrate)
     {
-        opus_encoder_ctl(m_encoder, OPUS_SET_BITRATE((opus_int32)requested));
-        m_appliedBitrate = requested;
+        // On failure Opus keeps the old bitrate. Leave m_appliedBitrate alone so the next packet tries again.
+        int err = opus_encoder_ctl(m_encoder, OPUS_SET_BITRATE((opus_int32)requested));
+        if (err == OPUS_OK)
+            m_appliedBitrate = requested;
+        else
+            fprintf(stderr, "Opus bitrate change to %u failed: %s\n", requested, opus_strerror(err));
     }
 
     opus_int32 len = opus_encode(m_encoder, m_pending.data(), (int)FRAME_SAMPLES,
@@ -101,6 +121,14 @@ bool AudioProcessor::encode_pending()
         fprintf(stderr, "Opus encode failed: %s\n", opus_strerror(len));
         return false;
     }
+
+    // Clears m_inCallback even if the callback throws
+    struct CallbackScope
+    {
+        bool &flag;
+        explicit CallbackScope(bool &f) : flag(f) { flag = true; }
+        ~CallbackScope() { flag = false; }
+    } scope(m_inCallback);
 
     m_cb(m_packet, (size_t)len);
     return true;
@@ -122,4 +150,8 @@ uint32_t AudioProcessor::bitrate() const
 void AudioProcessor::reset()
 {
     m_pendingFrames = 0;
+    // Clears Opus's history but keeps its settings (CBR, bitrate)
+    int err = opus_encoder_ctl(m_encoder, OPUS_RESET_STATE);
+    if (err != OPUS_OK)
+        fprintf(stderr, "Opus reset failed: %s\n", opus_strerror(err));
 }
