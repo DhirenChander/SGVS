@@ -74,3 +74,4 @@ conanbuildinfo.*
 
 **/msvc_build/
 **/ninja_build/
+**/dll_build/

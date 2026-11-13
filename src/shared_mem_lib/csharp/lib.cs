@@ -3,7 +3,7 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace FrameBufferInterop;
+namespace SharedMemLibrary;
 
 [StructLayout(LayoutKind.Sequential)]
 public struct VideoEncoding
@@ -49,10 +49,10 @@ public struct Encoding
 }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct Config
+public unsafe struct Config
 {
     public const int MaxEncodings = 10;
-    public Encoding[] encodings;
+    public Encoding* encodings;
     public Encoding front_end_video;
     public uint video_selector; // PID when is_process, Screen ID otherwise
     public byte is_process;     // C bool
@@ -70,22 +70,20 @@ public unsafe struct Frame
 // Safe Verion of Unsafe Frame
 public struct GCFrame {
     public Frame raw;
-    public byte[] data;
+    public required byte[] data;
 
     public GCFrame(Encoding enc) {
         GCFrame gcF;
 
         unsafe {
-            Frame f = FrameSizedByEncoding(enc);
-            ulong size = GetFrameSize(ref f);
+            Frame f = SharedMemLib.FrameSizedByEncoding(enc);
+            ulong size = SharedMemLib.GetFrameSize(ref f);
             byte[] data = new byte[size];
-            SetFrameData(ref f, ref data);
+            SharedMemLib.SetFrameData(ref f, ref data);
 
-            gcF.Raw = f;
+            gcF.raw = f;
             gcF.data = data;
         }
-
-        return gcF;
     }
 }
 
@@ -116,7 +114,7 @@ bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t ma
 */
 public interface IFrameBuffer {
     bool PushFrames(Frame[] f);
-    (Frame[] frames, bool success) TryPopFrames(Encoding encoding, uint32_t max_frame_count);
+    (Frame[] frames, bool success) TryPopFrames(Encoding encoding, uint max_frame_count);
     (Frame[] frames, bool success) BlockingPopFrames(Encoding encoding, uint max_frame_count, uint max_timeout);
     bool RequestEncoding(Encoding encoding);
     bool RemoveEncoding(Encoding encoding);
@@ -125,9 +123,195 @@ public interface IFrameBuffer {
     (Encoding[] encodings, bool success) ReadEncodings(uint max_len);
 }
 
+// Generated with Claude
+public class GCFrameBuffer : IFrameBuffer, IDisposable
+{
+    // Must be a field, not a property: `ref` can't be taken on a property.
+    private FrameBuffer fb;
+    private bool disposed;
+
+    public GCFrameBuffer()
+    {
+        if (!SharedMemLib.NewFramebuffer(out fb))
+            throw new InvalidOperationException("Failed to create shared frame buffer.");
+    }
+
+    public bool PushFrames(Frame[] f)
+    {
+        ThrowIfDisposed();
+        if (f == null) throw new ArgumentNullException(nameof(f));
+        if (f.Length == 0) return true;
+
+        unsafe 
+        {
+            fixed (Frame* ptr = f)
+            {
+                return SharedMemLib.PushFrames(ref fb, ptr, (uint)f.Length);
+            }
+        }
+
+    }
+
+    public (Frame[] frames, bool success) TryPopFrames(Encoding encoding, uint max_frame_count)
+    {
+        ThrowIfDisposed();
+        if (max_frame_count == 0) return (Array.Empty<Frame>(), true);
+
+        Frame[] buffer = AllocateFrames(encoding, max_frame_count);
+
+        bool ok;
+        uint count;
+        unsafe 
+        {
+            fixed (Frame* ptr = buffer)
+            {
+                ok = SharedMemLib.TryPopFrames(ref fb, encoding, ptr, out count, max_frame_count);
+            }
+        }
+
+        return Finish(buffer, ok, count);
+    }
+
+    public (Frame[] frames, bool success) BlockingPopFrames(Encoding encoding, uint max_frame_count, uint max_timeout)
+    {
+        ThrowIfDisposed();
+        if (max_frame_count == 0) return (Array.Empty<Frame>(), true);
+
+        Frame[] buffer = AllocateFrames(encoding, max_frame_count);
+
+        bool ok;
+        uint count;
+        unsafe 
+        {
+            fixed (Frame* ptr = buffer)
+            {
+                ok = SharedMemLib.BlockingPopFrames(ref fb, encoding, ptr, out count, max_frame_count, max_timeout);
+            }
+        }
+
+        return Finish(buffer, ok, count);
+    }
+
+    public bool RequestEncoding(Encoding encoding)
+    {
+        ThrowIfDisposed();
+        return SharedMemLib.RequestEncoding(ref fb, encoding);
+    }
+
+    public bool RemoveEncoding(Encoding encoding)
+    {
+        ThrowIfDisposed();
+        return SharedMemLib.RemoveEncoding(ref fb, encoding);
+    }
+
+    public (Encoding[] encodings, bool success) BlockingReadEncodings(uint max_len, uint max_timeout)
+    {
+        ThrowIfDisposed();
+        byte maxLen = ClampToByte(max_len);
+        if (maxLen == 0) return (Array.Empty<Encoding>(), true);
+
+        var buffer = new Encoding[maxLen];
+        bool ok;
+        byte outLen;
+        unsafe 
+        {
+            fixed (Encoding* ptr = buffer)
+            {
+                ok = SharedMemLib.BlockingReadEncodings(ref fb, ptr, out outLen, maxLen, max_timeout);
+            }
+        }
+
+        return FinishEncodings(buffer, ok, outLen);
+    }
+
+    public bool AlignRingsToConfig()
+    {
+        ThrowIfDisposed();
+        return SharedMemLib.AlignRingsToConfig(ref fb);
+    }
+
+    public (Encoding[] encodings, bool success) ReadEncodings(uint max_len)
+    {
+        ThrowIfDisposed();
+        byte maxLen = ClampToByte(max_len);
+        if (maxLen == 0) return (Array.Empty<Encoding>(), true);
+
+        var buffer = new Encoding[maxLen];
+        bool ok;
+        byte outLen;
+        unsafe
+        {
+            fixed (Encoding* ptr = buffer)
+            {
+                ok = SharedMemLib.ReadEncodings(ref fb, ptr, out outLen, maxLen);
+            }
+        }
+
+        return FinishEncodings(buffer, ok, outLen);
+    }
+
+    // ---- Helpers ----
+
+    // Pre-size each output frame for the requested encoding so the native
+    // side has somewhere to write the frame data.
+    private static Frame[] AllocateFrames(Encoding encoding, uint count)
+    {
+        var frames = new Frame[count];
+        for (uint i = 0; i < count; i++)
+            frames[i] = SharedMemLib.FrameSizedByEncoding(encoding);
+        return frames;
+    }
+
+    private static (Frame[], bool) Finish(Frame[] buffer, bool ok, uint count)
+    {
+        if (!ok) return (Array.Empty<Frame>(), false);
+        if (count > buffer.Length) count = (uint)buffer.Length; // defensive
+
+        if (count == buffer.Length) return (buffer, true);
+
+        var result = new Frame[count];
+        Array.Copy(buffer, result, count);
+        return (result, true);
+    }
+
+    private static (Encoding[], bool) FinishEncodings(Encoding[] buffer, bool ok, byte len)
+    {
+        if (!ok) return (Array.Empty<Encoding>(), false);
+        if (len > buffer.Length) len = (byte)buffer.Length; // defensive
+
+        var result = new Encoding[len];
+        Array.Copy(buffer, result, len);
+        return (result, true);
+    }
+
+    private static byte ClampToByte(uint v) => v > byte.MaxValue ? byte.MaxValue : (byte)v;
+
+    private void ThrowIfDisposed()
+    {
+        if (disposed) throw new ObjectDisposedException(nameof(GCFrameBuffer));
+    }
+
+    // ---- Cleanup ----
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposed) return;
+        disposed = true;
+        SharedMemLib.FreeFramebuffer(ref fb);
+    }
+
+    ~GCFrameBuffer() => Dispose(false);
+}
+
 public static unsafe class SharedMemLib
 {
-    const string Lib = "shared_mem_client";
+    const string Lib = "lib/shared_mem_client";
     const CallingConvention CC = CallingConvention.Cdecl;
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "frame_sized_by_encoding")]
