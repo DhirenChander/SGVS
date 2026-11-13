@@ -46,6 +46,27 @@ public struct Encoding
     public ulong id;
     public EncodingType type;
     public EncodingDir dir;
+
+    
+    public bool IsAudio() {
+        return SharedMemLib.IsAudioEncoding(this);
+    }
+
+    public bool IsVideo() {
+        return SharedMemLib.IsVideoEncoding(this);
+    }
+
+    public bool IsIncoming() {
+        return SharedMemLib.IsIncomingEncoding(this);
+    }
+
+    public bool IsOutgoing() {
+        return SharedMemLib.IsOutgoingEncoding(this);
+    }
+
+    public bool Equals(Encoding enc) {
+        return SharedMemLib.EncEq(this, enc);
+    }
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -73,16 +94,10 @@ public struct GCFrame {
     public required byte[] data;
 
     public GCFrame(Encoding enc) {
-        GCFrame gcF;
-
         unsafe {
-            Frame f = SharedMemLib.FrameSizedByEncoding(enc);
-            ulong size = SharedMemLib.GetFrameSize(ref f);
-            byte[] data = new byte[size];
-            SharedMemLib.SetFrameData(ref f, ref data);
-
-            gcF.raw = f;
-            gcF.data = data;
+            raw = SharedMemLib.FrameSizedByEncoding(enc);
+            ulong size = SharedMemLib.GetFrameSize(ref raw);
+            data = new byte[size];
         }
     }
 }
@@ -114,8 +129,8 @@ bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t ma
 */
 public interface IFrameBuffer {
     bool PushFrames(Frame[] f);
-    (Frame[] frames, bool success) TryPopFrames(Encoding encoding, uint max_frame_count);
-    (Frame[] frames, bool success) BlockingPopFrames(Encoding encoding, uint max_frame_count, uint max_timeout);
+    (GCFrame[] frames, bool success) TryPopFrames(Encoding encoding, uint max_frame_count);
+    (GCFrame[] frames, bool success) BlockingPopFrames(Encoding encoding, uint max_frame_count, uint max_timeout);
     bool RequestEncoding(Encoding encoding);
     bool RemoveEncoding(Encoding encoding);
     (Encoding[] encodings, bool success) BlockingReadEncodings(uint max_len, uint max_timeout);
@@ -152,44 +167,65 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
 
     }
 
-    public (Frame[] frames, bool success) TryPopFrames(Encoding encoding, uint max_frame_count)
+    public (GCFrame[] frames, bool success) TryPopFrames(Encoding encoding, uint max_frame_count)
+        => PopCore(encoding, max_frame_count, blocking: false, timeout: 0);
+
+    public (GCFrame[] frames, bool success) BlockingPopFrames(Encoding encoding, uint max_frame_count, uint max_timeout)
+        => PopCore(encoding, max_frame_count, blocking: true, timeout: max_timeout);
+
+    private (GCFrame[] frames, bool success) PopCore(Encoding encoding, uint max, bool blocking, uint timeout)
     {
         ThrowIfDisposed();
-        if (max_frame_count == 0) return (Array.Empty<Frame>(), true);
+        if (max == 0) return (Array.Empty<GCFrame>(), true);
 
-        Frame[] buffer = AllocateFrames(encoding, max_frame_count);
+        var gcFrames = new GCFrame[max];
+        var raws = new Frame[max];
+        var handles = new GCHandle[max];
+        int pinned = 0;
 
-        bool ok;
-        uint count;
-        unsafe 
+        try
         {
-            fixed (Frame* ptr = buffer)
+            // Build each frame and pin its managed buffer so native code can write into it.
+            for (int i = 0; i < max; i++)
             {
-                ok = SharedMemLib.TryPopFrames(ref fb, encoding, ptr, out count, max_frame_count);
+                gcFrames[i] = new GCFrame(encoding);
+                handles[i] = GCHandle.Alloc(gcFrames[i].data, GCHandleType.Pinned);
+                pinned++;
+
+                raws[i] = gcFrames[i].raw;
+                SharedMemLib.SetFrameData(ref raws[i], (byte*)handles[i].AddrOfPinnedObject());
             }
+
+            bool ok;
+            uint count;
+            unsafe 
+            {
+                fixed (Frame* ptr = raws)
+                {
+                    ok = blocking
+                        ? SharedMemLib.BlockingPopFrames(ref fb, encoding, ptr, out count, max, timeout)
+                        : SharedMemLib.TryPopFrames(ref fb, encoding, ptr, out count, max);
+                }
+            }
+
+            if (!ok) return (Array.Empty<GCFrame>(), false);
+            if (count > max) count = max; // defensive
+
+            // Copy native-updated frame metadata (size, timestamp, ...) back into the GCFrames.
+            for (int i = 0; i < count; i++)
+                gcFrames[i].raw = raws[i];
+
+            if (count == max) return (gcFrames, true);
+
+            var result = new GCFrame[count];
+            Array.Copy(gcFrames, result, count);
+            return (result, true);
         }
-
-        return Finish(buffer, ok, count);
-    }
-
-    public (Frame[] frames, bool success) BlockingPopFrames(Encoding encoding, uint max_frame_count, uint max_timeout)
-    {
-        ThrowIfDisposed();
-        if (max_frame_count == 0) return (Array.Empty<Frame>(), true);
-
-        Frame[] buffer = AllocateFrames(encoding, max_frame_count);
-
-        bool ok;
-        uint count;
-        unsafe 
+        finally
         {
-            fixed (Frame* ptr = buffer)
-            {
-                ok = SharedMemLib.BlockingPopFrames(ref fb, encoding, ptr, out count, max_frame_count, max_timeout);
-            }
+            for (int i = 0; i < pinned; i++)
+                handles[i].Free();
         }
-
-        return Finish(buffer, ok, count);
     }
 
     public bool RequestEncoding(Encoding encoding)
