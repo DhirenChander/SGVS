@@ -17,7 +17,7 @@ void mock_processor(Frame *f, shared_mem_client::SharedMemoryFrameBuffer *fb)
     }
 }
 
-void mock_reciever(Encoding enc, shared_mem_client::SharedMemoryFrameBuffer *fb)
+/*void mock_reciever(Encoding enc, shared_mem_client::SharedMemoryFrameBuffer *fb)
 {
     std::cout << "Recieving: " << std::hex << enc.id << std::dec << std::endl;
     Frame out[120]{};
@@ -44,7 +44,7 @@ void mock_reciever(Encoding enc, shared_mem_client::SharedMemoryFrameBuffer *fb)
             std::cout << "Did not recieve frames." << std::endl;
         }
     }
-}
+}*/
 
 int main()
 {
@@ -52,6 +52,7 @@ int main()
     shared_mem_client::SharedMemoryFrameBuffer fb{};
 
     shared_mem_client::Encoding enc = shared_mem_client::new_video_encoding(1000, 1000, 1080, 1920, 60);
+    shared_mem_client::set_encoding_outgoing(&enc);
 
     size_t size = 0;
     shared_mem_client::Frame f = shared_mem_client::frame_sized_by_encoding(enc, &size);
@@ -70,13 +71,15 @@ int main()
     std::unordered_set<uint64_t> recs;
 
     recs.insert(enc.id);
-    Encoding encs[10];
-    uint8_t out_len;
+    // Encoding encs[10];
+    // uint8_t out_len;
 
     std::cout << "Starting loop..." << std::endl;
     std::cout << std::hex << enc.id << std::dec << std::endl;
 
-    while (true)
+    t.join();
+
+    /*while (true)
     {
         if (fb.blocking_read_encodings(encs, &out_len, 10, 2000))
         {
@@ -98,7 +101,7 @@ int main()
         {
             std::cout << "Did not find any new encodings" << std::endl;
         }
-    }
+    }*/
 
     return 0;
 }

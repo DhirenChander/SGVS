@@ -41,6 +41,7 @@ func main() {
 	shared_mem_lib.NewFrameBuffer(&fb)
 
 	enc := shared_mem_lib.NewVideoEncoding(10000, 10000, 1080, 1920, 60)
+	enc.SetIncoming()
 	fb.RequestEncoding(enc)
 	fb.AlignRingsToConfig()
 
@@ -66,7 +67,10 @@ func main() {
 
 				if !ok {
 					recs[v] = struct{}{}
-					go mock_receiver(v, &fb)
+
+					if v.IsOutgoing() {
+						go mock_receiver(v, &fb)
+					}
 				}
 			}
 		} else {

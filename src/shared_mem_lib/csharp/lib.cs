@@ -2,6 +2,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Diagnostics.CodeAnalysis;
 
 namespace SharedMemLibrary;
 
@@ -91,13 +92,14 @@ public unsafe struct Frame
 // Safe Verion of Unsafe Frame
 public struct GCFrame {
     public Frame raw;
-    public required byte[] data;
+    public required byte[] Data;
 
+    [SetsRequiredMembers]
     public GCFrame(Encoding enc) {
         unsafe {
-            raw = SharedMemLib.FrameSizedByEncoding(enc);
-            ulong size = SharedMemLib.GetFrameSize(ref raw);
-            data = new byte[size];
+            ulong size = 0;
+            raw = SharedMemLib.FrameSizedByEncoding(enc, ref size);
+            Data = new byte[size];
         }
     }
 }
@@ -189,11 +191,14 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
             for (int i = 0; i < max; i++)
             {
                 gcFrames[i] = new GCFrame(encoding);
-                handles[i] = GCHandle.Alloc(gcFrames[i].data, GCHandleType.Pinned);
+                handles[i] = GCHandle.Alloc(gcFrames[i].Data, GCHandleType.Pinned);
                 pinned++;
 
                 raws[i] = gcFrames[i].raw;
-                SharedMemLib.SetFrameData(ref raws[i], (byte*)handles[i].AddrOfPinnedObject());
+                unsafe 
+                {
+                    SharedMemLib.SetFrameData(ref raws[i], (byte*)handles[i].AddrOfPinnedObject());
+                }
             }
 
             bool ok;
@@ -292,9 +297,10 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
     // side has somewhere to write the frame data.
     private static Frame[] AllocateFrames(Encoding encoding, uint count)
     {
+        ulong _ = 0;
         var frames = new Frame[count];
         for (uint i = 0; i < count; i++)
-            frames[i] = SharedMemLib.FrameSizedByEncoding(encoding);
+            frames[i] = SharedMemLib.FrameSizedByEncoding(encoding, ref _);
         return frames;
     }
 
@@ -351,10 +357,10 @@ public static unsafe class SharedMemLib
     const CallingConvention CC = CallingConvention.Cdecl;
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "frame_sized_by_encoding")]
-    internal static extern Frame FrameSizedByEncoding(Encoding enc);
+    internal static extern Frame FrameSizedByEncoding(Encoding enc, ref ulong out_size);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "set_frame_data")]
-    internal static extern void SetFrameData(ref Frame f, ref byte[] data);
+    internal static extern void SetFrameData(ref Frame f, byte* data);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "get_frame_size")]
     internal static extern ulong GetFrameSize(ref Frame f);
