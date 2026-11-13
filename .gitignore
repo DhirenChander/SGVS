@@ -1,2 +1,6 @@
 **/*.exe
 **/.vscode/**
+bin/
+obj/
+.vs/
+*.user
