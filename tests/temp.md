@@ -1,0 +1,1 @@
+All tests to be stored in this folder
