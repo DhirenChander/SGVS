@@ -70,3 +70,8 @@ conanbuildinfo.*
 
 # Runtime output
 *.log
+
+
+**/msvc_build/
+**/ninja_build/
+**/dll_build/
