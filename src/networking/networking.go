@@ -298,7 +298,7 @@ func AddVoiceTrack(pc *webrtc.PeerConnection) (
 
 func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.FrameBuffer) error {
 
-	const minimumBufferedPackets = 5 // -> 50ms delay
+	const minimumBufferedPackets = 10 // -> 100ms delay
 	const audioFrameDuration = 10 * time.Millisecond
 
 	enc := shared_mem_lib.NewAudioEncoding(true)
@@ -400,13 +400,16 @@ func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared
 			ok, framesToSend = fb.BlockingPopFrames(enc, maxAudioFrames, timeOutMs) //BlockingPopFrames resizes slice to only be as long as needed
 
 			for i := 0; i < len(framesToSend); i++ {
+
+				framesCopy := make([]byte, len(framesToSend[i].Bytes))
+				copy(framesCopy, framesToSend[i].Bytes)
+				framesToSend[i].Close()
+
 				var media media.Sample = media.Sample{
 					Data:     framesToSend[i].Bytes,
 					Duration: audioFrameDuration,
 				}
 				err = track.WriteSample(media)
-				// framesToSend[i].Close()
-				// (check if anything is still using bytes by reference)
 				if err != nil {
 					break
 				}
