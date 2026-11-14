@@ -95,14 +95,20 @@ func testCallAndResponse(host bool) *webrtc.PeerConnection {
 func setupPcAsHost() (
 	*webrtc.PeerConnection,
 	*webrtc.DataChannel,
-	chan struct{}, //Signals when dataChannel is open (by closing itself) (TODO): See if we can change this into a chan bool
+	chan bool, //Signals when dataChannel is open
 	chan webrtc.DataChannelMessage, //Messages are sent here
 	error) {
 
 	// Change to take in a reader and writer if using a different IO stream
 	reader := bufio.NewReader(os.Stdin)
 
-	offerPc, dataChan, dataChanOpen, messages, err := generateOffer()
+	offerPc, dataChan, dataChanOpen, messages,
+		selfVoiceTrack, _, remoteVoiceTrackChan, _, //Use receivers later to judge network conditions
+		err := generateOffer()
+
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("Error generating offer: %s\n", err)
+	}
 
 	keepConnection := false
 	defer func() {
@@ -111,10 +117,6 @@ func setupPcAsHost() (
 			_ = offerPc.Close()
 		}
 	}()
-
-	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("Error generating offer: %s\n", err)
-	}
 
 	fmt.Printf("Offer SDP:\n%s", getSDPStr(offerPc))
 
@@ -132,6 +134,20 @@ func setupPcAsHost() (
 		return nil, nil, nil, nil, fmt.Errorf("Error applying answer: %s\n", err)
 	}
 
+	//Send audio
+	// err = selfVoiceTrack.WriteSample(media.Sample{})
+
+	//Don't do this here
+	//Return and then wait at a higher level after SDP printed
+	remoteVoiceTrack := <-remoteVoiceTrackChan
+
+	//Read incoming audio
+	// Should do this in a gorouting + for loop
+	remoteVoiceTrack.ReadRTP() //Blocking read
+	// remoteVoiceTrack.Read()
+
+	//Send data to processing module
+
 	keepConnection = true
 	return offerPc, dataChan, dataChanOpen, messages, nil
 }
@@ -139,7 +155,7 @@ func setupPcAsHost() (
 func setupPcAsAttendee() (
 	*webrtc.PeerConnection,
 	chan *webrtc.DataChannel,
-	chan struct{}, //Signals when dataChannel is open (by closing itself) (TODO): See if we can change this into a chan bool
+	chan bool, //Signals when dataChannel is open (by closing itself)
 	chan webrtc.DataChannelMessage, //Messages are sent here
 	error) {
 
@@ -152,7 +168,9 @@ func setupPcAsAttendee() (
 		return nil, nil, nil, nil, fmt.Errorf("Error reading offer: %s\n", err)
 	}
 
-	answerPc, dcReady, dataChanOpen, messages, err := generateAnswer(SDPOfferStr)
+	answerPc, dcReady, dataChanOpen, messages,
+		selfVoiceTrack, _, remoteVoiceTrackChan, _,
+		err := generateAnswer(SDPOfferStr)
 
 	keepConnection := false
 	defer func() {

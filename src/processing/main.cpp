@@ -42,6 +42,7 @@ void
     ProcessAudioReader micReader("");
     AudioProcessor processor = setup_processor(enc);
 
+    // TODO: Parallelize push_pcm or this callback
     micReader.start(200 * 10000, [&](uint32_t ind, uint16_t fCount, size_t fSize)
                     { processor.push_pcm((int16_t *)micReader.get_buffered_frame(ind, 0), fCount); });
 
