@@ -301,7 +301,17 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 	const minimumBufferedPackets = 5 // -> 50ms delay
 	const audioFrameDuration = 10 * time.Millisecond
 
-	enc := shared_mem_lib.NewAudioEncoding(true)
+	enc := shared_mem_lib.NewAudioEncoding(true) // Is_input is not important here
+	enc.SetIncoming()
+
+	if !fb.RequestEncoding(enc) {
+		return fmt.Errorf("Failed to request encoding")
+	}
+
+	if !fb.AlignRingsToConfig() {
+		return fmt.Errorf("Failed to align rings to config")
+	}
+
 	jb := jitterbuffer.New(jitterbuffer.WithMinimumPacketCount(minimumBufferedPackets))
 
 	playbackStarted := make(chan struct{})
@@ -368,7 +378,7 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 				}
 
 				gcFrame := shared_mem_lib.NewGCFrame(enc)
-				gcFrame.Bytes = packet.Payload
+				copy(gcFrame.Bytes, packet.Payload)
 				if !fb.PushFrames([]shared_mem_lib.GCFrame{gcFrame}) {
 					fmt.Println("Error pushing audio frame to shared buffer")
 					return
@@ -382,7 +392,7 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 
 // Add way to stop sending frames?
 // Add a channel to signal something has failed?
-func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared_mem_lib.FrameBuffer) error {
+func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared_mem_lib.FrameBuffer, enc shared_mem_lib.Encoding) error {
 
 	const timeOutMs = 10000
 	const maxAudioFrames = 100 // 10ms per frame -> 1 seconds
@@ -390,13 +400,11 @@ func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared
 	//Hard code for now
 	const audioFrameDuration = 10 * time.Millisecond
 
-	enc := shared_mem_lib.NewAudioEncoding(true)
-
 	go func() {
 		err := error(nil)
 		ok := true
 		for ok && err == nil {
-			var framesToSend []shared_mem_lib.GCFrame = make([]shared_mem_lib.GCFrame, maxAudioFrames)
+			var framesToSend []shared_mem_lib.GCFrame
 			ok, framesToSend = fb.BlockingPopFrames(enc, maxAudioFrames, timeOutMs) //BlockingPopFrames resizes slice to only be as long as needed
 
 			for i := 0; i < len(framesToSend); i++ {
