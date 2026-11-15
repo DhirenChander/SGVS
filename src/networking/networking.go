@@ -302,6 +302,10 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error
 	const audioFrameDuration = 10 * time.Millisecond
 
 	enc := shared_mem_lib.NewAudioEncoding(true)
+	enc.SetIncoming()
+	fb.RequestEncoding(enc)
+	fb.AlignRingsToConfig()
+
 	jb := jitterbuffer.New(jitterbuffer.WithMinimumPacketCount(minimumBufferedPackets))
 
 	playbackStarted := make(chan struct{})
@@ -322,6 +326,7 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error
 				fmt.Println("Error reading incoming audio")
 				return
 			}
+			fmt.Printf("Received audio packet from remote:\n\tSequence: %d\n", packet.SequenceNumber)
 
 			sequenceNum := packet.Header.SequenceNumber
 			if hasStarted.Load() {
@@ -358,8 +363,10 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error
 			//Potential addition: speed up timer temporarily if buffer is overflowing?
 			case <-ticker.C:
 				packet, err := jb.Pop()
-				if errors.Is(err, jitterbuffer.ErrBufferUnderrun) {
+				if errors.Is(err, jitterbuffer.ErrInvalidOperation) {
 					jb.SetPlayoutHead(jb.PlayoutHead() + 1)
+					//Next packet not yet received
+					//Should we push blank audio to shared buffer?
 					continue
 				}
 				if err != nil {
@@ -391,6 +398,9 @@ func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBu
 	const audioFrameDuration = 10 * time.Millisecond
 
 	enc := shared_mem_lib.NewAudioEncoding(true)
+	enc.SetOutgoing()
+	fb.RequestEncoding(enc)
+	fb.AlignRingsToConfig()
 
 	go func() {
 		err := error(nil)
@@ -399,6 +409,8 @@ func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBu
 			var framesToSend []shared_mem_lib.GCFrame = make([]shared_mem_lib.GCFrame, maxAudioFrames)
 			ok, framesToSend = fb.BlockingPopFrames(enc, maxAudioFrames, timeOutMs) //BlockingPopFrames resizes slice to only be as long as needed
 
+			fmt.Println("Received frames to from processing module")
+
 			for i := 0; i < len(framesToSend); i++ {
 
 				framesCopy := make([]byte, len(framesToSend[i].Bytes))
@@ -406,7 +418,7 @@ func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBu
 				framesToSend[i].Close()
 
 				var media media.Sample = media.Sample{
-					Data:     framesToSend[i].Bytes,
+					Data:     framesCopy,
 					Duration: audioFrameDuration,
 				}
 				err = track.WriteSample(media)

@@ -18,9 +18,27 @@ type frameBuffer interface {
 		uint32,
 		uint32,
 	) (bool, []shared_mem_lib.GCFrame)
+
+	RequestEncoding(enc shared_mem_lib.Encoding) bool
+	AlignRingsToConfig() bool
 }
 
 func main() {
+	args := os.Args[1:]
+
+	if len(args) >= 1 && args[0] == "test" {
+		success := runTests()
+
+		var msg string
+		if success {
+			msg = "Tests passed"
+		} else {
+			msg = "Tests failed"
+		}
+
+		fmt.Println(msg)
+		return
+	}
 
 	var fb shared_mem_lib.FrameBuffer
 	ok := shared_mem_lib.NewFrameBuffer(&fb)
@@ -31,8 +49,6 @@ func main() {
 		fmt.Println("Failed to create frame buffer")
 		return
 	}
-
-	args := os.Args[1:]
 
 	//Check if user wants to create a connection or answer
 	host := (len(args) >= 1 && args[0] == "host")
@@ -203,14 +219,15 @@ func setupPcAsAttendee(fb *shared_mem_lib.FrameBuffer) (
 }
 
 func relayAudioOnceConnected(localTrack *webrtc.TrackLocalStaticSample, remoteTrackChan chan *webrtc.TrackRemote, fb frameBuffer) error {
-	remoteTrack := <-remoteTrackChan
 
-	err := relayIncomingAudioToBuffer(remoteTrack, fb)
+	err := relayOutgoingAudioToRemote(localTrack, fb)
 	if err != nil {
 		return err
 	}
 
-	err = relayOutgoingAudioToRemote(localTrack, fb)
+	remoteTrack := <-remoteTrackChan
+
+	err = relayIncomingAudioToBuffer(remoteTrack, fb)
 	if err != nil {
 		return err
 	}
