@@ -19,6 +19,8 @@ func runTests() bool {
 	return testAudioTransfer()
 }
 
+//TODO: Check if we can test with a real frame buffer instead of mocking
+
 func testAudioTransfer() bool {
 
 	//Need one frame buffer for each direction?

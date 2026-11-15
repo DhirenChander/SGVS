@@ -375,7 +375,7 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error
 				}
 
 				gcFrame := shared_mem_lib.NewGCFrame(enc)
-				gcFrame.Bytes = packet.Payload
+				copy(gcFrame.Bytes, packet.Payload)
 				if !fb.PushFrames([]shared_mem_lib.GCFrame{gcFrame}) {
 					fmt.Println("Error pushing audio frame to shared buffer")
 					return
