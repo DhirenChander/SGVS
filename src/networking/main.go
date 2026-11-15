@@ -10,10 +10,20 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
+// Allows mocking of frameBuffer
+type frameBuffer interface {
+	PushFrames([]shared_mem_lib.GCFrame) bool
+	BlockingPopFrames(
+		shared_mem_lib.Encoding,
+		uint32,
+		uint32,
+	) (bool, []shared_mem_lib.GCFrame)
+}
+
 func main() {
 
-	var fb *shared_mem_lib.FrameBuffer = nil
-	ok := shared_mem_lib.NewFrameBuffer(fb)
+	var fb shared_mem_lib.FrameBuffer
+	ok := shared_mem_lib.NewFrameBuffer(&fb)
 
 	defer fb.Free()
 
@@ -30,7 +40,7 @@ func main() {
 	pcChan := make(chan *webrtc.PeerConnection, 1)
 
 	go func() {
-		pcChan <- testCallAndResponse(host, fb)
+		pcChan <- testCallAndResponse(host, &fb)
 	}()
 
 	<-time.After(5 * time.Minute)
@@ -192,7 +202,7 @@ func setupPcAsAttendee(fb *shared_mem_lib.FrameBuffer) (
 	return answerPc, dcReady, dataChanOpen, messages, nil
 }
 
-func relayAudioOnceConnected(localTrack *webrtc.TrackLocalStaticSample, remoteTrackChan chan *webrtc.TrackRemote, fb *shared_mem_lib.FrameBuffer) error {
+func relayAudioOnceConnected(localTrack *webrtc.TrackLocalStaticSample, remoteTrackChan chan *webrtc.TrackRemote, fb frameBuffer) error {
 	remoteTrack := <-remoteTrackChan
 
 	err := relayIncomingAudioToBuffer(remoteTrack, fb)

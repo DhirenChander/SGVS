@@ -19,11 +19,11 @@ const managementChannelName = "transceiver_management"
 const voiceAudioChannelName = "voice_audio"
 
 var StunServers = []string{
-	"stun.l.google.com:19302",
-	"stun1.l.google.com:19302",
-	"stun2.l.google.com:19302",
-	"stun3.l.google.com:19302",
-	"stun4.l.google.com:19302",
+	"stun:stun.l.google.com:19302",
+	// "stun:stun1.l.google.com:19302",
+	// "stun:stun2.l.google.com:19302",
+	"stun:stun3.l.google.com:19302",
+	// "stun:stun4.l.google.com:19302",
 }
 
 var ICEConfiguration = webrtc.Configuration{
@@ -296,7 +296,7 @@ func AddVoiceTrack(pc *webrtc.PeerConnection) (
 
 }
 
-func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.FrameBuffer) error {
+func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error {
 
 	const minimumBufferedPackets = 10 // -> 100ms delay
 	const audioFrameDuration = 10 * time.Millisecond
@@ -382,7 +382,7 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 
 // Add way to stop sending frames?
 // Add a channel to signal something has failed?
-func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared_mem_lib.FrameBuffer) error {
+func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBuffer) error {
 
 	const timeOutMs = 10000
 	const maxAudioFrames = 100 // 10ms per frame -> 1 seconds
