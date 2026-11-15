@@ -19,11 +19,11 @@ const managementChannelName = "transceiver_management"
 const voiceAudioChannelName = "voice_audio"
 
 var StunServers = []string{
-	"stun.l.google.com:19302",
-	"stun1.l.google.com:19302",
-	"stun2.l.google.com:19302",
-	"stun3.l.google.com:19302",
-	"stun4.l.google.com:19302",
+	"stun:stun.l.google.com:19302",
+	// "stun:stun1.l.google.com:19302",
+	// "stun:stun2.l.google.com:19302",
+	"stun:stun3.l.google.com:19302",
+	// "stun:stun4.l.google.com:19302",
 }
 
 var ICEConfiguration = webrtc.Configuration{
@@ -296,9 +296,9 @@ func AddVoiceTrack(pc *webrtc.PeerConnection) (
 
 }
 
-func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.FrameBuffer) error {
+func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error {
 
-	const minimumBufferedPackets = 5 // -> 50ms delay
+	const minimumBufferedPackets = 10 // -> 100ms delay
 	const audioFrameDuration = 10 * time.Millisecond
 
 	enc := shared_mem_lib.NewAudioEncoding(true) // Is_input is not important here
@@ -332,6 +332,7 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 				fmt.Println("Error reading incoming audio")
 				return
 			}
+			fmt.Printf("Received audio packet from remote:\n\tSequence: %d\n", packet.SequenceNumber)
 
 			sequenceNum := packet.Header.SequenceNumber
 			if hasStarted.Load() {
@@ -368,8 +369,10 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 			//Potential addition: speed up timer temporarily if buffer is overflowing?
 			case <-ticker.C:
 				packet, err := jb.Pop()
-				if errors.Is(err, jitterbuffer.ErrBufferUnderrun) {
+				if errors.Is(err, jitterbuffer.ErrInvalidOperation) {
 					jb.SetPlayoutHead(jb.PlayoutHead() + 1)
+					//Next packet not yet received
+					//Should we push blank audio to shared buffer?
 					continue
 				}
 				if err != nil {
@@ -393,7 +396,6 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 // Add way to stop sending frames?
 // Add a channel to signal something has failed?
 func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared_mem_lib.FrameBuffer, enc shared_mem_lib.Encoding) error {
-
 	const timeOutMs = 10000
 	const maxAudioFrames = 100 // 10ms per frame -> 1 seconds
 
@@ -407,14 +409,19 @@ func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared
 			var framesToSend []shared_mem_lib.GCFrame
 			ok, framesToSend = fb.BlockingPopFrames(enc, maxAudioFrames, timeOutMs) //BlockingPopFrames resizes slice to only be as long as needed
 
+			fmt.Println("Received frames to from processing module")
+
 			for i := 0; i < len(framesToSend); i++ {
+
+				framesCopy := make([]byte, len(framesToSend[i].Bytes))
+				copy(framesCopy, framesToSend[i].Bytes)
+				framesToSend[i].Close()
+
 				var media media.Sample = media.Sample{
-					Data:     framesToSend[i].Bytes,
+					Data:     framesCopy,
 					Duration: audioFrameDuration,
 				}
 				err = track.WriteSample(media)
-				// framesToSend[i].Close()
-				// (check if anything is still using bytes by reference)
 				if err != nil {
 					break
 				}
