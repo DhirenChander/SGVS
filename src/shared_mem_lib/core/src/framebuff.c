@@ -21,8 +21,17 @@ bool config_has_encoding(Config *conf, Encoding enc)
 
 bool add_ring(FrameBuffer *fb, Encoding enc)
 {
+#ifdef _WIN32
+    EnterCriticalSection(&fb->cs);
+#endif
+
+    // TODO: Use a more efficient allocating strategy when allocating rings
     fb->ring_count += 1;
     fb->rings = (RingBuffer *)realloc(fb->rings, fb->ring_count * sizeof(RingBuffer));
+
+#ifdef _WIN32
+    LeaveCriticalSection(&fb->cs);
+#endif
 
     if (fb->rings == nullptr)
     {
@@ -45,9 +54,24 @@ bool remove_ring(FrameBuffer *fb, Encoding enc)
     }
 
     free_ringbuffer(&fb->rings[rb_ind]);
-    memcpy(&fb->rings[rb_ind], &fb->rings[rb_ind + 1], (fb->ring_count - rb_ind - 1) * sizeof(RingBuffer));
+
+#ifdef _WIN32
+    EnterCriticalSection(&fb->cs);
+#endif
+
+    memmove(&fb->rings[rb_ind], &fb->rings[rb_ind + 1], (fb->ring_count - rb_ind - 1) * sizeof(RingBuffer));
     fb->ring_count -= 1;
     fb->rings = (RingBuffer *)realloc(fb->rings, fb->ring_count * sizeof(RingBuffer));
+
+#ifdef _WIN32
+    LeaveCriticalSection(&fb->cs);
+#endif
+
+    if (fb->rings == nullptr)
+    {
+        printf("Unable to remove ring for encoding: %" PRIu64 "\n", enc.id);
+        return false;
+    }
 
     return true;
 }
@@ -61,11 +85,22 @@ bool request_encoding(FrameBuffer *fb, Encoding enc)
 
     Encoding nil = nil_encoding();
 
+#ifdef _WIN32
+    if (WaitForSingleObject(fb->conf_mu, INFINITE) != WAIT_OBJECT_0)
+    {
+        return false;
+    }
+#endif
+
     for (int i = 0; i < MAX_ENCODINGS; i++)
     {
         if (enc_eq(fb->config->encodings[i], nil))
         {
             fb->config->encodings[i] = enc;
+
+#ifdef _WIN32
+            ReleaseMutex(fb->conf_mu);
+#endif
 
             if (!add_ring(fb, enc))
             {
@@ -74,13 +109,17 @@ bool request_encoding(FrameBuffer *fb, Encoding enc)
                 return false;
             }
 
-#if defined(_WIN32) || defined(_WIN64)
+#ifdef _WIN32
             SetEvent(fb->encs_ev); // Only set the event on suc
 #endif
 
             return true;
         }
     }
+
+#ifdef _WIN32
+    ReleaseMutex(fb->conf_mu);
+#endif
 
     return false;
 }
@@ -136,27 +175,41 @@ bool blocking_read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, u
 
 bool remove_encoding(FrameBuffer *fb, Encoding enc)
 {
+#ifdef _WIN32
+    if (WaitForSingleObject(fb->conf_mu, INFINITE) != WAIT_OBJECT_0)
+    {
+        return false;
+    }
+#endif
+
     for (int i = 0; i < MAX_ENCODINGS; i++)
     {
         if (enc_eq(fb->config->encodings[i], enc))
         {
             fb->config->encodings[i] = nil_encoding();
-#if defined(_WIN32) || defined(_WIN64)
-            SetEvent(fb->encs_ev);
+
+#ifdef _WIN32
+            ReleaseMutex(fb->conf_mu);
 #endif
+
             if (!remove_ring(fb, enc))
             {
                 // Clean-up if ring removal fails
                 fb->config->encodings[i] = enc;
-#if defined(_WIN32) || defined(_WIN64)
-                SetEvent(fb->encs_ev);
-#endif
                 return false;
             }
+
+#ifdef _WIN32
+            SetEvent(fb->encs_ev);
+#endif
 
             return true;
         }
     }
+
+#ifdef _WIN32
+    ReleaseMutex(fb->conf_mu);
+#endif
 
     return true;
 }
@@ -164,16 +217,26 @@ bool remove_encoding(FrameBuffer *fb, Encoding enc)
 int ringbuff_by_encoding(FrameBuffer *fb, Encoding enc)
 {
     uint64_t id = enc.id;
+    int ind = -1;
+
+#ifdef _WIN32
+    EnterCriticalSection(&fb->cs);
+#endif
 
     for (int i = 0; i < fb->ring_count; i++)
     {
         if (fb->rings[i].id == id)
         {
-            return i;
+            ind = i;
+            break;
         }
     }
 
-    return -1;
+#ifdef _WIN32
+    LeaveCriticalSection(&fb->cs);
+#endif
+
+    return ind;
 }
 
 bool try_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *out_count, uint32_t max_frame_count)
@@ -193,24 +256,33 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *ou
 
     Slot *raw_out = (Slot *)malloc(max_frame_count * sizeof(Slot));
 
-    for (int i = 0; i < max_frame_count; i++)
+    for (uint32_t i = 0; i < max_frame_count; i++)
     {
         // Bytes is a pointer, so by copying to the raw slot, the data auto copies to the outframes.
         raw_out[i].bytes = out[i].data;
         raw_out[i].len = out[i].size;
     }
 
-    if (!blocking_pop(&fb->rings[rb_ind], raw_out, out_count, max_frame_count, max_timeout))
+#ifdef _WIN32
+    EnterCriticalSection(&fb->cs);
+#endif
+
+    bool res = blocking_pop(&fb->rings[rb_ind], raw_out, out_count, max_frame_count, max_timeout);
+
+#ifdef _WIN32
+    LeaveCriticalSection(&fb->cs);
+#endif
+
+    if (!res)
     {
+        free(raw_out);
         return false;
     }
 
-    for (int i = 0; i < *out_count; i++)
+    for (uint32_t i = 0; i < *out_count; i++)
     {
         out[i].size = raw_out[i].len;
         out[i].encoding = enc;
-        // Removed due to UB when trying to realloc GC managed pointers
-        // out[i].data = (uint8_t *)realloc(out->data, out[i].size);
     }
 
     free(raw_out);
@@ -230,13 +302,21 @@ bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count)
 
     Slot *data = (Slot *)malloc(frame_count * sizeof(Slot));
 
-    for (int i = 0; i < frame_count; i++)
+    for (uint32_t i = 0; i < frame_count; i++)
     {
         data[i].bytes = f[i].data;
         data[i].len = f[i].size;
     }
 
+#ifdef _WIN32
+    EnterCriticalSection(&fb->cs);
+#endif
+
     bool res = push(&fb->rings[rb_ind], data, frame_count);
+
+#ifdef _WIN32
+    LeaveCriticalSection(&fb->cs);
+#endif
 
     free(data);
 
@@ -245,6 +325,7 @@ bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count)
 
 bool new_framebuffer(FrameBuffer *out)
 {
+    // TODO: Use a more efficient allocating strategy when allocating rings
     out->rings = malloc(0);
     out->ring_count = 0;
 
@@ -252,11 +333,26 @@ bool new_framebuffer(FrameBuffer *out)
     Config *config;
 
 #ifdef _WIN32
+    // Create mutex that is immediately owned
+    out->conf_mu = CreateMutexA(NULL, TRUE, "Local\\svgs_mu");
+
+    if (out->conf_mu == nullptr)
+    {
+        return false;
+    }
+
+    if (GetLastError() == ERROR_ALREADY_EXISTS)
+    {
+        // Must wait forever until the other processes are done editing the frame buffer
+        WaitForSingleObject(out->conf_mu, INFINITE);
+    }
+
     out->conf_map = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
                                        (DWORD)(conf_size >> 32), (DWORD)(conf_size & 0xFFFFFFFF),
                                        L"Local\\sgvs_conf");
     if (out->conf_map == nullptr)
     {
+        CloseHandle(out->conf_mu);
         return false;
     }
 
@@ -266,6 +362,8 @@ bool new_framebuffer(FrameBuffer *out)
 
     if (config == nullptr)
     {
+        CloseHandle(out->conf_mu);
+        out->conf_mu = nullptr;
         return false;
     }
 
@@ -278,20 +376,27 @@ bool new_framebuffer(FrameBuffer *out)
     out->encs_ev = CreateEventW(nullptr, FALSE, FALSE, L"Local\\sgvs_conf_encs_ev");
     if (out->encs_ev == nullptr)
     {
+        CloseHandle(out->conf_mu);
         CloseHandle(out->conf_map);
         out->conf_map = nullptr;
+        out->conf_mu = nullptr;
         return false;
     }
 
     out->conf_ev = CreateEventW(nullptr, FALSE, FALSE, L"Local\\sgvs_conf_ev");
     if (out->conf_ev == nullptr)
     {
+        CloseHandle(out->conf_mu);
         CloseHandle(out->conf_map);
         CloseHandle(out->encs_ev);
         out->encs_ev = nullptr;
         out->conf_map = nullptr;
+        out->conf_mu = nullptr;
         return false;
     }
+
+    InitializeCriticalSection(&out->cs);
+    ReleaseMutex(out->conf_mu);
 #endif
 
     out->config = config;
@@ -312,10 +417,12 @@ void free_framebuffer(FrameBuffer *fb)
     }
     free(fb->rings);
 #ifdef _WIN32
-    UnmapViewOfFile(&fb->config);
+    UnmapViewOfFile(fb->config);
     CloseHandle(fb->conf_map);
     CloseHandle(fb->encs_ev);
     CloseHandle(fb->conf_ev);
+    CloseHandle(fb->conf_mu);
+    DeleteCriticalSection(&fb->cs);
 #endif
 }
 

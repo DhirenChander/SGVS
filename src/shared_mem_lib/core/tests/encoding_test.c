@@ -22,7 +22,7 @@ int main(void)
 void test_nil_encoding(void)
 {
     Encoding enc = nil_encoding();
-    TEST_ASSERT_EQ(enc.id, 0);
+    TEST_ASSERT_EQUAL(enc.id, 0);
 }
 
 void test_new_audio_encoding(void)
@@ -33,7 +33,7 @@ void test_new_audio_encoding(void)
     };
 
     const size_t case_count = 2;
-    struct TestCase cases[case_count] = {
+    struct TestCase cases[2] = {
         (struct TestCase){.isInput = true},
         (struct TestCase){.isInput = false},
     };
@@ -59,7 +59,7 @@ void test_new_video_encoding(void)
     };
 
     const size_t case_count = 2;
-    struct TestCase cases[case_count] = {
+    struct TestCase cases[2] = {
         (struct TestCase){.maxBR = 44, .minBR = 22, .frameHeight = 1080, .frameWidth = 1920, .frameRate = 60},
     };
 

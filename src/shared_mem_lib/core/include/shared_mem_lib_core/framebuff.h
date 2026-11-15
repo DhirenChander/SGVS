@@ -44,7 +44,8 @@ extern "C"
         Config *config; // Used to hold data about active encodings
 #ifdef _WIN32
         // Encs_ev is using for encoding updates, conf_ev is used for any other config updates
-        HANDLE encs_ev, conf_ev, conf_map;
+        HANDLE encs_ev, conf_ev, conf_map, conf_mu;
+        CRITICAL_SECTION cs;
 #endif
     } FrameBuffer;
 

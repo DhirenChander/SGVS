@@ -9,8 +9,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(SHARED_MEM_CLIENT_BUILD_DLL "Build shared_mem_client as a shared library (DLL)" OFF)
 
-find_package(OpenSSL REQUIRED)
-
 if(SHARED_MEM_CLIENT_BUILD_DLL)
   add_library(shared_mem_client SHARED)
 else()
@@ -24,7 +22,6 @@ target_sources(shared_mem_client PRIVATE
   src/frame.c
 )
 add_library(shared_mem_client::shared_mem_client ALIAS shared_mem_client)
-target_link_libraries(shared_mem_client PUBLIC OpenSSL::SSL)
 
 target_include_directories(shared_mem_client
   PUBLIC
@@ -36,6 +33,10 @@ if(SHARED_MEM_CLIENT_BUILD_DLL)
   set_target_properties(shared_mem_client PROPERTIES
     WINDOWS_EXPORT_ALL_SYMBOLS ON
   )
+endif()
+
+if(WIN32)
+    target_link_libraries(shared_mem_client PRIVATE bcrypt)
 endif()
 
 if(MSVC)

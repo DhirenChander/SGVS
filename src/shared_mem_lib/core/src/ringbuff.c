@@ -72,19 +72,19 @@ bool blocking_pop(RingBuffer *rb, Slot *out, uint32_t *out_count, uint32_t max_s
         }
     }
 
-    uint32_t available = (head - tail) % rb->ring->slot_count;
+    uint32_t available = ((uint64_t)head + (uint64_t)rb->ring->slot_count - (uint64_t)tail) % rb->ring->slot_count;
     *out_count = min(available, max_slots_out);
     uint32_t next = (tail + *out_count) % rb->ring->slot_count;
 
-    for (int i = 0; i < *out_count; i++)
+    for (uint32_t i = 0; i < *out_count; i++)
     {
         size_t len = rb->lens[(tail + i) % rb->ring->slot_count];
-        fprintf(stderr, "Copying %d, %d...\n", i, len);
+        fprintf(stderr, "Copying %d, %zu...\n", i, len);
         // Deep copy each slot
         uint8_t *slot = get_slot(rb, (tail + i) % rb->ring->slot_count);
         memcpy(out[i].bytes, slot, len);
         out[i].len = len;
-        fprintf(stderr, "Size: %d...\n", out[i].len);
+        fprintf(stderr, "Size: %zu...\n", out[i].len);
     }
 
     atomic_store(&rb->ring->tail, next);
@@ -111,12 +111,14 @@ bool push(RingBuffer *rb, Slot *data, uint32_t size)
     // Need to wait for acquiring tail lock from shared process, head doesn't matter
     uint32_t tail = atomic_load(&rb->ring->tail);
 
-    if (size > (tail - (head + 1)) % rb->ring->slot_count)
+    uint32_t free = ((uint64_t)tail + (uint64_t)rb->ring->slot_count - (uint64_t)head - 1) % rb->ring->slot_count;
+
+    if (size > free)
         return false; // full: caller drops
 
     uint32_t next = (head + size) % rb->ring->slot_count;
 
-    for (int i = 0; i < size; i++)
+    for (uint32_t i = 0; i < size; i++)
     {
         if (data[i].len > rb->ring->slot_size)
             return false;
