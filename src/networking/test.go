@@ -145,3 +145,7 @@ func (mfb *mockFrameBuffer) BlockingPopFrames(
 func (mfb *mockFrameBuffer) AppendFrames(frames []shared_mem_lib.GCFrame) {
 	mfb.framesToPop <- frames
 }
+
+func (fb *mockFrameBuffer) ReadEncodings(maxLen uint8) ([]shared_mem_lib.Encoding, bool) {
+	return []shared_mem_lib.Encoding{}, false
+}

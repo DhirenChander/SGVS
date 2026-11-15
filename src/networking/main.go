@@ -19,6 +19,7 @@ type frameBuffer interface {
 		uint32,
 	) (bool, []shared_mem_lib.GCFrame)
 
+	ReadEncodings(maxLen uint8) ([]shared_mem_lib.Encoding, bool)
 	RequestEncoding(enc shared_mem_lib.Encoding) bool
 	AlignRingsToConfig() bool
 }
@@ -220,19 +221,57 @@ func setupPcAsAttendee(fb *shared_mem_lib.FrameBuffer) (
 
 func relayAudioOnceConnected(localTrack *webrtc.TrackLocalStaticSample, remoteTrackChan chan *webrtc.TrackRemote, fb frameBuffer) error {
 
-	err := relayOutgoingAudioToRemote(localTrack, fb)
-	if err != nil {
-		return err
-	}
+	goAndPrintIfError(func() error {
+		enc, err := waitForAudioEncodingFromProcessing(fb)
+		if err != nil {
+			return err
+		}
 
-	remoteTrack := <-remoteTrackChan
+		err = relayOutgoingAudioToRemote(localTrack, fb, enc)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 
-	err = relayIncomingAudioToBuffer(remoteTrack, fb)
-	if err != nil {
-		return err
-	}
+	goAndPrintIfError(func() error {
+		remoteTrack := <-remoteTrackChan
+
+		err := relayIncomingAudioToBuffer(remoteTrack, fb)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
 
 	return nil
+}
+
+func waitForAudioEncodingFromProcessing(fb frameBuffer) (shared_mem_lib.Encoding, error) {
+	const timeOut = 100 * time.Second
+	const interval = 500 * time.Millisecond
+	elapsed := 0 * time.Second
+
+	for elapsed < timeOut {
+		encs, succ := fb.ReadEncodings(10)
+		if succ {
+			fb.AlignRingsToConfig()
+			fmt.Println("Got: ", len(encs), " Encodings")
+			for _, v := range encs {
+				if v.IsOutgoing() && v.IsAudio() {
+					return v, nil
+				}
+			}
+		} else {
+			fmt.Println("Failed to poll encodings")
+		}
+
+		elapsed += interval
+		time.Sleep(interval)
+	}
+
+	return shared_mem_lib.Encoding{}, fmt.Errorf("Did not find audio encoding after %s", string(timeOut))
 }
 
 func goAndPrintIfError(f func() error) {

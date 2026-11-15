@@ -395,7 +395,7 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error
 
 // Add way to stop sending frames?
 // Add a channel to signal something has failed?
-func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared_mem_lib.FrameBuffer, enc shared_mem_lib.Encoding) error {
+func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBuffer, enc shared_mem_lib.Encoding) error {
 	const timeOutMs = 10000
 	const maxAudioFrames = 100 // 10ms per frame -> 1 seconds
 
