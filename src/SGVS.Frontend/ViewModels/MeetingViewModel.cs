@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SGVS.Frontend.Models;
 using SGVS.Frontend.Services;
@@ -29,6 +30,7 @@ public partial class MeetingViewModel : ViewModelBase
         // ReadOnlyObservableCollection only exposes the event through the interface
         ((INotifyCollectionChanged)Members).CollectionChanged += (_, _) => OnPropertyChanged(nameof(GalleryColumns));
         _meeting.Self.PropertyChanged += OnSelfChanged;
+        _meeting.PropertyChanged += OnMeetingChanged;
 
         JoinCode = new JoinCodeViewModel(_meeting.Code);
 
@@ -46,6 +48,31 @@ public partial class MeetingViewModel : ViewModelBase
 
     // the key icon / code rail at the bottom-right
     public JoinCodeViewModel JoinCode { get; }
+
+    // only the host has a connection string to hand out
+    public bool IsHost => _meeting.IsHost;
+
+    // the host has shared the code and is waiting for the guest's reply to be pasted in
+    public bool IsWaitingForReply => _meeting.State == CallState.WaitingForReply;
+
+    // what the user pasted from the guest
+    [ObservableProperty]
+    public partial string ReplyText { get; set; } = "";
+
+    // a failed reply, a lost connection. null while all is well
+    public string? ErrorMessage => _meeting.Error;
+
+    public bool HasError => _meeting.Error is not null;
+
+    // the other person is gone and so is the call. Leave is all that's left to do
+    public bool IsCallEnded => _meeting.State == CallState.Ended;
+
+    // the Connect button next to the reply box
+    [RelayCommand]
+    private async Task AcceptReply()
+    {
+        if (await _meeting.AcceptReplyAsync(ReplyText)) ReplyText = "";
+    }
 
     public ReadOnlyObservableCollection<Participant> Members => _meeting.Members;
 
@@ -68,6 +95,22 @@ public partial class MeetingViewModel : ViewModelBase
     {
         await _meeting.LeaveAsync();
         _goToStart();
+    }
+
+    private void OnMeetingChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(IMeetingService.State):
+                OnPropertyChanged(nameof(IsWaitingForReply));
+                OnPropertyChanged(nameof(IsCallEnded));
+                break;
+
+            case nameof(IMeetingService.Error):
+                OnPropertyChanged(nameof(ErrorMessage));
+                OnPropertyChanged(nameof(HasError));
+                break;
+        }
     }
 
     private void OnSelfChanged(object? sender, PropertyChangedEventArgs e)

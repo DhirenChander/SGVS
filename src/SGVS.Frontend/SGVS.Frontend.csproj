@@ -37,4 +37,26 @@
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   </ItemGroup>
+
+  <!-- shared memory the processing and networking modules also use (Windows only at runtime) -->
+  <ItemGroup>
+    <ProjectReference Include="..\shared_mem_lib\csharp\csharp.csproj" />
+  </ItemGroup>
+
+  <!-- builds the Go networking module into backend/ next to the app, which is where NetworkingProcess looks.
+       needs Go on PATH; without it the app still builds but hosting/joining reports the module as missing.
+       -p:SkipNetworkingBuild=true skips this -->
+  <Target Name="BuildNetworking" AfterTargets="Build" Condition="'$(SkipNetworkingBuild)' != 'true'">
+    <PropertyGroup>
+      <NetworkingExeName Condition="$([MSBuild]::IsOSPlatform('Windows'))">sgvs-networking.exe</NetworkingExeName>
+      <NetworkingExeName Condition="'$(NetworkingExeName)' == ''">sgvs-networking</NetworkingExeName>
+      <!-- OutDir is relative to this project, but go runs from the networking folder -->
+      <NetworkingOutDir>$([System.IO.Path]::GetFullPath('$(OutDir)', '$(MSBuildProjectDirectory)'))</NetworkingOutDir>
+    </PropertyGroup>
+    <Exec Command="go build -o &quot;$(NetworkingOutDir)backend/$(NetworkingExeName)&quot; ." WorkingDirectory="$(MSBuildThisFileDirectory)..\networking"
+          ContinueOnError="true" IgnoreExitCode="true" StandardOutputImportance="low">
+      <Output TaskParameter="ExitCode" PropertyName="NetworkingBuildExit" />
+    </Exec>
+    <Warning Condition="'$(NetworkingBuildExit)' != '0'" Text="Could not build the networking module (is Go installed and on PATH?). The app will run but cannot host or join a meeting." />
+  </Target>
 </Project>

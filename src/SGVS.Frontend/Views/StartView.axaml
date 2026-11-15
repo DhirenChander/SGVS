@@ -86,19 +86,39 @@
         <StackPanel HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     Spacing="8">
-            <Grid Width="162"
-                  Height="40">
-                <TextBox Classes="meeting-code" />
-                <Button Classes="meeting-arrow"
-                        HorizontalAlignment="Right"
-                        VerticalAlignment="Center"
-                        Margin="0,0,1,0"
-                        Content="→"
-                        Command="{Binding ShowMeetingCommand}" />
-            </Grid>
-            <Button Classes="new-meeting"
-                    Command="{Binding ShowMeetingCommand}"
-                    Content="New meeting" />
+            <!-- joining: paste the host's connection string, the reply to send back shows up below -->
+            <StackPanel Spacing="8" IsVisible="{Binding !IsAwaitingHost}">
+                <Grid Width="162"
+                      Height="40">
+                    <TextBox Classes="meeting-code"
+                             Text="{Binding JoinText}"
+                             PlaceholderText="Paste host's code" />
+                    <Button Classes="meeting-arrow"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,1,0"
+                            Content="→"
+                            IsEnabled="{Binding !IsBusy}"
+                            Command="{Binding JoinCommand}" />
+                </Grid>
+                <Button Classes="new-meeting"
+                        IsEnabled="{Binding !IsBusy}"
+                        Command="{Binding HostCommand}"
+                        Content="New meeting" />
+            </StackPanel>
+
+            <StackPanel Spacing="8" Width="260" IsVisible="{Binding IsAwaitingHost}">
+                <TextBlock Foreground="#FFD4D4D4" FontSize="13" TextWrapping="Wrap"
+                           Text="Send this reply to the host. You'll join as soon as they paste it in." />
+                <TextBox Classes="meeting-code" Width="260" IsReadOnly="True" Text="{Binding ReplyCode, Mode=OneWay}"
+                         Padding="12,0,12,0" AutomationProperties.Name="Reply for the host" />
+                <Button Classes="new-meeting" Width="260" Click="OnCopyReplyClick" Content="Copy reply" />
+                <Button Classes="new-meeting" Width="260" Command="{Binding CancelCommand}" Content="Cancel" />
+            </StackPanel>
+
+            <TextBlock Width="260" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"
+                       Foreground="#FFF09A8E" FontSize="12"
+                       IsVisible="{Binding HasError}" Text="{Binding ErrorMessage}" />
         </StackPanel>
 
         <TextBlock HorizontalAlignment="Left"

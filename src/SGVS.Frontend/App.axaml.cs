@@ -17,10 +17,14 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            var main = new MainViewModel();
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainViewModel(),
+                DataContext = main,
             };
+
+            // the networking module is a child process, don't leave it running
+            desktop.ShutdownRequested += (_, _) => main.Shutdown();
         }
 
         base.OnFrameworkInitializationCompleted();

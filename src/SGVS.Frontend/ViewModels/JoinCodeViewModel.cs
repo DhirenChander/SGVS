@@ -20,10 +20,20 @@ public partial class JoinCodeViewModel : ObservableObject
 
     public string Code { get; }
 
-    // the rail shows the code over two lines, so it's the code without the dash split in half
-    public string FirstHalf => Code.Replace("-", "")[..3];
+    // the rail shows a short preview of the code over two lines. real connection strings are far too long
+    // for that, so it only previews the first 6 characters, clicking still copies the whole thing
+    private string Preview
+    {
+        get
+        {
+            var compact = Code.Replace("-", "");
+            return compact.Length > 6 ? compact[..6] : compact;
+        }
+    }
 
-    public string SecondHalf => Code.Replace("-", "")[3..];
+    public string FirstHalf => Preview[..Math.Min(3, Preview.Length)];
+
+    public string SecondHalf => Preview.Length > 3 ? Preview[3..] : "";
 
     // key icon swapped for the code
     [ObservableProperty]

@@ -1,11 +1,13 @@
 using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Avalonia.Media.Imaging;
 using SGVS.Frontend.Models;
 
 namespace SGVS.Frontend.Services;
 
-// pretend call with the people from the Figma mockup. no networking, everything happens instantly
-public sealed class FakeMeetingService : IMeetingService
+// pretend call with the people from the Figma mockup. no networking, everything happens instantly.
+// hosting or joining just puts you straight into the call
+public sealed class FakeMeetingService : ObservableObject, IMeetingService
 {
     // stand-in stream frame, StreamPreview/landscape.jpg next to the exe. null if it's missing
     private readonly Bitmap? _preview = LoadImage("StreamPreview", "landscape.jpg");
@@ -28,6 +30,28 @@ public sealed class FakeMeetingService : IMeetingService
 
     public string Code => "KX7-29Q";
 
+    public CallState State
+    {
+        get;
+        private set => SetProperty(ref field, value);
+    } = CallState.Idle;
+
+    public bool IsHost => true;
+
+    public string? Error => null;
+
+    public Task<bool> HostAsync() => Connect();
+
+    public Task<bool> JoinAsync(string hostCode) => Connect();
+
+    public Task<bool> AcceptReplyAsync(string replyCode) => Connect();
+
+    private Task<bool> Connect()
+    {
+        State = CallState.Connected;
+        return Task.FromResult(true);
+    }
+
     public Participant Self { get; }
 
     public ReadOnlyObservableCollection<Participant> Members { get; }
@@ -47,7 +71,11 @@ public sealed class FakeMeetingService : IMeetingService
         return Task.CompletedTask;
     }
 
-    public Task LeaveAsync() => Task.CompletedTask;
+    public Task LeaveAsync()
+    {
+        State = CallState.Ended;
+        return Task.CompletedTask;
+    }
 
     // images live in folders next to the exe, null if missing or unreadable
     private static Bitmap? LoadImage(string folder, string file)

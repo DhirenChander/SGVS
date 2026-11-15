@@ -14,6 +14,13 @@ func main() {
 
 	args := os.Args[1:]
 
+	// Controlled by the frontend: JSON commands on stdin, JSON events on stdout, logs on stderr
+	if len(args) >= 1 && args[0] == "ipc" {
+		logOut = os.Stderr
+		runIPC(os.Stdin, os.Stdout)
+		return
+	}
+
 	//Check if user wants to create a connection or answer
 	host := (len(args) >= 1 && args[0] == "host")
 
@@ -146,7 +153,7 @@ func setupPcAsAttendee() (
 	reader := bufio.NewReader(os.Stdin)
 
 	//Wait for user input
-	fmt.Println("Enter connection string:\n")
+	fmt.Print("Enter connection string:\n\n")
 	SDPOfferStr, err := readSDP(reader)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("Error reading offer: %s\n", err)
