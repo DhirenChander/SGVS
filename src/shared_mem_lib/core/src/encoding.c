@@ -1,18 +1,35 @@
 #include "shared_mem_lib_core/encoding.h"
-#include <openssl/rand.h>
+#include <windows.h>
+#include <bcrypt.h>
 #include <stdint.h>
 
-uint64_t generate_id()
+#ifdef _WIN32
+uint64_t win_generate_id()
 {
-    uint64_t out;
-    // This should be fine for unique ids, collisions are unlikely
-    if (RAND_bytes((unsigned char *)&out, sizeof(uint64_t)) != 1)
+    uint64_t out = 0;
+
+    // BCRYPT_USE_SYSTEM_PREFERRED_RNG allows passing NULL for the algorithm handle
+    NTSTATUS status = BCryptGenRandom(
+        NULL,
+        (PUCHAR)&out,
+        sizeof(uint64_t),
+        BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+
+    if (!BCRYPT_SUCCESS(status))
     {
-        printf("Failed to generate id, returning 0.\n");
         return 0;
     }
 
     return out;
+}
+#endif
+
+uint64_t generate_id()
+{
+#ifdef _WIN32
+    return win_generate_id();
+#endif
+    return 0;
 }
 
 Encoding new_video_encoding(uint16_t max_bit_rate, uint16_t min_bit_rate, uint16_t frame_height, uint16_t frame_width, uint8_t frame_rate)

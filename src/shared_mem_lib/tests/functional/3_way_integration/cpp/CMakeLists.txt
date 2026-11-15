@@ -11,7 +11,7 @@ add_executable(threewayintegration main.cpp)
 add_library(shared_mem_lib STATIC IMPORTED)
 
 set_target_properties(shared_mem_lib PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/lib/shared_mem_client.lib"
+    IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/../../../../cpp/lib/shared_mem_client.lib"
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/../../../../core/include"
     INTERFACE_LINK_LIBRARIES "OpenSSL::Crypto"
 )
@@ -23,6 +23,10 @@ target_include_directories(threewayintegration
 )
 
 target_link_libraries(threewayintegration PRIVATE shared_mem_lib)
+
+if(WIN32)
+    target_link_libraries(threewayintegration PRIVATE bcrypt)
+endif()
 
 if(MSVC)
   target_compile_options(threewayintegration PUBLIC /W4 /std:c17 /experimental:c11atomics)

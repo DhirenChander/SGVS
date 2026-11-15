@@ -1,5 +1,7 @@
 #ifndef FRAME_H
 
+#define FRAME_H
+
 #include <stdint.h>
 #include "encoding.h"
 

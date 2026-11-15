@@ -62,6 +62,7 @@ cmake-build-*/
 vcpkg_installed/
 conan/
 conanbuildinfo.*
+**/obj
 
 # Test / coverage
 *.gcno

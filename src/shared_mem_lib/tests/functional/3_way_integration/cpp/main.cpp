@@ -5,14 +5,17 @@
 
 void mock_processor(Frame *f, shared_mem_client::SharedMemoryFrameBuffer *fb)
 {
+    std::cout << "Starting Processor..." << std::endl;
     while (true)
     {
         if (!fb->push_frames(f, 1))
         {
             std::cout << "Buffer full, cannot push until data is pulled" << std::endl;
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            continue;
         }
 
+        std::cout << "Pushed frame" << std::endl;
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 }

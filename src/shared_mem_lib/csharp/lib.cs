@@ -47,7 +47,6 @@ public struct Encoding
     public ulong id;
     public EncodingType type;
     public EncodingDir dir;
-
     
     public bool IsAudio() {
         return SharedMemLib.IsAudioEncoding(this);
@@ -99,9 +98,26 @@ public struct GCFrame {
         unsafe {
             ulong size = 0;
             raw = SharedMemLib.FrameSizedByEncoding(enc, ref size);
-            Data = new byte[size];
+            Data = new byte[size * 4];
         }
     }
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct CriticalSection
+{
+    private IntPtr DebugInfo;      // PRTL_CRITICAL_SECTION_DEBUG
+    private int    LockCount;      // LONG
+    private int    RecursionCount; // LONG
+    private IntPtr OwningThread;   // HANDLE
+    private IntPtr LockSemaphore;  // HANDLE
+    private UIntPtr SpinCount;     // ULONG_PTR
+}
+
+[InlineArray(4)]
+public struct Padding
+{
+    private ulong _element0;
 }
 
 // Define WINDOWS in your project (<DefineConstants>) when targeting Windows,
@@ -111,9 +127,10 @@ public unsafe struct FrameBuffer
 {
     public byte ring_count;
     public void* rings; // RingBuffer*
-    public Config config;
+    public void* config; // Config*
 #if WINDOWS
-    public IntPtr encs_ev, conf_ev, conf_map;
+    public IntPtr encs_ev, conf_ev, conf_map, conf_mu;
+    public CriticalSection cs;
 #endif
 }
 
@@ -143,14 +160,15 @@ public interface IFrameBuffer {
 // Generated with Claude
 public class GCFrameBuffer : IFrameBuffer, IDisposable
 {
-    // Must be a field, not a property: `ref` can't be taken on a property.
-    private FrameBuffer fb;
+    // Need to pin frame buffer due to critical section pointers
+    private readonly FrameBuffer[] storage = GC.AllocateArray<FrameBuffer>(1, pinned: true);
+    private ref FrameBuffer fb => ref storage[0];
     private bool disposed;
 
     public GCFrameBuffer()
-    {
+    {   
         if (!SharedMemLib.NewFramebuffer(out fb))
-            throw new InvalidOperationException("Failed to create shared frame buffer.");
+            throw new InvalidOperationException("Failed to create shared frame buffer.");   
     }
 
     public bool PushFrames(Frame[] f)
