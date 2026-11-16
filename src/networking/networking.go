@@ -396,8 +396,10 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error
 				copy(gcFrame.Bytes, packet.Payload)
 				if !fb.PushFrames([]shared_mem_lib.GCFrame{gcFrame}) {
 					fmt.Println("Error pushing audio frame to shared buffer")
+					gcFrame.Close()
 					return
 				}
+				gcFrame.Close()
 			}
 		}
 	}()
@@ -408,7 +410,7 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error
 // Add way to stop sending frames?
 // Add a channel to signal something has failed?
 func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBuffer, enc shared_mem_lib.Encoding) error {
-	const timeOutMs = 10000
+	const timeOutMs = 100000
 	const maxAudioFrames = 100 // 10ms per frame -> 1 seconds
 
 	//Hard code for now
@@ -420,6 +422,10 @@ func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBu
 		for ok && err == nil {
 			var framesToSend []shared_mem_lib.GCFrame
 			ok, framesToSend = fb.BlockingPopFrames(enc, maxAudioFrames, timeOutMs) //BlockingPopFrames resizes slice to only be as long as needed
+
+			if !ok {
+				break
+			}
 
 			fmt.Println("Received frames to from processing module")
 
