@@ -3,7 +3,8 @@ package shared_mem_lib
 
 /*
 #cgo CFLAGS: -I../core/include
-#cgo LDFLAGS: -L./lib -lshared_mem_client -lcrypto
+#cgo LDFLAGS: -L./lib -lshared_mem_client
+#cgo windows LDFLAGS: -lbcrypt
 #include "shared_mem_lib_core/encoding.h"
 #include "shared_mem_lib_core/framebuff.h"
 */
