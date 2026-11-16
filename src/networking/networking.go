@@ -32,13 +32,13 @@ var ICEConfiguration = webrtc.Configuration{
 	}},
 }
 
-// Create API with adjusted timeouts
+// Webrtc API with adjusted timeouts
 var peerAPI = func() *webrtc.API {
 	settings := webrtc.SettingEngine{}
 	settings.SetICETimeouts(
-		1*time.Minute,  // disconnected timeout
-		5*time.Minute,  // failed timeout
-		20*time.Second, // keep-alive interval
+		1*time.Minute, // disconnected timeout
+		5*time.Minute, // failed timeout
+		5*time.Second, // keep-alive interval
 	)
 
 	return webrtc.NewAPI(webrtc.WithSettingEngine(settings))
@@ -427,7 +427,7 @@ func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBu
 				continue
 			}
 
-			fmt.Println("Received frames to from processing module")
+			fmt.Println("Received frames to send from processing module")
 
 			for i := 0; i < len(framesToSend); i++ {
 
