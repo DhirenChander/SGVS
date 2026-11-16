@@ -32,6 +32,18 @@ var ICEConfiguration = webrtc.Configuration{
 	}},
 }
 
+// Create API with adjusted timeouts
+var peerAPI = func() *webrtc.API {
+	settings := webrtc.SettingEngine{}
+	settings.SetICETimeouts(
+		1*time.Minute,  // disconnected timeout
+		5*time.Minute,  // failed timeout
+		20*time.Second, // keep-alive interval
+	)
+
+	return webrtc.NewAPI(webrtc.WithSettingEngine(settings))
+}()
+
 // Setting up connections
 // Switch to named return?
 // Or wrap objects together in a struct?
@@ -47,7 +59,7 @@ func generateOffer() (
 	error) {
 
 	// create a peer connection
-	pc, err := webrtc.NewPeerConnection(ICEConfiguration)
+	pc, err := peerAPI.NewPeerConnection(ICEConfiguration)
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
@@ -147,7 +159,7 @@ func generateAnswer(offerSDP string) (
 
 	error) {
 
-	pc, err := webrtc.NewPeerConnection(ICEConfiguration)
+	pc, err := peerAPI.NewPeerConnection(ICEConfiguration)
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
