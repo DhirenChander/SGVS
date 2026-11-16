@@ -1,4 +1,4 @@
-#include "screen_capture.hpp"
+#include "../../screen_capture.hpp"
 
 #include <atomic>
 #include <chrono>
