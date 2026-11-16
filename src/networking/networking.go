@@ -419,12 +419,12 @@ func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBu
 	go func() {
 		err := error(nil)
 		ok := true
-		for ok && err == nil {
+		for err == nil {
 			var framesToSend []shared_mem_lib.GCFrame
 			ok, framesToSend = fb.BlockingPopFrames(enc, maxAudioFrames, timeOutMs) //BlockingPopFrames resizes slice to only be as long as needed
 
 			if !ok {
-				break
+				continue
 			}
 
 			fmt.Println("Received frames to from processing module")
