@@ -2,34 +2,53 @@
 #include <windows.h>
 #include <bcrypt.h>
 #include <stdint.h>
+#include <string.h>
+#include <stdio.h>
+#include <inttypes.h>
+
+uint256_t zero()
+{
+    return (uint256_t){.limbs = (uint64_t[4]){0, 0, 0, 0}};
+}
+
+bool uint256_eq(uint256_t a, uint256_t b)
+{
+    return a.limbs[0] == b.limbs[0] && a.limbs[1] == b.limbs[1] && a.limbs[2] == b.limbs[2] && a.limbs[3] == b.limbs[3];
+}
+
+int write_uint256(char *buff, uint256_t val)
+{
+    return sprintf(buff, PRIu64 PRIu64 PRIu64 PRIu64, val.limbs[0], val.limbs[1], val.limbs[2], val.limbs[3]);
+}
 
 #ifdef _WIN32
-uint64_t win_generate_id()
+uint256_t win_generate_id()
 {
-    uint64_t out = 0;
+    uint256_t out = zero();
 
     // BCRYPT_USE_SYSTEM_PREFERRED_RNG allows passing NULL for the algorithm handle
     NTSTATUS status = BCryptGenRandom(
         NULL,
-        (PUCHAR)&out,
-        sizeof(uint64_t),
+        (PUCHAR)&out.limbs,
+        sizeof(uint64_t) * 4,
         BCRYPT_USE_SYSTEM_PREFERRED_RNG);
 
     if (!BCRYPT_SUCCESS(status))
     {
-        return 0;
+        return zero();
     }
 
     return out;
 }
 #endif
 
-uint64_t generate_id()
+uint256_t generate_id()
 {
+
 #ifdef _WIN32
     return win_generate_id();
 #endif
-    return 0;
+    return zero();
 }
 
 Encoding new_video_encoding(uint16_t max_bit_rate, uint16_t min_bit_rate, uint16_t frame_height, uint16_t frame_width, uint8_t frame_rate)
@@ -87,11 +106,11 @@ bool is_outgoing_encoding(Encoding enc)
 Encoding nil_encoding(void)
 {
     Encoding enc;
-    enc.id = 0;
+    enc.id = zero();
     return enc;
 }
 
 bool enc_eq(Encoding a, Encoding b)
 {
-    return a.id == b.id;
+    return uint256_eq(a.id, b.id);
 }
