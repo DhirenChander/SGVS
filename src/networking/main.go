@@ -257,7 +257,7 @@ func waitForAudioEncodingFromProcessing(fb frameBuffer) (shared_mem_lib.Encoding
 		encs, succ := fb.ReadEncodings(10)
 		if succ {
 			fb.AlignRingsToConfig()
-			fmt.Println("Got: ", len(encs), " Encodings")
+			// fmt.Println("Got: ", len(encs), " Encodings")
 			for _, v := range encs {
 				if v.IsOutgoing() && v.IsAudio() {
 					return v, nil

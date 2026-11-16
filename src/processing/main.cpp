@@ -1,6 +1,7 @@
 #include "../shared_mem_lib/cpp/shared_mem_client.hpp"
 #include "audio_processor.hpp"
 #include "audio_capture.hpp"
+#include <string>
 
 #include <iostream>
 AudioProcessor *setup_processor(shared_mem_client::SharedMemoryFrameBuffer *fb, shared_mem_client::Encoding enc)
@@ -37,8 +38,16 @@ AudioProcessor *setup_processor(shared_mem_client::SharedMemoryFrameBuffer *fb, 
     return processor;
 }
 
-int main()
+int main(int argc, char *argv[])
 {
+    if (argc < 2)
+    {
+        std::cout << "Need frontend PID to exclude" << std::endl;
+        return 0;
+    }
+
+    uint64_t fe_pid = (uint64_t)std::stoi(argv[1]);
+
     std::cout << "Running Processor..." << std::endl;
     shared_mem_client::SharedMemoryFrameBuffer fb{};
     std::cout << "Created frame buffer..." << std::endl;
