@@ -32,6 +32,8 @@ public partial class OverlayViewModel : ViewModelBase
     private readonly Action? _stopWatching;
 
     private double _volumeBeforeMute = 50;
+    
+    private readonly PcmPlayer _pcmPlayer = new();
 
     // for the XAML previewer only
     public OverlayViewModel() : this(null, true, null, null, () => Task.CompletedTask, null)
@@ -235,5 +237,19 @@ public partial class OverlayViewModel : ViewModelBase
         if (Volume > 0) _volumeBeforeMute = Volume;
         IsStreamMuted = true;
         Volume = 0;
+    }
+
+    [RelayCommand]
+    private async Task MicrophoneClicked()
+    {
+        //IsMuted = !IsMuted;
+
+        var pcmPath = Path.Combine(
+            AppContext.BaseDirectory,
+            "Assets",
+            "PCM_Sounds",
+            "metal_pipe.pcm");
+
+        await _pcmPlayer.PlayAsync(pcmPath);
     }
 }
