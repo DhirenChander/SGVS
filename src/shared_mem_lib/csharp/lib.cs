@@ -41,12 +41,33 @@ public enum Module : int
     Application,
 }
 
+/*
+typedef enum
+    {
+        START_SHARING,
+        STOP_SHARING,
+        HOST_CODE,
+        ANSWER_CODE,
+        START_HOST,
+        JOIN_CALL,
+        PARTICIPANT_JOINED,
+        PARTICIPANT_LEFT,
+        LEAVE_CALL,
+    } Operation;
+
+*/
+
 public enum Operation : int
 {
     StartSharing,
     StopSharing,
     HostCode,
-    JoinCode,
+    AnswerCode,
+    StartHost,
+    JoinCall,
+    ParticipantJoined,
+    ParticipantLeft,
+    LeaveCall
 }
 
 [InlineArray(256)]

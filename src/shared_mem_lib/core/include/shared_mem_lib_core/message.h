@@ -17,15 +17,17 @@ extern "C"
         Application,
     } Module;
 
-    // TODO: Add messages for requesting to host and when someone joins
     typedef enum
     {
         START_SHARING,
         STOP_SHARING,
         HOST_CODE,
-        JOIN_CODE,
-        // SET_SHARE_PROCESS_ID,
-        // SET_SHARE_SCREEN_ID,
+        ANSWER_CODE,
+        START_HOST,
+        JOIN_CALL,
+        PARTICIPANT_JOINED,
+        PARTICIPANT_LEFT,
+        LEAVE_CALL,
     } Operation;
 
     typedef struct
