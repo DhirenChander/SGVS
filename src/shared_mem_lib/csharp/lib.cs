@@ -109,7 +109,7 @@ public struct GCFrame {
         unsafe {
             ulong size = 0;
             raw = SharedMemLib.FrameSizedByEncoding(enc, ref size);
-            Data = new byte[size * 4];
+            Data = new byte[size];
         }
     }
 }
