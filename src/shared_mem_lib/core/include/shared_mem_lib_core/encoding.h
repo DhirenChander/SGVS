@@ -55,7 +55,8 @@ extern "C"
         EncodingDir dir;
     } Encoding;
 
-    uint256_t generate_id();
+    uint256_t generate_id(void);
+    uint256_t uint256_zero(void);
     Encoding nil_encoding(void);
     Encoding new_video_encoding(uint16_t max_bit_rate, uint16_t min_bit_rate, uint16_t frame_height, uint16_t frame_width, uint8_t frame_rate);
     Encoding new_audio_encoding(bool is_input);

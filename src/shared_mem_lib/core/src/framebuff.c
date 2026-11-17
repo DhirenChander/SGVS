@@ -459,7 +459,7 @@ bool push_message(FrameBuffer *fb, Message msg)
     slot.len = sizeof(Message);
 
     memcpy(slot.bytes, msg.data, 256);
-    memcpy(&slot.bytes[256], msg.opcode, sizeof(Operation));
+    memcpy(&slot.bytes[256], &msg.opcode, sizeof(Operation));
 
     return push(&fb->msg_chans[msg.src][msg.dest], &slot, 1);
 }
@@ -470,7 +470,7 @@ bool blocking_pop_message_from(FrameBuffer *fb, Module src, Module dst, Message 
     out.bytes = (uint8_t *)malloc(sizeof(Message));
     out.len = sizeof(Message);
 
-    uint64_t _;
+    uint32_t _;
 
     if (!blocking_pop(&fb->msg_chans[src][dst], &out, &_, 1, max_timeout))
     {
@@ -478,7 +478,7 @@ bool blocking_pop_message_from(FrameBuffer *fb, Module src, Module dst, Message 
     }
 
     memcpy(out_msg->data, out.bytes, 256);
-    memcpy(out_msg->opcode, &out.bytes[256], sizeof(Operation));
+    memcpy(&out_msg->opcode, &out.bytes[256], sizeof(Operation));
     out_msg->dest = dst;
     out_msg->src = src;
 
