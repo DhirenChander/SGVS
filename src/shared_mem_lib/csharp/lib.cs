@@ -325,11 +325,11 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
         return FinishEncodings(buffer, ok, outLen);
     }
 
-    bool PushMessage(Message msg) {
+    public bool PushMessage(Message msg) {
         return SharedMemLib.PushMessage(ref fb, msg);
     }
 
-    (Message msg bool success) BlockingPopMessages(Module src, Module dst) {
+    public (Message msg bool success) BlockingPopMessages(Module src, Module dst) {
         Message out;
         
         bool succ = SharedMemLib.BlockingPopMessages(ref fb, src, dst, ref out);
