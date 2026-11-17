@@ -33,7 +33,7 @@ public sealed class NetworkingProcess : INetworkingProcess
             StandardInputEncoding = new UTF8Encoding(false), // no BOM, it would corrupt the first command
             StandardOutputEncoding = Encoding.UTF8,
         };
-        info.ArgumentList.Add("ipc");
+        // info.ArgumentList.Add("ipc");
 
         _process = new Process { StartInfo = info, EnableRaisingEvents = true };
         _process.Start();

@@ -52,19 +52,19 @@ public interface IMeetingService : INotifyPropertyChanged
     ReadOnlyObservableCollection<Participant> Members { get; }
 
     // start a call. false if it didn't work, Error says why
-    Task<bool> HostAsync();
+    bool Host();
 
     // join with the host's connection string. false if it didn't work, Error says why.
     // on success Code is the reply to send back to the host
-    Task<bool> JoinAsync(string hostCode);
+    bool Join(string hostCode);
 
     // hosting: take the guest's reply. false if it didn't work, Error says why
-    Task<bool> AcceptReplyAsync(string replyCode);
+    bool AcceptReply(string replyCode);
 
     // starts sharing; Self.IsStreamer turns true once it's live
-    Task StartStreamAsync(ShareSource source);
+    void StartStream(ShareSource source);
 
-    Task StopStreamAsync();
+    void StopStream();
 
-    Task LeaveAsync();
+    // Task LeaveAsync();
 }

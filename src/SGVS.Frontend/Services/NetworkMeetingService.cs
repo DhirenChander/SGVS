@@ -1,8 +1,16 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Reflection;
+using System.Text;
+
+
+//using System.Reflection;
+//using Avalonia.Platform.Surfaces;
 using CommunityToolkit.Mvvm.ComponentModel;
 using SGVS.Frontend.Models;
 using SGVS.Frontend.Services.Networking;
-using SGVS.Frontend.Services.SharedMemory;
+
+using SharedMemLibrary;
 
 namespace SGVS.Frontend.Services;
 
@@ -20,12 +28,12 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
     private readonly TimeSpan _setupTimeout;
 
     private readonly Func<INetworkingProcess> _startProcess;
-    private readonly Func<ISharedMemoryBridge> _openSharedMemory;
+    private readonly Func<IFrameBuffer> _openSharedMemory;
     private readonly Action<Action> _post;
     private readonly ObservableCollection<Participant> _members = [];
 
     private INetworkingProcess? _process;
-    private ISharedMemoryBridge? _sharedMemory;
+    private IFrameBuffer? _sharedMemory;
 
     // the host/join/accept the networking module still owes an answer to. completes true on success
     private TaskCompletionSource<bool>? _pending;
@@ -37,7 +45,7 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
     public NetworkMeetingService(
         string selfName,
         Func<INetworkingProcess> startProcess,
-        Func<ISharedMemoryBridge> openSharedMemory,
+        Func<IFrameBuffer> openSharedMemory,
         Action<Action> post,
         TimeSpan? setupTimeout = null)
     {
@@ -63,46 +71,23 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
 
     public ReadOnlyObservableCollection<Participant> Members { get; }
 
-    public Task<bool> HostAsync() =>
-        Setup("offer", NetworkingCommand.Host(Self.Name), "Could not start the meeting", isHost: true);
+    public bool Host() =>
+        Setup("Could not start the meeting", isHost: true, hostCode: "");
 
-    public Task<bool> JoinAsync(string hostCode)
+    public bool Join(string hostCode) =>
+         Setup("Could not join the meeting", isHost: false, hostCode: hostCode.Trim());
+
+    public bool AcceptReply(string replyCode)
     {
-        if (string.IsNullOrWhiteSpace(hostCode))
-        {
-            Error = "Paste the connection string from the host first.";
-            return Task.FromResult(false);
-        }
-
-        return Setup("answer", NetworkingCommand.Join(Self.Name, hostCode.Trim()), "Could not join the meeting", isHost: false);
+        return _sharedMemory.PushMessage(new(Encoding.UTF8.GetBytes(replyCode), Module.App, Module.Network, Operation.JoinCode));
     }
 
-    public Task<bool> AcceptReplyAsync(string replyCode)
-    {
-        if (State != CallState.WaitingForReply || _process is null)
-        {
-            Error = "There is no meeting waiting for a reply.";
-            return Task.FromResult(false);
-        }
-        if (string.IsNullOrWhiteSpace(replyCode))
-        {
-            Error = "Paste the reply from the guest first.";
-            return Task.FromResult(false);
-        }
-
-        Error = null;
-        _process.Send(NetworkingCommand.Accept(replyCode.Trim()));
-        // accept has no event of its own: success shows up as a state change, a bad reply as an error event.
-        // so true here only means it was sent, the caller watches State and Error for the outcome
-        return Task.FromResult(true);
-    }
-
-    public async Task StartStreamAsync(ShareSource source)
+    public void StartStream(ShareSource source)
     {
         try
         {
-            _sharedMemory ??= _openSharedMemory();
-            _sharedMemory.SetSharingVideo(true);
+            _sharedMemory ??= new GCFrameBuffer();
+            _sharedMemory.PushMessage(new(new(0x0), Module.App, Module.Network, Operation.StartSharing));
         }
         catch (Exception e) when (e is InvalidOperationException or DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
@@ -111,22 +96,18 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         }
 
         Self.IsStreamer = true;
-        _process?.Send(NetworkingCommand.Stream(true));
-        await Task.CompletedTask;
     }
 
-    public async Task StopStreamAsync()
+    public void StopStream()
     {
         Self.IsStreamer = false;
         Self.StreamPreview = null;
 
-        try { _sharedMemory?.SetSharingVideo(false); }
+        try { _sharedMemory?.PushMessage(new(new(0x0), Module.App, Module.Network, Operation.StopSharing)); }
         catch (Exception e) when (e is InvalidOperationException) { Error = "Could not update the shared memory: " + e.Message; }
-
-        _process?.Send(NetworkingCommand.Stream(false));
-        await Task.CompletedTask;
     }
 
+    /* TODO: Set up events in shared memory library to allow for leaving meetings
     public async Task LeaveAsync()
     {
         FailPending();
@@ -148,10 +129,11 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
 
         State = CallState.Ended;
         await Task.CompletedTask;
-    }
+    }*/
 
-    // starts the process if it isn't running, sends the command, and waits for the event that answers it
-    private async Task<bool> Setup(string answerEvent, NetworkingCommand command, string failurePrefix, bool isHost)
+    // starts the process if it isn't running
+    // called when starting or joining a meeting
+    private bool Setup(string failurePrefix, bool isHost, string hostCode)
     {
         if (State is not (CallState.Idle or CallState.Ended) || _pending is not null)
         {
@@ -164,7 +146,7 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
 
         try
         {
-            _process = _startProcess();
+            _process = _startProcess(isHost);
         }
         catch (Exception e) when (e is InvalidOperationException or IOException or System.ComponentModel.Win32Exception or FileNotFoundException)
         {
@@ -175,20 +157,31 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         _process.EventReceived += OnEvent;
         _process.Exited += OnExited;
 
-        var pending = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        /*var pending = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending = pending;
         _pendingEvent = answerEvent;
-        _process.Send(command);
+        _process.Send(command);*/
 
-        var finished = await Task.WhenAny(pending.Task, Task.Delay(_setupTimeout));
-        if (finished != pending.Task)
+        //var finished = await Task.WhenAny(pending.Task, Task.Delay(_setupTimeout));
+        _sharedMemory ??= new GCFrameBuffer();
+
+        if (isHost)
+        {
+            _sharedMemory.PushMessage(new(new(0x0), Module.App, Module.Network, Operation.HostCode));
+        }
+        else
+        {
+            _sharedMemory.PushMessage(new(Encoding.UTF8.GetBytes(hostCode), Module.App, Module.Network, Operation.JoinCode));
+        }
+
+        /*if (finished != pending.Task)
         {
             Error = $"{failurePrefix}: the networking module did not respond.";
             FailPending();
             return false;
-        }
+        }*/
 
-        return await pending.Task;
+        return true; //await pending.Task;
     }
 
     private void OnEvent(NetworkingEvent evt) => _post(() => Handle(evt));
@@ -198,11 +191,21 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         if (_process is null) return; // we shut it down ourselves
         Error = "The networking module stopped unexpectedly.";
         State = CallState.Ended;
-        FailPending();
+        //FailPending();
     });
 
-    private void Handle(NetworkingEvent evt)
+    private void Handle(Operation op)
     {
+        switch (op)
+        {
+            case StartSharing:
+            case StopSharing:
+            case HostCode:
+            case JoinCode:
+            default:
+                Console.WriteLine("Handle for operation not implemented");
+        }
+        /*
         switch (evt.Event)
         {
             case "offer" when evt.Code is not null:
@@ -246,9 +249,10 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
                 Error = evt.Message ?? "Something went wrong.";
                 FailPending();
                 break;
-        }
+        }*/
     }
 
+    /*
     private void OnConnectionState(string? state)
     {
         switch (state)
@@ -264,8 +268,9 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
                 State = CallState.Ended;
                 break;
         }
-    }
+    }*/
 
+    /*
     private void CompletePending(string forEvent, bool success)
     {
         if (_pending is null || _pendingEvent != forEvent) return;
@@ -279,5 +284,5 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         var pending = _pending;
         _pending = null;
         pending?.TrySetResult(false);
-    }
+    }*/
 }

@@ -12,14 +12,11 @@ extern "C"
 
     typedef struct
     {
-<<<<<<< HEAD
-        == == == =
-                     uint64_t limbs[4];
+        uint64_t limbs[4];
     } uint256_t;
 
     typedef struct
     {
->>>>>>> feat/shared-mem-client
         // Separate values for min and max bit rates to allow for selection of capped VBR (max > min) or CBR (max == min)
         uint16_t max_bit_rate;
         uint16_t min_bit_rate;
