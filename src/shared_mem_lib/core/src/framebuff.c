@@ -302,7 +302,9 @@ bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count)
 
     if (rb_ind == -1)
     {
-        printf("No ring buffer present for this encoding: %" PRIu64 "\n", f->encoding.id);
+        char id_str[80];
+        write_uint256(id_str, f->encoding.id);
+        printf("No ring buffer present for this encoding: %s\n", id_str);
         return false;
     }
 
