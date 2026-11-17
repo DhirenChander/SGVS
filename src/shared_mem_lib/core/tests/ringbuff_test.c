@@ -39,7 +39,7 @@ void test_ringbuff_push(void)
     for (int i = 0; i < case_count; i++)
     {
         RingBuffer rb;
-        rb.id = i + 0x1390289301 % 198023;
+        rb.id = generate_id();
         TEST_ASSERT(open_ring(&rb, cases[i].size, cases[i].len + 1));
 
         TEST_ASSERT(push(&rb, cases[i].data, cases[i].len));
@@ -81,7 +81,7 @@ void test_ringbuff_try_pop(void)
     for (int i = 0; i < case_count; i++)
     {
         RingBuffer rb;
-        rb.id = i + 0x1391419301 % 1234023;
+        rb.id = generate_id();
         TEST_ASSERT(open_ring(&rb, cases[i].size, cases[i].len + 1));
 
         TEST_ASSERT(push(&rb, cases[i].data, cases[i].len));

@@ -16,6 +16,7 @@
 #include "frame.h"
 #include "ringbuff.h"
 #include "encoding.h"
+#include "message.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -26,45 +27,42 @@ extern "C"
 #define FRAMEBUFF_H
 
 #define MAX_ENCODINGS 10
+#define MSG_EV_COUNT 3
 
-    // TODO: Add audio input field
-    typedef struct
-    {
-        Encoding encodings[MAX_ENCODINGS];
-        Encoding front_end_video;
-        uint32_t video_selector; // PID when isProcess is true, Screen ID when isProcess is false
-        bool is_process;
-        bool sharing_screen;
-    } Config;
+        // TODO: Add audio input field
+        typedef struct
+        {
+                Encoding encodings[MAX_ENCODINGS];
+        } Config;
 
-    typedef struct
-    {
-        uint8_t ring_count;
-        RingBuffer *rings;
-        Config *config; // Used to hold data about active encodings
+        typedef struct
+        {
+                RingBuffer msg_chans[MSG_EV_COUNT][MSG_EV_COUNT];
+                RingBuffer *rings;
+                Config *config; // Used to hold data about active encodings
 #ifdef _WIN32
-        // Encs_ev is using for encoding updates, conf_ev is used for any other config updates
-        HANDLE encs_ev, conf_ev, conf_map;
+                // Encs_ev is using for encoding updates, msg_evs is used for any other config updates
+                HANDLE encs_ev, conf_map, conf_mu;
+                CRITICAL_SECTION cs;
 #endif
-    } FrameBuffer;
+                uint8_t ring_count;
+        } FrameBuffer;
 
-    bool new_framebuffer(FrameBuffer *out);
-    void free_framebuffer(FrameBuffer *fb);
-    bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count);
-    bool try_pop_frames(FrameBuffer *fb, Encoding encoding, Frame *out, uint32_t *out_count, uint32_t max_frame_count);
-    bool blocking_pop_frames(FrameBuffer *fb, Encoding encoding, Frame *out, uint32_t *out_count, uint32_t max_frame_count, uint32_t max_timeout);
-    bool request_encoding(FrameBuffer *fb, Encoding encoding);
-    bool remove_encoding(FrameBuffer *fb, Encoding encoding);
-    bool blocking_read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len, uint32_t max_timeout);
-    bool align_rings_to_config(FrameBuffer *fb);
-    // Config methods
-    void set_share_video(FrameBuffer *fb, bool v);
-    bool get_sharing_video(FrameBuffer *fb);
-    void set_front_end_encoding(FrameBuffer *fb, Encoding enc);
-    Encoding get_front_end_encoding(FrameBuffer *fb);
+        bool new_framebuffer(FrameBuffer *out);
+        void free_framebuffer(FrameBuffer *fb);
+        bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count);
+        bool try_pop_frames(FrameBuffer *fb, Encoding encoding, Frame *out, uint32_t *out_count, uint32_t max_frame_count);
+        bool blocking_pop_frames(FrameBuffer *fb, Encoding encoding, Frame *out, uint32_t *out_count, uint32_t max_frame_count, uint32_t max_timeout);
+        bool request_encoding(FrameBuffer *fb, Encoding encoding);
+        bool remove_encoding(FrameBuffer *fb, Encoding encoding);
+        bool blocking_read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len, uint32_t max_timeout);
+        bool align_rings_to_config(FrameBuffer *fb);
 
-    // TODO: Fix signalling on encodings and hide this method
-    bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len);
+        // TODO: Fix signalling on encodings and hide this method
+        bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len);
+
+        bool push_message(FrameBuffer *fb, Message msg);
+        bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_msg);
 
 #ifdef __cplusplus
 }

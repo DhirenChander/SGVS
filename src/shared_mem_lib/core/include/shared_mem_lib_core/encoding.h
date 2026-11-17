@@ -12,6 +12,14 @@ extern "C"
 
     typedef struct
     {
+<<<<<<< HEAD
+        == == == =
+                     uint64_t limbs[4];
+    } uint256_t;
+
+    typedef struct
+    {
+>>>>>>> feat/shared-mem-client
         // Separate values for min and max bit rates to allow for selection of capped VBR (max > min) or CBR (max == min)
         uint16_t max_bit_rate;
         uint16_t min_bit_rate;
@@ -45,11 +53,13 @@ extern "C"
             AudioEncoding audio_enc;
         } data;
 
-        uint64_t id;
+        uint256_t id;
         EncodingType type;
         EncodingDir dir;
     } Encoding;
 
+    uint256_t generate_id(void);
+    uint256_t uint256_zero(void);
     Encoding nil_encoding(void);
     Encoding new_video_encoding(uint16_t max_bit_rate, uint16_t min_bit_rate, uint16_t frame_height, uint16_t frame_width, uint8_t frame_rate);
     Encoding new_audio_encoding(bool is_input);
@@ -60,6 +70,8 @@ extern "C"
     bool is_incoming_encoding(Encoding enc);
     bool is_outgoing_encoding(Encoding enc);
     bool enc_eq(Encoding a, Encoding b);
+    bool uint256_eq(uint256_t a, uint256_t b);
+    int write_uint256(char *buff, uint256_t val);
 
 #ifdef __cplusplus
 }

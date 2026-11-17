@@ -16,6 +16,8 @@ type Encoding C.Encoding
 type Config C.Config
 type Frame C.Frame
 type FrameBuffer C.FrameBuffer
+type Message C.Message
+type Module C.Module
 
 type GCFrame struct {
 	Raw    *Frame
@@ -110,15 +112,6 @@ func (fb *FrameBuffer) RemoveEncoding(enc Encoding) bool {
 	return bool(C.remove_encoding(fb.c(), C.Encoding(enc)))
 }
 
-func (fb *FrameBuffer) SetShareVideo(v bool) {
-	C.set_share_video(fb.c(), C.bool(v))
-}
-
-// bool get_sharing_video(FrameBuffer *fb);
-func (fb *FrameBuffer) GetSharingVideo() bool {
-	return bool(C.get_sharing_video(fb.c()))
-}
-
 // bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len);
 func (fb *FrameBuffer) ReadEncodings(maxLen uint8) ([]Encoding, bool) {
 	encs := make([]Encoding, maxLen)
@@ -129,6 +122,20 @@ func (fb *FrameBuffer) ReadEncodings(maxLen uint8) ([]Encoding, bool) {
 	}
 
 	return encs[:outLen], true
+}
+
+// bool push_message(FrameBuffer *fb, Message msg);
+func (fb *FrameBuffer) PushMessage(msg Message) bool {
+	return bool(C.push_message(fb.c(), C.Message(msg)))
+}
+
+// bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_msg);
+func (fb *FrameBuffer) BlockingPopMessage(src, dst Module) (Message, bool) {
+	var out Message
+
+	res := bool(C.blocking_pop_message(fb.c(), C.Module(src), C.Module(dst), (*C.Message)(&out)))
+
+	return out, res
 }
 
 func FrameSizedByEncoding(enc Encoding) (Frame, uint64) {

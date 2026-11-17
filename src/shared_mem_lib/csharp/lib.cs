@@ -33,6 +33,21 @@ public enum EncodingDir : int {
     Outgoing
 }
 
+public enum Module : int
+{
+    Processor,
+    Network,
+    Application,
+}
+
+public enum Operation : int
+{
+    StartSharing,
+    StopSharing,
+    HostCode,
+    JoinCode,
+} 
+
 [StructLayout(LayoutKind.Explicit)]
 public struct EncodingData
 {
@@ -47,7 +62,6 @@ public struct Encoding
     public ulong id;
     public EncodingType type;
     public EncodingDir dir;
-
     
     public bool IsAudio() {
         return SharedMemLib.IsAudioEncoding(this);
@@ -75,10 +89,6 @@ public unsafe struct Config
 {
     public const int MaxEncodings = 10;
     public Encoding* encodings;
-    public Encoding front_end_video;
-    public uint video_selector; // PID when is_process, Screen ID otherwise
-    public byte is_process;     // C bool
-    public byte sharing_screen; // C bool
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -104,17 +114,36 @@ public struct GCFrame {
     }
 }
 
+[StructLayout(LayoutKind.Sequential)]
+public struct CriticalSection
+{
+    private IntPtr DebugInfo;      // PRTL_CRITICAL_SECTION_DEBUG
+    private int    LockCount;      // LONG
+    private int    RecursionCount; // LONG
+    private IntPtr OwningThread;   // HANDLE
+    private IntPtr LockSemaphore;  // HANDLE
+    private UIntPtr SpinCount;     // ULONG_PTR
+}
+
+[InlineArray(9)]
+public struct MsgChans
+{
+    private RingBuffer buff;
+}
+
 // Define WINDOWS in your project (<DefineConstants>) when targeting Windows,
 // so the layout matches the C struct's #ifdef _WIN32 fields.
 [StructLayout(LayoutKind.Sequential)]
 public unsafe struct FrameBuffer
 {
-    public byte ring_count;
+    public MsgChans msg_chns; 
     public void* rings; // RingBuffer*
-    public Config config;
+    public void* config; // Config*
 #if WINDOWS
-    public IntPtr encs_ev, conf_ev, conf_map;
+    public IntPtr encs_ev, conf_map, conf_mu;
+    public CriticalSection cs;
 #endif
+    public byte ring_count;
 }
 
 /*
@@ -128,6 +157,8 @@ bool remove_encoding(FrameBuffer *fb, Encoding encoding);
 bool blocking_read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len, uint32_t max_timeout);
 bool align_rings_to_config(FrameBuffer *fb);
 bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len);
+bool push_message(FrameBuffer *fb, Message msg);
+bool blocking_pop_message(FrameBuffer *fb, Module dst, Message *out_msg);
 */
 public interface IFrameBuffer {
     bool PushFrames(Frame[] f);
@@ -138,23 +169,22 @@ public interface IFrameBuffer {
     (Encoding[] encodings, bool success) BlockingReadEncodings(uint max_len, uint max_timeout);
     bool AlignRingsToConfig();
     (Encoding[] encodings, bool success) ReadEncodings(uint max_len);
-    void SetShareVideo(bool sharing);
-    bool GetSharingVideo();
-    void SetFrontEndEncoding(Encoding encoding);
-    Encoding GetFrontEndEncoding();
+    bool PushMessage(Message msg);
+    (Message msg bool success) BlockingPopMessages(Module src, Module dst);
 }
 
 // Generated with Claude
 public class GCFrameBuffer : IFrameBuffer, IDisposable
 {
-    // Must be a field, not a property: `ref` can't be taken on a property.
-    private FrameBuffer fb;
+    // Need to pin frame buffer due to critical section pointers
+    private readonly FrameBuffer[] storage = GC.AllocateArray<FrameBuffer>(1, pinned: true);
+    private ref FrameBuffer fb => ref storage[0];
     private bool disposed;
 
     public GCFrameBuffer()
-    {
+    {   
         if (!SharedMemLib.NewFramebuffer(out fb))
-            throw new InvalidOperationException("Failed to create shared frame buffer.");
+            throw new InvalidOperationException("Failed to create shared frame buffer.");   
     }
 
     public bool PushFrames(Frame[] f)
@@ -295,30 +325,16 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
         return FinishEncodings(buffer, ok, outLen);
     }
 
-    // ---- Config ----
-
-    public void SetShareVideo(bool sharing)
-    {
-        ThrowIfDisposed();
-        SharedMemLib.SetShareVideo(ref fb, sharing);
+    public bool PushMessage(Message msg) {
+        return SharedMemLib.PushMessage(ref fb, msg);
     }
 
-    public bool GetSharingVideo()
-    {
-        ThrowIfDisposed();
-        return SharedMemLib.GetSharingVideo(ref fb);
-    }
+    public (Message msg bool success) BlockingPopMessages(Module src, Module dst) {
+        Message out;
+        
+        bool succ = SharedMemLib.BlockingPopMessages(ref fb, src, dst, ref out);
 
-    public void SetFrontEndEncoding(Encoding encoding)
-    {
-        ThrowIfDisposed();
-        SharedMemLib.SetFrontEndEncoding(ref fb, encoding);
-    }
-
-    public Encoding GetFrontEndEncoding()
-    {
-        ThrowIfDisposed();
-        return SharedMemLib.GetFrontEndEncoding(ref fb);
+        return (out, succ);
     }
 
     // ---- Helpers ----
@@ -436,21 +452,6 @@ public static unsafe class SharedMemLib
     [return: MarshalAs(UnmanagedType.U1)]
     internal static extern bool ReadEncodings(ref FrameBuffer fb, Encoding* output, out byte outLen, byte maxLen);
 
-    // ---- Config functions ----
-
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "set_share_video")]
-    internal static extern void SetShareVideo(ref FrameBuffer fb, [MarshalAs(UnmanagedType.U1)] bool sharing);
-
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "get_sharing_video")]
-    [return: MarshalAs(UnmanagedType.U1)]
-    internal static extern bool GetSharingVideo(ref FrameBuffer fb);
-
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "set_front_end_encoding")]
-    internal static extern void SetFrontEndEncoding(ref FrameBuffer fb, Encoding enc);
-
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "get_front_end_encoding")]
-    internal static extern Encoding GetFrontEndEncoding(ref FrameBuffer fb);
-
     // ---- Encoding functions ----
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "new_video_encoding")]
     public static extern Encoding NewVideoEncoding(ushort maxBitRate, ushort minBitRate, ushort frameHeight, ushort frameWidth, byte frameRate);
@@ -483,4 +484,12 @@ public static unsafe class SharedMemLib
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "enc_eq")]
     [return: MarshalAs(UnmanagedType.U1)]
     public static extern bool EncEq(Encoding a, Encoding b);
+
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "push_message")]
+    [return: MarshalAs(UnmanagedType.U1)]
+    public static extern bool PushMessage(ref fb, Message msg);
+
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "blocking_pop_frames")]
+    [return: MarshalAs(UnmanagedType.U1)]
+    public static extern bool BlockingPopFrames(ref fb, Module dst, ref out_msg);
 }
