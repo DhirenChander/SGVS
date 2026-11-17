@@ -17,6 +17,7 @@ extern "C"
         Application,
     } Module;
 
+    // TODO: Add messages for requesting to host and when someone joins
     typedef enum
     {
         START_SHARING,
