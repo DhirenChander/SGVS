@@ -1,9 +1,59 @@
+using System.Collections.Concurrent;
 using Concentus.Enums;
 using Concentus.Structs;
+using SGVS.Frontend.Services.Audio;
 using SharedMemLibrary;
 using Encoding = SharedMemLibrary.Encoding;
 
 namespace SGVS.Frontend.Tests.Support;
+
+// Packets queued by the test. Safe to fill from the test while the pump reads on its own thread.
+public sealed class FakeAudioSource : IIncomingAudioSource
+{
+    private readonly BlockingCollection<byte[]> _packets = new();
+
+    public Exception? ThrowNext { get; set; }
+
+    public void Push(byte[] packet) => _packets.Add(packet);
+
+    public bool TryReadPacket(TimeSpan timeout, out ReadOnlyMemory<byte> packet)
+    {
+        if (ThrowNext is { } error)
+        {
+            ThrowNext = null;
+            throw error;
+        }
+        bool got = _packets.TryTake(out var bytes, timeout);
+        packet = got ? bytes : default;
+        return got;
+    }
+}
+
+// Copies every chunk it gets, like the real player must.
+public sealed class FakePcmSink : IPcmSink
+{
+    private readonly List<byte[]> _chunks = [];
+
+    public bool ThrowOnce { get; set; }
+
+    public List<byte[]> Chunks
+    {
+        get { lock (_chunks) return [.. _chunks]; }
+    }
+
+    public void Enqueue(ReadOnlySpan<byte> pcm)
+    {
+        if (ThrowOnce)
+        {
+            ThrowOnce = false;
+            throw new InvalidOperationException("player failed");
+        }
+        lock (_chunks) _chunks.Add(pcm.ToArray());
+    }
+
+    public bool WaitForChunks(int count, TimeSpan timeout) =>
+        SpinWait.SpinUntil(() => { lock (_chunks) return _chunks.Count >= count; }, timeout);
+}
 
 // Shared memory without the native library: a config of encodings and one queue of frames.
 // Only the members SharedMemoryAudioSource uses work; the rest throw.
