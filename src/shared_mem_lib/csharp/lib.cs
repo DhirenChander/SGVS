@@ -28,7 +28,8 @@ public enum EncodingType : int
     Audio
 }
 
-public enum EncodingDir : int {
+public enum EncodingDir : int
+{
     Incoming,
     Outgoing
 }
@@ -40,13 +41,47 @@ public enum Module : int
     Application,
 }
 
+/*
+typedef enum
+    {
+        START_SHARING,
+        STOP_SHARING,
+        HOST_CODE,
+        ANSWER_CODE,
+        START_HOST,
+        JOIN_CALL,
+        PARTICIPANT_JOINED,
+        PARTICIPANT_LEFT,
+        LEAVE_CALL,
+    } Operation;
+
+*/
+
 public enum Operation : int
 {
     StartSharing,
     StopSharing,
     HostCode,
-    JoinCode,
-} 
+    AnswerCode,
+    StartHost,
+    JoinCall,
+    ParticipantJoined,
+    ParticipantLeft,
+    LeaveCall
+}
+
+[InlineArray(256)]
+public struct MsgData
+{
+    private byte _element0;
+}
+
+public struct Message
+{
+    MsgData data;
+    Module src, dest;
+    Operation opcode;
+};
 
 [InlineArray(256)]
 public struct MsgData
@@ -75,24 +110,29 @@ public struct Encoding
     public ulong id;
     public EncodingType type;
     public EncodingDir dir;
-    
-    public bool IsAudio() {
+
+    public bool IsAudio()
+    {
         return SharedMemLib.IsAudioEncoding(this);
     }
 
-    public bool IsVideo() {
+    public bool IsVideo()
+    {
         return SharedMemLib.IsVideoEncoding(this);
     }
 
-    public bool IsIncoming() {
+    public bool IsIncoming()
+    {
         return SharedMemLib.IsIncomingEncoding(this);
     }
 
-    public bool IsOutgoing() {
+    public bool IsOutgoing()
+    {
         return SharedMemLib.IsOutgoingEncoding(this);
     }
 
-    public bool Equals(Encoding enc) {
+    public bool Equals(Encoding enc)
+    {
         return SharedMemLib.EncEq(this, enc);
     }
 }
@@ -113,13 +153,16 @@ public unsafe struct Frame
 }
 
 // Safe Verion of Unsafe Frame
-public struct GCFrame {
+public struct GCFrame
+{
     public Frame raw;
     public required byte[] Data;
 
     [SetsRequiredMembers]
-    public GCFrame(Encoding enc) {
-        unsafe {
+    public GCFrame(Encoding enc)
+    {
+        unsafe
+        {
             ulong size = 0;
             raw = SharedMemLib.FrameSizedByEncoding(enc, ref size);
             Data = new byte[size];
@@ -131,12 +174,27 @@ public struct GCFrame {
 public struct CriticalSection
 {
     private IntPtr DebugInfo;      // PRTL_CRITICAL_SECTION_DEBUG
-    private int    LockCount;      // LONG
-    private int    RecursionCount; // LONG
+    private int LockCount;      // LONG
+    private int RecursionCount; // LONG
     private IntPtr OwningThread;   // HANDLE
     private IntPtr LockSemaphore;  // HANDLE
     private UIntPtr SpinCount;     // ULONG_PTR
 }
+
+[InlineArray(4)]
+public struct uint256
+{
+    private ulong first;
+}
+
+unsafe struct RingBuffer
+{
+    void* ring, lens, data;
+    uint256 id;
+#if WINDOWS
+    IntPtr map, ev;
+#endif
+};
 
 [InlineArray(9)]
 public struct MsgChans
@@ -149,7 +207,7 @@ public struct MsgChans
 [StructLayout(LayoutKind.Sequential)]
 public unsafe struct FrameBuffer
 {
-    public MsgChans msg_chns; 
+    public MsgChans msg_chns;
     public void* rings; // RingBuffer*
     public void* config; // Config*
 #if WINDOWS
@@ -173,7 +231,8 @@ bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t ma
 bool push_message(FrameBuffer *fb, Message msg);
 bool blocking_pop_message(FrameBuffer *fb, Module dst, Message *out_msg);
 */
-public interface IFrameBuffer {
+public interface IFrameBuffer
+{
     bool PushFrames(Frame[] f);
     (GCFrame[] frames, bool success) TryPopFrames(Encoding encoding, uint max_frame_count);
     (GCFrame[] frames, bool success) BlockingPopFrames(Encoding encoding, uint max_frame_count, uint max_timeout);
@@ -183,7 +242,7 @@ public interface IFrameBuffer {
     bool AlignRingsToConfig();
     (Encoding[] encodings, bool success) ReadEncodings(uint max_len);
     bool PushMessage(Message msg);
-    (Message msg bool success) BlockingPopMessages(Module src, Module dst);
+    (Message msg, bool success) BlockingPopMessages(Module src, Module dst);
 }
 
 // Generated with Claude
@@ -195,9 +254,9 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
     private bool disposed;
 
     public GCFrameBuffer()
-    {   
+    {
         if (!SharedMemLib.NewFramebuffer(out fb))
-            throw new InvalidOperationException("Failed to create shared frame buffer.");   
+            throw new InvalidOperationException("Failed to create shared frame buffer.");
     }
 
     public bool PushFrames(Frame[] f)
@@ -206,7 +265,7 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
         if (f == null) throw new ArgumentNullException(nameof(f));
         if (f.Length == 0) return true;
 
-        unsafe 
+        unsafe
         {
             fixed (Frame* ptr = f)
             {
@@ -242,7 +301,7 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
                 pinned++;
 
                 raws[i] = gcFrames[i].raw;
-                unsafe 
+                unsafe
                 {
                     SharedMemLib.SetFrameData(ref raws[i], (byte*)handles[i].AddrOfPinnedObject());
                 }
@@ -250,7 +309,7 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
 
             bool ok;
             uint count;
-            unsafe 
+            unsafe
             {
                 fixed (Frame* ptr = raws)
                 {
@@ -301,7 +360,7 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
         var buffer = new Encoding[maxLen];
         bool ok;
         byte outLen;
-        unsafe 
+        unsafe
         {
             fixed (Encoding* ptr = buffer)
             {
@@ -338,16 +397,18 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
         return FinishEncodings(buffer, ok, outLen);
     }
 
-    public bool PushMessage(Message msg) {
+    public bool PushMessage(Message msg)
+    {
         return SharedMemLib.PushMessage(ref fb, msg);
     }
 
-    public (Message msg bool success) BlockingPopMessages(Module src, Module dst) {
-        Message out;
-        
-        bool succ = SharedMemLib.BlockingPopMessages(ref fb, src, dst, ref out);
+    public (Message msg, bool success) BlockingPopMessages(Module src, Module dst)
+    {
+        Message out_msg = new Message();
 
-        return (out, succ);
+        bool succ = SharedMemLib.BlockingPopMessages(ref fb, src, dst, ref out_msg);
+
+        return (out_msg, succ);
     }
 
     // ---- Helpers ----
@@ -500,9 +561,9 @@ public static unsafe class SharedMemLib
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "push_message")]
     [return: MarshalAs(UnmanagedType.U1)]
-    public static extern bool PushMessage(ref fb, Message msg);
+    public static extern bool PushMessage(ref FrameBuffer fb, Message msg);
 
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "blocking_pop_frames")]
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "blocking_pop_messages")]
     [return: MarshalAs(UnmanagedType.U1)]
-    public static extern bool BlockingPopFrames(ref fb, Module dst, ref out_msg);
+    public static extern bool BlockingPopMessages(ref FrameBuffer fb, Module src, Module dst, ref Message out_msg);
 }

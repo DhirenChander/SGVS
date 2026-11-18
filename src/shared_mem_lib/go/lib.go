@@ -18,6 +18,7 @@ type Frame C.Frame
 type FrameBuffer C.FrameBuffer
 type Message C.Message
 type Module C.Module
+type Operation C.Operation
 
 type GCFrame struct {
 	Raw    *Frame
