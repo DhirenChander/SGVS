@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"reflect"
 	"runtime"
 )
@@ -312,16 +311,18 @@ func (msg *Message) UnmarshallMessage(argTypes ...reflect.Type) ([]any, error) {
 		}
 
 		if t.Kind() == reflect.String {
-			var length uint16
-			if err := binary.Read(r, binary.NativeEndian, &length); err != nil {
-				return nil, fmt.Errorf("argument %d (%v): reading string length: %w", n, t, err)
+			var sb []byte
+			for {
+				b, err := r.ReadByte()
+				if err != nil {
+					return nil, fmt.Errorf("argument %d (%v): missing null terminator: %w", n, t, err)
+				}
+				if b == 0 {
+					break
+				}
+				sb = append(sb, b)
 			}
-			buf := make([]byte, length)
-			if _, err := io.ReadFull(r, buf); err != nil {
-				return nil, fmt.Errorf("argument %d (%v): reading string data: %w", n, t, err)
-			}
-			// Convert so named string types (type Foo string) round-trip correctly.
-			out = append(out, reflect.ValueOf(string(buf)).Convert(t).Interface())
+			out = append(out, reflect.ValueOf(string(sb)).Convert(t).Interface())
 			continue
 		}
 
