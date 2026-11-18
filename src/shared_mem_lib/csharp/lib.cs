@@ -83,19 +83,6 @@ public struct Message
     Operation opcode;
 };
 
-[InlineArray(256)]
-public struct MsgData
-{
-    private byte _element0;
-}
-
-public struct Message
-{
-    MsgData data;
-    Module src, dest;
-    Operation opcode;
-};
-
 [StructLayout(LayoutKind.Explicit)]
 public struct EncodingData
 {
