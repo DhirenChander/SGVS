@@ -12,6 +12,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
+	"reflect"
 	"runtime"
 )
 
@@ -290,4 +292,45 @@ func NewMessageStr(src, dst Module, opcode Operation, data string) (Message, err
 	msg.data[255] = 0
 
 	return msg, nil
+}
+
+// Generated with claude, returns an array of any values matching the passed arg types
+func (msg *Message) UnmarshallMessage(argTypes ...reflect.Type) ([]any, error) {
+	// Copy the cgo array into a Go byte slice (adjust if msg.data is already []byte).
+	raw := make([]byte, len(msg.data))
+	for i, b := range msg.data {
+		raw[i] = byte(b)
+	}
+	// If the C struct has a length field, trim it here: raw = raw[:msg.len]
+
+	r := bytes.NewReader(raw)
+	out := make([]any, 0, len(argTypes))
+
+	for n, t := range argTypes {
+		if t == nil {
+			return nil, fmt.Errorf("type %d is nil", n)
+		}
+
+		if t.Kind() == reflect.String {
+			var length uint16
+			if err := binary.Read(r, binary.NativeEndian, &length); err != nil {
+				return nil, fmt.Errorf("argument %d (%v): reading string length: %w", n, t, err)
+			}
+			buf := make([]byte, length)
+			if _, err := io.ReadFull(r, buf); err != nil {
+				return nil, fmt.Errorf("argument %d (%v): reading string data: %w", n, t, err)
+			}
+			// Convert so named string types (type Foo string) round-trip correctly.
+			out = append(out, reflect.ValueOf(string(buf)).Convert(t).Interface())
+			continue
+		}
+
+		ptr := reflect.New(t)
+		if err := binary.Read(r, binary.NativeEndian, ptr.Interface()); err != nil {
+			return nil, fmt.Errorf("argument %d (%v): %w", n, t, err)
+		}
+		out = append(out, ptr.Elem().Interface())
+	}
+
+	return out, nil
 }
