@@ -9,6 +9,9 @@ package shared_mem_lib
 */
 import "C"
 import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
 	"runtime"
 )
 
@@ -236,4 +239,55 @@ func (e Encoding) IsOutgoing() bool {
 
 func EncodingEq(a, b Encoding) bool {
 	return bool(C.enc_eq(C.Encoding(a), C.Encoding(b)))
+}
+
+func (msg *Message) GetOperation() Operation {
+	return Operation(msg.opcode)
+}
+
+func NewMessage(src, dst Module, opcode Operation, args ...interface{}) (Message, error) {
+	var msg Message
+	msg.src = C.Module(src)
+	msg.dest = C.Module(dst)
+	msg.opcode = C.Operation(opcode)
+
+	// Generated with claude
+	var buf bytes.Buffer
+	for n, a := range args {
+		if err := binary.Write(&buf, binary.NativeEndian, a); err != nil { // Go 1.21+
+			return Message{}, fmt.Errorf("argument %d (%T): %w", n, a, err)
+		}
+	}
+	if buf.Len() > len(msg.data) {
+		return Message{}, fmt.Errorf("arguments are %d bytes, max is %d", buf.Len(), len(msg.data))
+	}
+	for i, b := range buf.Bytes() {
+		msg.data[i] = C.uchar(b) // adjust to msg.data's element type
+	}
+	// msg.len = C.uint(buf.Len()) // if the C struct has a length field
+
+	return msg, nil
+}
+
+func NewMessageStr(src, dst Module, opcode Operation, data string) (Message, error) {
+	if len(data) > 255 {
+		return Message{}, fmt.Errorf("String is too long for message, max length is 255")
+	}
+
+	var msg Message
+	msg.src = C.Module(src)
+	msg.dest = C.Module(dst)
+	msg.opcode = C.Operation(opcode)
+
+	var buf bytes.Buffer
+
+	buf.WriteString(data)
+
+	for i, b := range buf.Bytes() {
+		msg.data[i] = C.uchar(b)
+	}
+
+	msg.data[255] = 0
+
+	return msg, nil
 }
