@@ -48,13 +48,13 @@ public partial class StartViewModel : ViewModelBase
     public string ReplyCode => _meeting.Code;
 
     [RelayCommand]
-    private async Task Host()
+    private void Host()
     {
         if (IsBusy) return;
         IsBusy = true;
         try
         {
-            if (await _meeting.HostAsync()) OpenMeetingOnce();
+            if (_meeting.Host()) OpenMeetingOnce();
         }
         finally
         {
@@ -63,13 +63,13 @@ public partial class StartViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task Join()
+    private void Join()
     {
         if (IsBusy) return;
         IsBusy = true;
         try
         {
-            await _meeting.JoinAsync(JoinText);
+            _meeting.Join(JoinText);
         }
         finally
         {

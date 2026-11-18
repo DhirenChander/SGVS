@@ -26,8 +26,8 @@ public partial class OverlayViewModel : ViewModelBase
     private static readonly ShareSource[] ShareSources = [ShareSource.Screen, ShareSource.App];
 
     private readonly Participant? _self;
-    private readonly Func<ShareSource, Task>? _startStream;
-    private readonly Func<Task>? _stopStream;
+    private readonly Action<ShareSource>? _startStream;
+    private readonly Action? _stopStream;
     private readonly Func<Task> _leave;
     private readonly Action? _stopWatching;
 
@@ -44,8 +44,8 @@ public partial class OverlayViewModel : ViewModelBase
     public OverlayViewModel(
         Participant? self,
         bool showViewerControls,
-        Func<ShareSource, Task>? startStream,
-        Func<Task>? stopStream,
+        Action<ShareSource>? startStream,
+        Action? stopStream,
         Func<Task> leave,
         Action? stopWatching)
     {
@@ -138,7 +138,7 @@ public partial class OverlayViewModel : ViewModelBase
     // confirm button of the Start stream dialog. closes first so the dialog doesn't hang
     // around while the stream spins up
     [RelayCommand]
-    private async Task ConfirmDialog()
+    private void ConfirmDialog()
     {
         var wasStartStream = IsStartStreamDialog;
         DialogKind = StreamDialogKind.None;
@@ -146,16 +146,13 @@ public partial class OverlayViewModel : ViewModelBase
         if (wasStartStream && _startStream is not null)
         {
             var index = Math.Max(0, Array.IndexOf(SourceLabels, SelectedStreamSource));
-            await _startStream(ShareSources[index]);
+            _startStream(ShareSources[index]);
         }
     }
 
     // stops your own stream (Meeting only, Watch passes null)
     [RelayCommand]
-    private async Task StopStream()
-    {
-        if (_stopStream is not null) await _stopStream();
-    }
+    private void StopStream() => _stopStream?.Invoke();
 
     // asks first unless "don't ask me again" was ticked
     [RelayCommand]

@@ -26,10 +26,7 @@ public class TestApp
 // puts the real windows on a headless screen to catch XAML and binding mistakes that only show up at runtime
 public class ViewRenderTests
 {
-    private readonly FakeNetworkingProcess _process = new();
-
-    private NetworkMeetingService NewService() =>
-        new("Hazel", () => _process, () => new FakeSharedMemory(), action => action());
+    private readonly ScriptedMeetingService _service = new();
 
     private static MainWindow Show(MainViewModel vm)
     {
@@ -53,7 +50,7 @@ public class ViewRenderTests
     [AvaloniaFact]
     public void Start_screen_shows_join_box_and_new_meeting()
     {
-        var window = Show(new MainViewModel(NewService));
+        var window = Show(new MainViewModel(() => _service));
 
         Assert.Contains("New meeting", window.GetVisualDescendants().OfType<Button>().Select(b => b.Content as string));
         Assert.NotEmpty(window.GetVisualDescendants().OfType<TextBox>());
@@ -62,8 +59,9 @@ public class ViewRenderTests
     [AvaloniaFact]
     public void Start_screen_shows_the_error_when_hosting_fails()
     {
-        _process.Script = _ => [new() { Event = "error", Message = "could not host: no network" }];
-        var window = Show(new MainViewModel(NewService));
+        _service.Succeeds = false;
+        _service.FailWith = "could not host: no network";
+        var window = Show(new MainViewModel(() => _service));
 
         Click(window, "New meeting");
 
@@ -73,7 +71,7 @@ public class ViewRenderTests
     [AvaloniaFact]
     public void Joining_shows_the_reply_to_copy_and_cancel()
     {
-        var window = Show(new MainViewModel(NewService));
+        var window = Show(new MainViewModel(() => _service));
         ((StartViewModel)((MainViewModel)window.DataContext!).CurrentView).JoinText = "host-code";
 
         Click(window, "→");
@@ -86,7 +84,7 @@ public class ViewRenderTests
     [AvaloniaFact]
     public void Hosting_shows_the_meeting_with_the_reply_box()
     {
-        var window = Show(new MainViewModel(NewService));
+        var window = Show(new MainViewModel(() => _service));
 
         Click(window, "New meeting");
 
@@ -98,11 +96,11 @@ public class ViewRenderTests
     [AvaloniaFact]
     public void Meeting_reply_box_disappears_once_the_guest_connects()
     {
-        var window = Show(new MainViewModel(NewService));
+        var window = Show(new MainViewModel(() => _service));
         Click(window, "New meeting");
 
-        _process.Emit("state", state: "connected");
-        _process.Emit("peer", peer: "Gus");
+        _service.State = CallState.Connected;
+        _service.AddPeer("Gus");
         Dispatcher.UIThread.RunJobs();
 
         var meeting = window.GetVisualDescendants().OfType<MeetingView>().Single();
@@ -113,16 +111,16 @@ public class ViewRenderTests
     [AvaloniaFact]
     public void Meeting_reports_errors_and_a_finished_call()
     {
-        var window = Show(new MainViewModel(NewService));
+        var window = Show(new MainViewModel(() => _service));
         Click(window, "New meeting");
 
-        _process.Emit("error", message: "could not accept reply: bad");
+        _service.Error = "could not accept reply: bad";
         Dispatcher.UIThread.RunJobs();
         Assert.Contains("could not accept reply: bad", Texts(window));
 
-        _process.Emit("state", state: "connected");
-        _process.Emit("peer", peer: "Gus");
-        _process.Emit("peer_left");
+        _service.State = CallState.Connected;
+        _service.AddPeer("Gus");
+        _service.State = CallState.Ended;
         Dispatcher.UIThread.RunJobs();
         Assert.Contains(Texts(window), t => t.Contains("The call has ended"));
     }

@@ -40,16 +40,16 @@ public sealed class FakeMeetingService : ObservableObject, IMeetingService
 
     public string? Error => null;
 
-    public Task<bool> HostAsync() => Connect();
+    public bool Host() => Connect();
 
-    public Task<bool> JoinAsync(string hostCode) => Connect();
+    public bool Join(string hostCode) => Connect();
 
-    public Task<bool> AcceptReplyAsync(string replyCode) => Connect();
+    public bool AcceptReply(string replyCode) => Connect();
 
-    private Task<bool> Connect()
+    private bool Connect()
     {
         State = CallState.Connected;
-        return Task.FromResult(true);
+        return true;
     }
 
     public Participant Self { get; }
@@ -57,18 +57,16 @@ public sealed class FakeMeetingService : ObservableObject, IMeetingService
     public ReadOnlyObservableCollection<Participant> Members { get; }
 
     // screen and app share the same placeholder until capture exists
-    public Task StartStreamAsync(ShareSource source)
+    public void StartStream(ShareSource source)
     {
         Self.StreamPreview = _preview;
         Self.IsStreamer = true;
-        return Task.CompletedTask;
     }
 
-    public Task StopStreamAsync()
+    public void StopStream()
     {
         Self.IsStreamer = false;
         Self.StreamPreview = null;
-        return Task.CompletedTask;
     }
 
     public Task LeaveAsync()

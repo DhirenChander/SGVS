@@ -1,64 +1,107 @@
+using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
+using SGVS.Frontend.Models;
+using SGVS.Frontend.Services;
 using SGVS.Frontend.Services.Networking;
-using SGVS.Frontend.Services.SharedMemory;
 
 namespace SGVS.Frontend.Tests.Support;
 
-// stands in for the networking module. records what was sent, and replies the way the real one does
-// (host -> offer, join -> answer) unless told otherwise
+// stands in for the networking module process. just remembers what it was sent
 public sealed class FakeNetworkingProcess : INetworkingProcess
 {
     public List<NetworkingCommand> Sent { get; } = [];
-    public bool Disposed { get; private set; }
-
-    // what to emit when a command arrives. null means the default replies
-    public Func<NetworkingCommand, IEnumerable<NetworkingEvent>>? Script { get; set; }
 
     public event Action<NetworkingEvent>? EventReceived;
     public event Action? Exited;
 
-    public void Send(NetworkingCommand command)
-    {
-        Sent.Add(command);
-        foreach (var evt in (Script ?? DefaultReplies)(command))
-            EventReceived?.Invoke(evt);
-    }
-
-    public void Emit(NetworkingEvent evt) => EventReceived?.Invoke(evt);
-
-    public void Emit(string name, string? code = null, string? state = null, string? peer = null, string? message = null, bool? on = null) =>
-        Emit(new NetworkingEvent { Event = name, Code = code, State = state, Name = peer, Message = message, On = on });
+    public void Send(NetworkingCommand command) => Sent.Add(command);
 
     public void Crash() => Exited?.Invoke();
 
-    public void Dispose() => Disposed = true;
-
-    private static IEnumerable<NetworkingEvent> DefaultReplies(NetworkingCommand command)
+    public void Dispose()
     {
-        switch (command.Cmd)
-        {
-            case "host":
-                yield return new NetworkingEvent { Event = "offer", Code = "OFFER-CODE" };
-                break;
-            case "join":
-                yield return new NetworkingEvent { Event = "answer", Code = "ANSWER-CODE" };
-                break;
-        }
     }
 }
 
-public sealed class FakeSharedMemory : ISharedMemoryBridge
+// a call the tests drive by hand, for the view models and pages. host/join/accept do what the real
+// service is meant to do once networking answers, and the tests change State, Error and Members directly
+// to play out the rest
+public sealed class ScriptedMeetingService : ObservableObject, IMeetingService
 {
-    public bool IsSharingVideo { get; private set; }
-    public bool Disposed { get; private set; }
+    private readonly ObservableCollection<Participant> _members = [];
 
-    // makes SetSharingVideo fail like the real one does when the native library isn't usable
-    public bool Fail { get; set; }
-
-    public void SetSharingVideo(bool sharing)
+    public ScriptedMeetingService()
     {
-        if (Fail) throw new InvalidOperationException("no shared memory here");
-        IsSharingVideo = sharing;
+        Self = new Participant { Name = "Hazel", IsSelf = true, Tone = AvatarTone.Teal };
+        _members.Add(Self);
+        Members = new ReadOnlyObservableCollection<Participant>(_members);
     }
 
-    public void Dispose() => Disposed = true;
+    public string Code { get; private set => SetProperty(ref field, value); } = "";
+
+    public CallState State { get; set => SetProperty(ref field, value); } = CallState.Idle;
+
+    public bool IsHost { get; private set => SetProperty(ref field, value); }
+
+    public string? Error { get; set => SetProperty(ref field, value); }
+
+    public Participant Self { get; }
+
+    public ReadOnlyObservableCollection<Participant> Members { get; }
+
+    // false makes host/join/accept fail with FailWith as the error
+    public bool Succeeds { get; set; } = true;
+
+    public string FailWith { get; set; } = "something went wrong";
+
+    // what was called, in order
+    public List<string> Calls { get; } = [];
+
+    public bool Host()
+    {
+        Calls.Add("host");
+        if (!Succeeds) return Fail();
+
+        IsHost = true;
+        Code = "OFFER-CODE";
+        State = CallState.WaitingForReply;
+        return true;
+    }
+
+    public bool Join(string hostCode)
+    {
+        Calls.Add("join:" + hostCode);
+        if (!Succeeds) return Fail();
+
+        Code = "ANSWER-CODE";
+        State = CallState.WaitingForHost;
+        return true;
+    }
+
+    public bool AcceptReply(string replyCode)
+    {
+        Calls.Add("accept:" + replyCode);
+        return Succeeds || Fail();
+    }
+
+    public void StartStream(ShareSource source)
+    {
+        Calls.Add("start:" + source);
+        Self.IsStreamer = true;
+    }
+
+    public void StopStream()
+    {
+        Calls.Add("stop");
+        Self.IsStreamer = false;
+        Self.StreamPreview = null;
+    }
+
+    public void AddPeer(string name) => _members.Add(new Participant { Name = name, Tone = AvatarTone.Amber });
+
+    private bool Fail()
+    {
+        Error = FailWith;
+        return false;
+    }
 }

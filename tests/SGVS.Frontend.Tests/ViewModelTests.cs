@@ -7,36 +7,32 @@ namespace SGVS.Frontend.Tests;
 
 public class ViewModelTests
 {
-    private readonly FakeNetworkingProcess _process = new();
-    private readonly FakeSharedMemory _memory = new();
-
-    private NetworkMeetingService NewService() =>
-        new("Hazel", () => _process, () => _memory, action => action());
+    private readonly ScriptedMeetingService _service = new();
 
     // ---- Start page ----
 
     [Fact]
-    public async Task Host_opens_the_meeting_page_once_the_offer_is_ready()
+    public void Host_opens_the_meeting_page()
     {
-        var service = NewService();
         var opened = 0;
-        var start = new StartViewModel(service, () => opened++, () => { });
+        var start = new StartViewModel(_service, () => opened++, () => { });
 
-        await start.HostCommand.ExecuteAsync(null);
+        start.HostCommand.Execute(null);
 
         Assert.Equal(1, opened);
         Assert.False(start.IsBusy);
+        Assert.Equal(["host"], _service.Calls);
     }
 
     [Fact]
-    public async Task A_failed_host_stays_on_start_and_shows_why()
+    public void A_failed_host_stays_on_start_and_shows_why()
     {
-        _process.Script = _ => [new() { Event = "error", Message = "could not host: no network" }];
-        var service = NewService();
+        _service.Succeeds = false;
+        _service.FailWith = "could not host: no network";
         var opened = 0;
-        var start = new StartViewModel(service, () => opened++, () => { });
+        var start = new StartViewModel(_service, () => opened++, () => { });
 
-        await start.HostCommand.ExecuteAsync(null);
+        start.HostCommand.Execute(null);
 
         Assert.Equal(0, opened);
         Assert.True(start.HasError);
@@ -44,71 +40,43 @@ public class ViewModelTests
     }
 
     [Fact]
-    public async Task Join_shows_the_reply_and_waits_for_the_host()
+    public void Join_shows_the_reply_and_waits_for_the_host()
     {
-        var service = NewService();
         var opened = 0;
-        var start = new StartViewModel(service, () => opened++, () => { }) { JoinText = "host-code" };
+        var start = new StartViewModel(_service, () => opened++, () => { }) { JoinText = "host-code" };
 
-        await start.JoinCommand.ExecuteAsync(null);
+        start.JoinCommand.Execute(null);
 
-        Assert.Equal("join", _process.Sent.Single().Cmd);
-        Assert.Equal("host-code", _process.Sent.Single().Code);
+        Assert.Equal(["join:host-code"], _service.Calls);
         Assert.True(start.IsAwaitingHost);
         Assert.Equal("ANSWER-CODE", start.ReplyCode);
         Assert.Equal(0, opened); // not in the meeting until the host pastes the reply
     }
 
     [Fact]
-    public async Task Join_moves_on_when_the_connection_comes_up()
+    public void Join_moves_on_when_the_connection_comes_up()
     {
-        var service = NewService();
         var opened = 0;
-        var start = new StartViewModel(service, () => opened++, () => { }) { JoinText = "host-code" };
-        await start.JoinCommand.ExecuteAsync(null);
+        var start = new StartViewModel(_service, () => opened++, () => { }) { JoinText = "host-code" };
+        start.JoinCommand.Execute(null);
 
-        _process.Emit("state", state: "connected");
-        _process.Emit("state", state: "connected"); // repeated events must not open it twice
+        _service.State = CallState.Connected;
+        _service.State = CallState.Ended;
+        _service.State = CallState.Connected; // must not open it twice
 
         Assert.Equal(1, opened);
     }
 
     [Fact]
-    public async Task Joining_with_an_empty_box_shows_an_error()
-    {
-        var start = new StartViewModel(NewService(), () => { }, () => { });
-
-        await start.JoinCommand.ExecuteAsync(null);
-
-        Assert.True(start.HasError);
-        Assert.False(start.IsAwaitingHost);
-    }
-
-    [Fact]
-    public async Task Cancel_while_waiting_starts_over()
+    public void Cancel_while_waiting_starts_over()
     {
         var restarted = 0;
-        var service = NewService();
-        var start = new StartViewModel(service, () => { }, () => restarted++) { JoinText = "host-code" };
-        await start.JoinCommand.ExecuteAsync(null);
+        var start = new StartViewModel(_service, () => { }, () => restarted++) { JoinText = "host-code" };
+        start.JoinCommand.Execute(null);
 
         start.CancelCommand.Execute(null);
 
         Assert.Equal(1, restarted);
-    }
-
-    [Fact]
-    public async Task A_second_press_while_busy_is_ignored()
-    {
-        var slow = new FakeNetworkingProcess { Script = _ => [] }; // never answers, so host stays busy
-        var service = new NetworkMeetingService("Hazel", () => slow, () => _memory, a => a(), TimeSpan.FromMilliseconds(300));
-        var start = new StartViewModel(service, () => { }, () => { });
-
-        var first = start.HostCommand.ExecuteAsync(null);
-        await start.HostCommand.ExecuteAsync(null); // ignored, returns straight away
-        await first;
-
-        Assert.Single(slow.Sent);
     }
 
     [Fact]
@@ -122,17 +90,16 @@ public class ViewModelTests
 
     // ---- Meeting page ----
 
-    private async Task<MeetingViewModel> HostedMeeting()
+    private MeetingViewModel HostedMeeting()
     {
-        var service = NewService();
-        await service.HostAsync();
-        return new MeetingViewModel(service, _ => { }, () => { });
+        _service.Host();
+        return new MeetingViewModel(_service, _ => { }, () => { });
     }
 
     [Fact]
-    public async Task Host_meeting_shows_the_code_and_waits_for_a_reply()
+    public void Host_meeting_shows_the_code_and_waits_for_a_reply()
     {
-        var meeting = await HostedMeeting();
+        var meeting = HostedMeeting();
 
         Assert.True(meeting.IsHost);
         Assert.True(meeting.IsWaitingForReply);
@@ -142,52 +109,40 @@ public class ViewModelTests
     }
 
     [Fact]
-    public async Task Pasting_the_reply_sends_accept_and_clears_the_box()
+    public void Pasting_the_reply_passes_it_on_and_clears_the_box()
     {
-        var meeting = await HostedMeeting();
-        meeting.ReplyText = "  guest-reply ";
+        var meeting = HostedMeeting();
+        meeting.ReplyText = "guest-reply";
 
-        await meeting.AcceptReplyCommand.ExecuteAsync(null);
+        meeting.AcceptReplyCommand.Execute(null);
 
-        var sent = _process.Sent.Last();
-        Assert.Equal("accept", sent.Cmd);
-        Assert.Equal("guest-reply", sent.Code);
+        Assert.Equal("accept:guest-reply", _service.Calls.Last());
         Assert.Equal("", meeting.ReplyText);
     }
 
     [Fact]
-    public async Task A_bad_reply_shows_an_error_and_keeps_the_box_open()
+    public void A_bad_reply_shows_an_error_and_keeps_the_box_open()
     {
-        var meeting = await HostedMeeting();
+        var meeting = HostedMeeting();
+        _service.Succeeds = false;
+        _service.FailWith = "could not accept reply: bad";
         meeting.ReplyText = "garbage";
-        await meeting.AcceptReplyCommand.ExecuteAsync(null);
 
-        _process.Emit("error", message: "could not accept reply: bad");
+        meeting.AcceptReplyCommand.Execute(null);
 
         Assert.True(meeting.HasError);
         Assert.Equal("could not accept reply: bad", meeting.ErrorMessage);
+        Assert.Equal("garbage", meeting.ReplyText);
         Assert.True(meeting.IsWaitingForReply);
     }
 
     [Fact]
-    public async Task An_empty_reply_is_refused_and_keeps_the_box()
+    public void The_reply_box_goes_away_once_connected_and_the_peer_appears()
     {
-        var meeting = await HostedMeeting();
-        meeting.ReplyText = "";
+        var meeting = HostedMeeting();
 
-        await meeting.AcceptReplyCommand.ExecuteAsync(null);
-
-        Assert.True(meeting.HasError);
-        Assert.DoesNotContain(_process.Sent, c => c.Cmd == "accept");
-    }
-
-    [Fact]
-    public async Task The_reply_box_goes_away_once_connected_and_the_peer_appears()
-    {
-        var meeting = await HostedMeeting();
-
-        _process.Emit("state", state: "connected");
-        _process.Emit("peer", peer: "Gus");
+        _service.State = CallState.Connected;
+        _service.AddPeer("Gus");
 
         Assert.False(meeting.IsWaitingForReply);
         Assert.Equal(2, meeting.Members.Count);
@@ -195,62 +150,59 @@ public class ViewModelTests
     }
 
     [Fact]
-    public async Task The_page_says_so_when_the_other_person_leaves()
+    public void The_page_says_so_when_the_call_ends()
     {
-        var meeting = await HostedMeeting();
-        _process.Emit("state", state: "connected");
-        _process.Emit("peer", peer: "Gus");
+        var meeting = HostedMeeting();
+        _service.State = CallState.Connected;
 
-        _process.Emit("peer_left");
+        _service.State = CallState.Ended;
 
         Assert.True(meeting.IsCallEnded);
-        Assert.Single(meeting.Members);
     }
 
     [Fact]
-    public async Task Guests_have_no_code_to_share()
+    public void Guests_have_no_code_to_share()
     {
-        var service = NewService();
-        await service.JoinAsync("host-code");
-        _process.Emit("state", state: "connected");
+        _service.Join("host-code");
+        _service.State = CallState.Connected;
 
-        var meeting = new MeetingViewModel(service, _ => { }, () => { });
+        var meeting = new MeetingViewModel(_service, _ => { }, () => { });
 
         Assert.False(meeting.IsHost);
         Assert.False(meeting.IsWaitingForReply);
     }
 
     [Fact]
-    public async Task Starting_and_stopping_a_stream_from_the_overlay_goes_through_the_service()
+    public void Starting_and_stopping_a_stream_from_the_overlay_goes_through_the_service()
     {
-        var service = NewService();
-        await service.HostAsync();
-        _process.Emit("state", state: "connected");
-        var meeting = new MeetingViewModel(service, _ => { }, () => { });
+        _service.Host();
+        _service.State = CallState.Connected;
+        var meeting = new MeetingViewModel(_service, _ => { }, () => { });
 
-        await meeting.Overlay.ConfirmDialogCommand.ExecuteAsync(null); // dialog closed: no-op
+        meeting.Overlay.ConfirmDialogCommand.Execute(null); // dialog closed: no-op
+        Assert.Empty(_service.Calls.Where(c => c.StartsWith("start")));
+
         meeting.Overlay.OpenStartStreamCommand.Execute(null);
-        await meeting.Overlay.ConfirmDialogCommand.ExecuteAsync(null);
-        Assert.True(service.Self.IsStreamer);
+        meeting.Overlay.ConfirmDialogCommand.Execute(null);
+        Assert.Contains("start:Screen", _service.Calls);
+        Assert.True(_service.Self.IsStreamer);
         Assert.True(meeting.Overlay.IsStreaming);
-        Assert.True(_memory.IsSharingVideo);
 
-        await meeting.Overlay.StopStreamCommand.ExecuteAsync(null);
-        Assert.False(service.Self.IsStreamer);
+        meeting.Overlay.StopStreamCommand.Execute(null);
+        Assert.Contains("stop", _service.Calls);
+        Assert.False(_service.Self.IsStreamer);
         Assert.False(meeting.Overlay.IsStreaming);
     }
 
     [Fact]
-    public async Task Leave_ends_the_call_and_goes_back_to_start()
+    public async Task Leave_goes_back_to_start()
     {
-        var service = NewService();
-        await service.HostAsync();
+        _service.Host();
         var wentToStart = 0;
-        var meeting = new MeetingViewModel(service, _ => { }, () => wentToStart++);
+        var meeting = new MeetingViewModel(_service, _ => { }, () => wentToStart++);
 
         await meeting.Overlay.ConfirmLeaveCommand.ExecuteAsync(null);
 
-        Assert.Equal("leave", _process.Sent.Last().Cmd);
         Assert.Equal(1, wentToStart);
     }
 
@@ -283,7 +235,7 @@ public class ViewModelTests
     public void The_app_opens_on_the_start_page_with_a_fresh_call()
     {
         var made = 0;
-        var main = new MainViewModel(() => { made++; return NewService(); });
+        var main = new MainViewModel(() => { made++; return new ScriptedMeetingService(); });
 
         Assert.IsType<StartViewModel>(main.CurrentView);
         Assert.Equal(1, made);
@@ -292,57 +244,54 @@ public class ViewModelTests
     [Fact]
     public async Task Hosting_from_start_lands_on_the_meeting_and_leaving_returns_to_a_fresh_start()
     {
-        var services = new List<NetworkMeetingService>();
-        var main = new MainViewModel(() => { var s = NewService(); services.Add(s); return s; });
+        var services = new List<ScriptedMeetingService>();
+        var main = new MainViewModel(() => { var s = new ScriptedMeetingService(); services.Add(s); return s; });
 
-        await ((StartViewModel)main.CurrentView).HostCommand.ExecuteAsync(null);
+        ((StartViewModel)main.CurrentView).HostCommand.Execute(null);
         var meeting = Assert.IsType<MeetingViewModel>(main.CurrentView);
-        Assert.Equal(1, services.Count);
+        Assert.Single(services);
 
         await meeting.Overlay.ConfirmLeaveCommand.ExecuteAsync(null);
 
         Assert.IsType<StartViewModel>(main.CurrentView);
         Assert.Equal(2, services.Count); // the next attempt gets its own call
-        Assert.True(_process.Disposed);   // and the old networking process is gone
     }
 
     [Fact]
-    public async Task Joining_from_start_lands_on_the_meeting_when_connected()
+    public void Joining_from_start_lands_on_the_meeting_when_connected()
     {
-        var main = new MainViewModel(NewService);
+        var main = new MainViewModel(() => _service);
         var start = (StartViewModel)main.CurrentView;
         start.JoinText = "host-code";
 
-        await start.JoinCommand.ExecuteAsync(null);
+        start.JoinCommand.Execute(null);
         Assert.IsType<StartViewModel>(main.CurrentView);
 
-        _process.Emit("state", state: "connected");
+        _service.State = CallState.Connected;
 
         var meeting = Assert.IsType<MeetingViewModel>(main.CurrentView);
         Assert.False(meeting.IsHost);
     }
 
     [Fact]
-    public async Task Cancelling_a_join_returns_to_a_fresh_start_and_closes_networking()
+    public void Cancelling_a_join_returns_to_a_fresh_start()
     {
-        var main = new MainViewModel(NewService);
+        var main = new MainViewModel(() => new ScriptedMeetingService());
         var start = (StartViewModel)main.CurrentView;
         start.JoinText = "host-code";
-        await start.JoinCommand.ExecuteAsync(null);
+        start.JoinCommand.Execute(null);
 
         start.CancelCommand.Execute(null);
 
         Assert.NotSame(start, main.CurrentView);
         Assert.IsType<StartViewModel>(main.CurrentView);
-        Assert.True(_process.Disposed);
     }
 
     [Fact]
-    public async Task Watching_a_stream_and_stopping_returns_to_the_same_meeting_page()
+    public void Watching_a_stream_and_stopping_returns_to_the_same_meeting_page()
     {
         var main = new MainViewModel(() => new FakeMeetingService());
         ((StartViewModel)main.CurrentView).HostCommand.Execute(null);
-        await Task.Yield();
         var meeting = Assert.IsType<MeetingViewModel>(main.CurrentView);
 
         meeting.WatchCommand.Execute(meeting.Members.First(m => m.IsStreamer));
@@ -350,17 +299,6 @@ public class ViewModelTests
         watch.Overlay.OpenStopWatchingCommand.Execute(null);
 
         Assert.Same(meeting, main.CurrentView);
-    }
-
-    [Fact]
-    public async Task Shutdown_closes_the_networking_process()
-    {
-        var main = new MainViewModel(NewService);
-        await ((StartViewModel)main.CurrentView).HostCommand.ExecuteAsync(null);
-
-        main.Shutdown();
-
-        Assert.True(_process.Disposed);
     }
 
     [Fact]

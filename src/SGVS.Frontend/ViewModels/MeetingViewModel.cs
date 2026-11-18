@@ -36,7 +36,7 @@ public partial class MeetingViewModel : ViewModelBase
 
         // control bar + gear. Meeting has no viewer controls, Start stream and Leave act on the call
         Overlay = new OverlayViewModel(_meeting.Self, showViewerControls: false,
-            startStream: _meeting.StartStreamAsync, stopStream: _meeting.StopStreamAsync, leave: LeaveMeeting,
+            startStream: _meeting.StartStream, stopStream: _meeting.StopStream, leave: LeaveMeeting,
             stopWatching: null)
         {
             IsStreaming = _meeting.Self.IsStreamer,
@@ -69,9 +69,9 @@ public partial class MeetingViewModel : ViewModelBase
 
     // the Connect button next to the reply box
     [RelayCommand]
-    private async Task AcceptReply()
+    private void AcceptReply()
     {
-        if (await _meeting.AcceptReplyAsync(ReplyText)) ReplyText = "";
+        if (_meeting.AcceptReply(ReplyText)) ReplyText = "";
     }
 
     public ReadOnlyObservableCollection<Participant> Members => _meeting.Members;
@@ -90,11 +90,13 @@ public partial class MeetingViewModel : ViewModelBase
     private void Watch(Participant member) =>
         _navigate(new WatchViewModel(member, _meeting, () => _navigate(this), _goToStart));
 
-    // what the overlay's Leave calls once confirmed. tells the service, then goes back to the Start screen
-    private async Task LeaveMeeting()
+    // what the overlay's Leave calls once confirmed. goes back to the Start screen
+    private Task LeaveMeeting()
     {
-        await _meeting.LeaveAsync();
+        // TODO: tell the service once leaving is possible through shared memory
+        // await _meeting.LeaveAsync();
         _goToStart();
+        return Task.CompletedTask;
     }
 
     private void OnMeetingChanged(object? sender, PropertyChangedEventArgs e)

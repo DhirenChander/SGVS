@@ -4,7 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SGVS.Frontend.Services;
 using SGVS.Frontend.Services.Networking;
-using SGVS.Frontend.Services.SharedMemory;
+using SharedMemLibrary;
 
 namespace SGVS.Frontend.ViewModels;
 
@@ -34,12 +34,17 @@ public partial class MainViewModel : ViewModelBase
     private void GoToStartPage()
     {
         // whatever call was in progress is over
-        _ = _meeting?.LeaveAsync();
+        // TODO: tell the service once leaving is possible through shared memory
+        // _ = _meeting?.LeaveAsync();
         CurrentView = NewStartPage();
     }
 
     // called when the window closes so the networking module doesn't outlive the app
-    public void Shutdown() => _ = _meeting?.LeaveAsync();
+    public void Shutdown()
+    {
+        // TODO: tell the service once leaving is possible through shared memory
+        // _ = _meeting?.LeaveAsync();
+    }
 
     private StartViewModel NewStartPage()
     {
@@ -58,7 +63,7 @@ public partial class MainViewModel : ViewModelBase
         if (Environment.GetEnvironmentVariable("SGVS_FAKE") == "1") return new FakeMeetingService();
 
         // display names aren't decided yet, so for now it's whoever is signed in to the PC
-        return new NetworkMeetingService(Environment.UserName, StartNetworking, SharedMemoryBridge.Create,
+        return new NetworkMeetingService(Environment.UserName, StartNetworking, () => new GCFrameBuffer(),
             action => Dispatcher.UIThread.Post(action));
     }
 

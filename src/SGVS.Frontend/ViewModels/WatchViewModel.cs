@@ -23,10 +23,12 @@ public class WatchViewModel : ViewModelBase
         // control bar + gear. Start stream is null since there's nothing to start from here
         // yet, and Leave goes back to Start
         Overlay = new OverlayViewModel(meeting.Self, showViewerControls: true, startStream: null, stopStream: null,
-            leave: async () =>
+            leave: () =>
             {
-                await meeting.LeaveAsync();
+                // TODO: tell the service once leaving is possible through shared memory
+                // await meeting.LeaveAsync();
                 goToStart();
+                return Task.CompletedTask;
             },
             stopWatching: stopWatching);
     }
