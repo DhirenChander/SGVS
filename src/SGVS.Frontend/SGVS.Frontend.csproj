@@ -36,6 +36,8 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!-- managed Opus decoder for incoming call audio -->
+    <PackageReference Include="Concentus" Version="2.2.3" />
   </ItemGroup>
 
   <!-- shared memory the processing and networking modules also use (Windows only at runtime) -->
