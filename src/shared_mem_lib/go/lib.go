@@ -17,8 +17,38 @@ type Config C.Config
 type Frame C.Frame
 type FrameBuffer C.FrameBuffer
 type Message C.Message
-type Module C.Module
-type Operation C.Operation
+
+/*
+START_SHARING,
+STOP_SHARING,
+HOST_CODE,
+ANSWER_CODE,
+START_HOST,
+JOIN_CALL,
+PARTICIPANT_JOINED,
+PARTICIPANT_LEFT,
+LEAVE_CALL,
+*/
+type Operation int
+
+const (
+	StopSharing = iota
+	HostCode
+	AnswerCode
+	StartHost
+	JoinCall
+	ParticipantJoined
+	ParticipantLeft
+	LeaveCall
+)
+
+type Module int
+
+const (
+	Processor = iota
+	Network
+	Application
+)
 
 type GCFrame struct {
 	Raw    *Frame
