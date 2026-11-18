@@ -1,7 +1,81 @@
 using Concentus.Enums;
 using Concentus.Structs;
+using SharedMemLibrary;
+using Encoding = SharedMemLibrary.Encoding;
 
 namespace SGVS.Frontend.Tests.Support;
+
+// Shared memory without the native library: a config of encodings and one queue of frames.
+// Only the members SharedMemoryAudioSource uses work; the rest throw.
+public sealed class FakeFrameBuffer : IFrameBuffer
+{
+    public List<Encoding> Encodings { get; } = [];
+    public Queue<GCFrame> Frames { get; } = new();
+
+    public int AlignCalls { get; private set; }
+    public List<Encoding> PoppedWith { get; } = [];      // encoding passed to each BlockingPopFrames
+    public List<Encoding> DrainedWith { get; } = [];     // encoding passed to each TryPopFrames
+    public List<uint> DrainCounts { get; } = [];         // max_frame_count passed to each TryPopFrames
+    public bool FailNextPop { get; set; }
+
+    // An encoding the tests can tell apart by tag. Never touches Encoding.id, which is about to change type.
+    public static Encoding Enc(EncodingType type, EncodingDir dir, byte tag = 0)
+    {
+        var enc = new Encoding { type = type, dir = dir };
+        enc.data.audio_enc.is_input = tag;
+        return enc;
+    }
+
+    // Built by hand, because the GCFrame(Encoding) constructor calls native code.
+    public static GCFrame Frame(byte[] data, int size) =>
+        new() { raw = new Frame { size = (nuint)size }, Data = data };
+
+    public void Push(byte[] packet)
+    {
+        var data = new byte[1275]; // the wrapper always hands out 1275-byte buffers
+        packet.CopyTo(data, 0);
+        Frames.Enqueue(Frame(data, packet.Length));
+    }
+
+    public (Encoding[] encodings, bool success) ReadEncodings(uint max_len) =>
+        ([.. Encodings.Take((int)max_len)], true);
+
+    public bool AlignRingsToConfig()
+    {
+        AlignCalls++;
+        return true;
+    }
+
+    public (GCFrame[] frames, bool success) TryPopFrames(Encoding encoding, uint max_frame_count)
+    {
+        DrainedWith.Add(encoding);
+        DrainCounts.Add(max_frame_count);
+        var frames = new List<GCFrame>();
+        while (frames.Count < max_frame_count && Frames.TryDequeue(out var frame))
+            frames.Add(frame);
+        return ([.. frames], true);
+    }
+
+    // Never waits: an empty queue fails at once, like the real call does when it can't find the ring.
+    public (GCFrame[] frames, bool success) BlockingPopFrames(Encoding encoding, uint max_frame_count, uint max_timeout)
+    {
+        PoppedWith.Add(encoding);
+        if (FailNextPop)
+        {
+            FailNextPop = false;
+            return ([], false);
+        }
+        return Frames.TryDequeue(out var frame) ? ([frame], true) : ([], false);
+    }
+
+    public bool PushFrames(Frame[] f) => throw new NotSupportedException();
+    public bool RequestEncoding(Encoding encoding) => throw new NotSupportedException();
+    public bool RemoveEncoding(Encoding encoding) => throw new NotSupportedException();
+    public (Encoding[] encodings, bool success) BlockingReadEncodings(uint max_len, uint max_timeout) =>
+        throw new NotSupportedException();
+    public bool PushMessage(Message msg) => throw new NotSupportedException();
+    public (Message msg, bool success) BlockingPopMessages(Module src, Module dst) => throw new NotSupportedException();
+}
 
 // Opus packets made the way the processing module makes them (#13): 48 kHz, stereo, 10 ms, CBR, 64 kbps.
 public static class OpusTestPackets
