@@ -35,7 +35,9 @@ bool add_ring(FrameBuffer *fb, Encoding enc)
 
     if (fb->rings == nullptr)
     {
-        printf("Unable to allocate new ring for encoding: %" PRIu64 "\n", enc.id);
+        char id_str[80];
+        write_uint256(id_str, enc.id);
+        printf("Unable to allocate new ring for encoding: %s\n", id_str);
         return false;
     }
 
@@ -69,7 +71,9 @@ bool remove_ring(FrameBuffer *fb, Encoding enc)
 
     if (fb->rings == nullptr)
     {
-        printf("Unable to remove ring for encoding: %" PRIu64 "\n", enc.id);
+        char id_str[80];
+        write_uint256(id_str, enc.id);
+        printf("Unable to allocate remove ring for encoding: %s\n", id_str);
         return false;
     }
 
@@ -216,7 +220,7 @@ bool remove_encoding(FrameBuffer *fb, Encoding enc)
 
 int ringbuff_by_encoding(FrameBuffer *fb, Encoding enc)
 {
-    uint64_t id = enc.id;
+    uint256_t id = enc.id;
     int ind = -1;
 
 #ifdef _WIN32
@@ -225,7 +229,7 @@ int ringbuff_by_encoding(FrameBuffer *fb, Encoding enc)
 
     for (int i = 0; i < fb->ring_count; i++)
     {
-        if (fb->rings[i].id == id)
+        if (uint256_eq(fb->rings[i].id, id))
         {
             ind = i;
             break;
@@ -250,7 +254,9 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *ou
 
     if (rb_ind == -1)
     {
-        printf("No ring buffer present for this encoding: %" PRIu64 "\n", enc.id);
+        char id_str[80];
+        write_uint256(id_str, enc.id);
+        printf("No ringbuffer present for this encoding: %s\n", id_str);
         return false;
     }
 
@@ -296,7 +302,9 @@ bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count)
 
     if (rb_ind == -1)
     {
-        printf("No ring buffer present for this encoding: %" PRIu64 "\n", f->encoding.id);
+        char id_str[80];
+        write_uint256(id_str, f->encoding.id);
+        printf("No ring buffer present for this encoding: %s\n", id_str);
         return false;
     }
 
@@ -332,6 +340,15 @@ bool new_framebuffer(FrameBuffer *out)
     uint64_t conf_size = sizeof(Config);
     Config *config;
 
+    for (int i = 0; i < MSG_EV_COUNT; i++)
+    {
+        for (int j = 0; j < MSG_EV_COUNT; j++)
+        {
+            out->msg_chans[i][j].id = generate_id();
+            open_ring(&out->msg_chans[i][j], sizeof(Message), 10);
+        }
+    }
+
 #ifdef _WIN32
     // Create mutex that is immediately owned
     out->conf_mu = CreateMutexA(NULL, TRUE, "Local\\svgs_mu");
@@ -352,7 +369,7 @@ bool new_framebuffer(FrameBuffer *out)
                                        L"Local\\sgvs_conf");
     if (out->conf_map == nullptr)
     {
-        CloseHandle(out->conf_mu);
+        free_framebuffer(out);
         return false;
     }
 
@@ -362,8 +379,7 @@ bool new_framebuffer(FrameBuffer *out)
 
     if (config == nullptr)
     {
-        CloseHandle(out->conf_mu);
-        out->conf_mu = nullptr;
+        free_framebuffer(out);
         return false;
     }
 
@@ -376,22 +392,13 @@ bool new_framebuffer(FrameBuffer *out)
     out->encs_ev = CreateEventW(nullptr, FALSE, FALSE, L"Local\\sgvs_conf_encs_ev");
     if (out->encs_ev == nullptr)
     {
-        CloseHandle(out->conf_mu);
-        CloseHandle(out->conf_map);
-        out->conf_map = nullptr;
-        out->conf_mu = nullptr;
+        free_framebuffer(out);
         return false;
     }
 
-    out->conf_ev = CreateEventW(nullptr, FALSE, FALSE, L"Local\\sgvs_conf_ev");
-    if (out->conf_ev == nullptr)
+    if (out->conf_mu == nullptr)
     {
-        CloseHandle(out->conf_mu);
-        CloseHandle(out->conf_map);
-        CloseHandle(out->encs_ev);
-        out->encs_ev = nullptr;
-        out->conf_map = nullptr;
-        out->conf_mu = nullptr;
+        free_framebuffer(out);
         return false;
     }
 
@@ -420,7 +427,6 @@ void free_framebuffer(FrameBuffer *fb)
     UnmapViewOfFile(fb->config);
     CloseHandle(fb->conf_map);
     CloseHandle(fb->encs_ev);
-    CloseHandle(fb->conf_ev);
     CloseHandle(fb->conf_mu);
     DeleteCriticalSection(&fb->cs);
 #endif
@@ -448,25 +454,35 @@ bool align_rings_to_config(FrameBuffer *fb)
     // TODO: Add code to delete old rings
 }
 
-void set_share_video(FrameBuffer *fb, bool v)
+bool push_message(FrameBuffer *fb, Message msg)
 {
-    fb->config->sharing_screen = v;
-#ifdef _WIN32
-    SetEvent(fb->conf_ev);
-#endif
+    Slot slot;
+    slot.bytes = (uint8_t *)malloc(sizeof(Message)); // Slight over allocation
+    slot.len = sizeof(Message);
+
+    memcpy(slot.bytes, msg.data, 256);
+    memcpy(&slot.bytes[256], &msg.opcode, sizeof(Operation));
+
+    return push(&fb->msg_chans[msg.src][msg.dest], &slot, 1);
 }
 
-bool get_sharing_video(FrameBuffer *fb)
+bool blocking_pop_message_from(FrameBuffer *fb, Module src, Module dst, Message *out_msg, uint32_t max_timeout)
 {
-    return fb->config->sharing_screen;
-}
+    Slot out;
+    out.bytes = (uint8_t *)malloc(sizeof(Message));
+    out.len = sizeof(Message);
 
-void set_front_end_encoding(FrameBuffer *fb, Encoding enc)
-{
-    fb->config->front_end_video = enc;
-}
+    uint32_t _;
 
-Encoding get_front_end_encoding(FrameBuffer *fb)
-{
-    return fb->config->front_end_video;
+    if (!blocking_pop(&fb->msg_chans[src][dst], &out, &_, 1, max_timeout))
+    {
+        return false;
+    }
+
+    memcpy(out_msg->data, out.bytes, 256);
+    memcpy(&out_msg->opcode, &out.bytes[256], sizeof(Operation));
+    out_msg->dest = dst;
+    out_msg->src = src;
+
+    return true;
 }

@@ -76,6 +76,10 @@ conanbuildinfo.*
 **/msvc_build/
 **/ninja_build/
 **/dll_build/
+**/go_build/
+**/csharp_build/
+**/cpp_build/
+
 
 !go/lib/*
 !csharp/lib/*

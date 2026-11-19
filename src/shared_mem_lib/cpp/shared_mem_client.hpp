@@ -15,6 +15,9 @@ namespace shared_mem_client
     using Frame = ::Frame;
     using Encoding = ::Encoding;
     using Config = ::Config;
+    using Message = ::Message;
+    using Module = ::Module;
+    using Operation = ::Operation;
 
     Frame frame_sized_by_encoding(Encoding enc, size_t *out_size)
     {
@@ -127,19 +130,19 @@ namespace shared_mem_client
             return ::blocking_read_encodings(&fb_, out, out_len, max_len, max_timeout);
         }
 
-        void set_share_video(bool v)
-        {
-            ::set_share_video(&fb_, v);
-        }
-
-        bool get_sharing_video()
-        {
-            return ::get_sharing_video(&fb_);
-        }
-
         bool align_rings_to_config()
         {
             return ::align_rings_to_config(&fb_);
+        }
+
+        bool push_message(Message msg)
+        {
+            return ::push_message(&fb_, msg);
+        }
+
+        bool blocking_pop_message(Module src, Module dst, Message *out_msg)
+        {
+            return ::blocking_pop_message(&fb_, src, dst, out_msg);
         }
 
     private:

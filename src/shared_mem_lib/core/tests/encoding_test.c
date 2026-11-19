@@ -22,7 +22,7 @@ int main(void)
 void test_nil_encoding(void)
 {
     Encoding enc = nil_encoding();
-    TEST_ASSERT_EQUAL(enc.id, 0);
+    TEST_ASSERT(uint256_eq(enc.id, uint256_zero()));
 }
 
 void test_new_audio_encoding(void)
@@ -41,7 +41,7 @@ void test_new_audio_encoding(void)
     for (int i = 0; i < case_count; i++)
     {
         Encoding enc = new_audio_encoding(cases[i].isInput);
-        TEST_ASSERT_NOT_EQUAL(enc.id, 0);
+        TEST_ASSERT(!uint256_eq(enc.id, uint256_zero()));
         TEST_ASSERT_EQUAL(enc.type, Audio);
         TEST_ASSERT_EQUAL(enc.data.audio_enc.is_input, cases[i].isInput);
     }
@@ -66,7 +66,7 @@ void test_new_video_encoding(void)
     for (int i = 0; i < case_count; i++)
     {
         Encoding enc = new_video_encoding(cases[i].maxBR, cases[i].minBR, cases[i].frameHeight, cases[i].frameWidth, cases[i].frameRate);
-        TEST_ASSERT_NOT_EQUAL(enc.id, 0);
+        TEST_ASSERT(!uint256_eq(enc.id, uint256_zero()));
         TEST_ASSERT_EQUAL(enc.type, Video);
         TEST_ASSERT_EQUAL(enc.data.video_enc.max_bit_rate, cases[i].maxBR);
         TEST_ASSERT_EQUAL(enc.data.video_enc.min_bit_rate, cases[i].minBR);
