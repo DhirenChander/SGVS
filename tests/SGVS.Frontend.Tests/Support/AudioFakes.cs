@@ -124,7 +124,7 @@ public sealed class FakeFrameBuffer : IFrameBuffer
     public (Encoding[] encodings, bool success) BlockingReadEncodings(uint max_len, uint max_timeout) =>
         throw new NotSupportedException();
     public bool PushMessage(Message msg) => throw new NotSupportedException();
-    public (Message msg, bool success) BlockingPopMessages(Module src, Module dst) => throw new NotSupportedException();
+    public (Message msg, bool success) BlockingPopMessage(Module src, Module dst) => throw new NotSupportedException();
 }
 
 // Opus packets made the way the processing module makes them (#13): 48 kHz, stereo, 10 ms, CBR, 64 kbps.
