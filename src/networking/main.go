@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"shared_mem_lib"
@@ -9,6 +8,8 @@ import (
 
 	"github.com/pion/webrtc/v4"
 )
+
+// type frameBuffer *shared_mem_lib.FrameBuffer
 
 // Allows mocking of frameBuffer
 type frameBuffer interface {
@@ -25,112 +26,73 @@ type frameBuffer interface {
 }
 
 func main() {
-	args := os.Args[1:]
+	// var x shared_mem_lib.FrameBuffer
+	// x.AlignRingsToConfig()
+	// Receive JSON commands (on stdin) from frontend,
+	// Send JSON events on stdout, logs on stderr
 
-	// Controlled by the frontend: JSON commands on stdin, JSON events on stdout, logs on stderr
-	if len(args) >= 1 && args[0] == "ipc" {
-		logOut = os.Stderr
-		runIPC(os.Stdin, os.Stdout)
-		return
-	}
+	//TODO: change to no longer use stdin, stdout
+	//Use message passing via shared mem lib
+	go runIPC(os.Stdin, os.Stdout)
 
 	var fb shared_mem_lib.FrameBuffer
 	ok := shared_mem_lib.NewFrameBuffer(&fb)
-
-	defer fb.Free()
 
 	if !ok {
 		fmt.Println("Failed to create frame buffer")
 		return
 	}
 
-	//Check if user wants to create a connection or answer
-	host := (len(args) >= 1 && args[0] == "host")
+	defer fb.Free()
 
-	pcChan := make(chan *webrtc.PeerConnection, 1)
+	pc, _, _, _, err := startCallOnMessage(&fb)
 
-	go func() {
-		pcChan <- testCallAndResponse(host, &fb)
-	}()
+	//TODO: print messages on datachannel open?
 
+	if err != nil {
+		fmt.Println("Error starting call: " + err.Error())
+		//Retry?
+	}
+
+	//Temp to keep pc open during testing
+	//TODO: change to wait on message from application to end call
 	<-time.After(5 * time.Minute)
-	<-pcChan //Used to keep peer connection open during testing
-
+	_ = pc.Close()
 }
 
-func testCallAndResponse(host bool, fb *shared_mem_lib.FrameBuffer) *webrtc.PeerConnection {
-	if host /* We are the host */ {
+// Waits for a message from the application and then sets up the call, either as the host or the attendee
+func startCallOnMessage(fb frameBuffer) (
+	*webrtc.PeerConnection,
+	chan *webrtc.DataChannel,
+	chan bool, //Signals dataChannel is open
+	chan webrtc.DataChannelMessage,
+	error,
+) {
+	//TODO: Wait for message from application
 
+	host := true
+	offerSDP := "" //Set if message that we are attendee, and gives SDP
+
+	if host {
 		peerConnection, dataChan, dataChanOpen, messages, err := setupPcAsHost(fb)
 
-		if err != nil {
-			fmt.Printf("Error setting up connection: %s\n", err)
-			return nil
-		}
+		dcReady := make(chan *webrtc.DataChannel, 1)
+		dcReady <- dataChan
 
-		//Wait for data channel to open
-		fmt.Println("Waiting for datachannel to open")
-		<-dataChanOpen
+		return peerConnection, dcReady, dataChanOpen, messages, err
 
-		fmt.Println("Sending message from host")
-		dataChan.SendText("Hello from host :)")
-
-		//Wait for response
-		fmt.Println("Waiting for response")
-		response := <-messages
-
-		if !response.IsString {
-			fmt.Printf("Message was not a string")
-			return nil
-		}
-
-		fmt.Printf("Recieved Message: %s\n", string(response.Data))
-
-		return peerConnection
-
-	} else /* We are not the host */ {
-
-		peerConnection, dcReady, dataChanOpen, messages, err := setupPcAsAttendee(fb)
-
-		if err != nil {
-			fmt.Printf("Error setting up connection: %s\n", err)
-			return nil
-		}
-
-		fmt.Println("Waiting for datachannel to be created")
-		dataChan := <-dcReady
-
-		fmt.Println("Waiting for datachannel to open")
-		<-dataChanOpen
-
-		fmt.Println("Waiting for message from host")
-		firstMessage := <-messages
-
-		if !firstMessage.IsString {
-			fmt.Printf("Message was not a string")
-			return nil
-		}
-
-		fmt.Printf("Recieved Message: %s\n", string(firstMessage.Data))
-
-		fmt.Println("Sending reponse")
-
-		dataChan.SendText("Hello from the other side")
-
-		return peerConnection
+	} else {
+		return setupPcAsAttendee(fb, offerSDP)
 	}
 
 }
 
-func setupPcAsHost(fb *shared_mem_lib.FrameBuffer) (
+func setupPcAsHost(fb frameBuffer) (
 	*webrtc.PeerConnection,
 	*webrtc.DataChannel,
 	chan bool, //Signals when dataChannel is open
 	chan webrtc.DataChannelMessage, //Messages are sent here
 	error) {
-
-	// Change to take in a reader and writer if using a different IO stream
-	reader := bufio.NewReader(os.Stdin)
 
 	offerPc, dataChan, dataChanOpen, messages,
 		selfVoiceTrack, _, remoteVoiceTrackChan, _, //Use receivers later to judge network conditions
@@ -148,13 +110,13 @@ func setupPcAsHost(fb *shared_mem_lib.FrameBuffer) (
 		}
 	}()
 
-	fmt.Printf("Offer SDP:\n%s", getSDPStr(offerPc))
+	//TODO: Send SDP to application for message from application
+	//sdpStr := getSDPStr(offerPc)
 
-	//Prompt user for answer string and wait
-	fmt.Printf("\nEnter Answer SDP:\n")
-	answerStr, err := readSDP(reader)
+	//TODO: Wait for peer SDP from application
+	answerStr, err := "", nil
+
 	if err != nil {
-
 		return nil, nil, nil, nil, fmt.Errorf("Error reading answer: %s\n", err)
 	}
 
@@ -171,25 +133,16 @@ func setupPcAsHost(fb *shared_mem_lib.FrameBuffer) (
 	return offerPc, dataChan, dataChanOpen, messages, nil
 }
 
-func setupPcAsAttendee(fb *shared_mem_lib.FrameBuffer) (
+func setupPcAsAttendee(fb frameBuffer, SDPStr string) (
 	*webrtc.PeerConnection,
 	chan *webrtc.DataChannel,
 	chan bool, //Signals when dataChannel is open (by closing itself)
 	chan webrtc.DataChannelMessage, //Messages are sent here
 	error) {
 
-	reader := bufio.NewReader(os.Stdin)
-
-	//Wait for user input
-	fmt.Print("Enter connection string:\n\n")
-	SDPOfferStr, err := readSDP(reader)
-	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("Error reading offer: %s\n", err)
-	}
-
 	answerPc, dcReady, dataChanOpen, messages,
 		selfVoiceTrack, _, remoteVoiceTrackChan, _,
-		err := generateAnswer(SDPOfferStr)
+		err := generateAnswer(SDPStr)
 
 	keepConnection := false
 	defer func() {
@@ -203,42 +156,13 @@ func setupPcAsAttendee(fb *shared_mem_lib.FrameBuffer) (
 		return nil, nil, nil, nil, fmt.Errorf("Error generating answer: %s\n", err)
 	}
 
-	fmt.Printf("Answer SDP:\n%s", getSDPStr(answerPc))
+	//TODO: Send SDP to application for message from application
 
 	//Send voice audio
 	goAndPrintIfError(func() error { return relayAudioOnceConnected(selfVoiceTrack, remoteVoiceTrackChan, fb) })
 
 	keepConnection = true
 	return answerPc, dcReady, dataChanOpen, messages, nil
-}
-
-func relayAudioOnceConnected(localTrack *webrtc.TrackLocalStaticSample, remoteTrackChan chan *webrtc.TrackRemote, fb frameBuffer) error {
-
-	goAndPrintIfError(func() error {
-		enc, err := waitForAudioEncodingFromProcessing(fb)
-		if err != nil {
-			return err
-		}
-
-		err = relayOutgoingAudioToRemote(localTrack, fb, enc)
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-
-	goAndPrintIfError(func() error {
-		remoteTrack := <-remoteTrackChan
-
-		err := relayIncomingAudioToBuffer(remoteTrack, fb)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	})
-
-	return nil
 }
 
 func waitForAudioEncodingFromProcessing(fb frameBuffer) (shared_mem_lib.Encoding, error) {
@@ -274,19 +198,4 @@ func goAndPrintIfError(f func() error) {
 			fmt.Println("Error in concurrent func: " + err.Error())
 		}
 	}()
-}
-
-// Read SDP string from input stream (console for now)
-func readSDP(reader *bufio.Reader) (string, error) {
-	SDPStr := ""
-	for {
-		ln, err := reader.ReadString('\n')
-		if err != nil {
-			return SDPStr, err
-		}
-		if ln == "\r\n" || ln == "\n" {
-			return SDPStr, nil
-		}
-		SDPStr += ln
-	}
 }

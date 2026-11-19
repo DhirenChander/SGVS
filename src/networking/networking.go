@@ -485,6 +485,35 @@ func closeAll(frames []shared_mem_lib.GCFrame, closed []bool) {
 	}
 }
 
+func relayAudioOnceConnected(localTrack *webrtc.TrackLocalStaticSample, remoteTrackChan chan *webrtc.TrackRemote, fb frameBuffer) error {
+
+	goAndPrintIfError(func() error {
+		enc, err := waitForAudioEncodingFromProcessing(fb)
+		if err != nil {
+			return err
+		}
+
+		err = relayOutgoingAudioToRemote(localTrack, fb, enc)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	goAndPrintIfError(func() error {
+		remoteTrack := <-remoteTrackChan
+
+		err := relayIncomingAudioToBuffer(remoteTrack, fb)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	return nil
+}
+
 // Generated with AI
 func logPeerConnectionState(pc *webrtc.PeerConnection, role string) {
 	pc.OnICECandidate(func(candidate *webrtc.ICECandidate) {

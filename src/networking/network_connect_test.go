@@ -138,3 +138,67 @@ func (mfb *mockFrameBuffer) AppendFrames(frames []shared_mem_lib.GCFrame) {
 func (fb *mockFrameBuffer) ReadEncodings(maxLen uint8) ([]shared_mem_lib.Encoding, bool) {
 	return []shared_mem_lib.Encoding{}, true
 }
+
+// func testCallAndResponse(host bool, fb *shared_mem_lib.FrameBuffer) *webrtc.PeerConnection {
+// 	if host /* We are the host */ {
+
+// 		peerConnection, dataChan, dataChanOpen, messages, err := setupPcAsHost(fb)
+
+// 		if err != nil {
+// 			fmt.Printf("Error setting up connection: %s\n", err)
+// 			return nil
+// 		}
+
+// 		//Wait for data channel to open
+// 		fmt.Println("Waiting for datachannel to open")
+// 		<-dataChanOpen
+
+// 		fmt.Println("Sending message from host")
+// 		dataChan.SendText("Hello from host :)")
+
+// 		//Wait for response
+// 		fmt.Println("Waiting for response")
+// 		response := <-messages
+
+// 		if !response.IsString {
+// 			fmt.Printf("Message was not a string")
+// 			return nil
+// 		}
+
+// 		fmt.Printf("Recieved Message: %s\n", string(response.Data))
+
+// 		return peerConnection
+
+// 	} else /* We are not the host */ {
+
+// 		peerConnection, dcReady, dataChanOpen, messages, err := setupPcAsAttendee(fb)
+
+// 		if err != nil {
+// 			fmt.Printf("Error setting up connection: %s\n", err)
+// 			return nil
+// 		}
+
+// 		fmt.Println("Waiting for datachannel to be created")
+// 		dataChan := <-dcReady
+
+// 		fmt.Println("Waiting for datachannel to open")
+// 		<-dataChanOpen
+
+// 		fmt.Println("Waiting for message from host")
+// 		firstMessage := <-messages
+
+// 		if !firstMessage.IsString {
+// 			fmt.Printf("Message was not a string")
+// 			return nil
+// 		}
+
+// 		fmt.Printf("Recieved Message: %s\n", string(firstMessage.Data))
+
+// 		fmt.Println("Sending reponse")
+
+// 		dataChan.SendText("Hello from the other side")
+
+// 		return peerConnection
+// 	}
+
+// }
