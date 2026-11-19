@@ -4,14 +4,27 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"shared_mem_lib"
 	"time"
 
 	"github.com/pion/webrtc/v4"
 )
 
-// TODO: only close peer connection if it is not nil (in all files)
-func main() {
+// Allows mocking of frameBuffer
+type frameBuffer interface {
+	PushFrames([]shared_mem_lib.GCFrame) bool
+	BlockingPopFrames(
+		shared_mem_lib.Encoding,
+		uint32,
+		uint32,
+	) (bool, []shared_mem_lib.GCFrame)
 
+	ReadEncodings(maxLen uint8) ([]shared_mem_lib.Encoding, bool)
+	RequestEncoding(enc shared_mem_lib.Encoding) bool
+	AlignRingsToConfig() bool
+}
+
+func main() {
 	args := os.Args[1:]
 
 	// Controlled by the frontend: JSON commands on stdin, JSON events on stdout, logs on stderr
@@ -21,13 +34,23 @@ func main() {
 		return
 	}
 
+	var fb shared_mem_lib.FrameBuffer
+	ok := shared_mem_lib.NewFrameBuffer(&fb)
+
+	defer fb.Free()
+
+	if !ok {
+		fmt.Println("Failed to create frame buffer")
+		return
+	}
+
 	//Check if user wants to create a connection or answer
 	host := (len(args) >= 1 && args[0] == "host")
 
 	pcChan := make(chan *webrtc.PeerConnection, 1)
 
 	go func() {
-		pcChan <- testCallAndResponse(host)
+		pcChan <- testCallAndResponse(host, &fb)
 	}()
 
 	<-time.After(5 * time.Minute)
@@ -35,10 +58,10 @@ func main() {
 
 }
 
-func testCallAndResponse(host bool) *webrtc.PeerConnection {
+func testCallAndResponse(host bool, fb *shared_mem_lib.FrameBuffer) *webrtc.PeerConnection {
 	if host /* We are the host */ {
 
-		peerConnection, dataChan, dataChanOpen, messages, err := setupPcAsHost()
+		peerConnection, dataChan, dataChanOpen, messages, err := setupPcAsHost(fb)
 
 		if err != nil {
 			fmt.Printf("Error setting up connection: %s\n", err)
@@ -67,7 +90,7 @@ func testCallAndResponse(host bool) *webrtc.PeerConnection {
 
 	} else /* We are not the host */ {
 
-		peerConnection, dcReady, dataChanOpen, messages, err := setupPcAsAttendee()
+		peerConnection, dcReady, dataChanOpen, messages, err := setupPcAsAttendee(fb)
 
 		if err != nil {
 			fmt.Printf("Error setting up connection: %s\n", err)
@@ -99,7 +122,7 @@ func testCallAndResponse(host bool) *webrtc.PeerConnection {
 
 }
 
-func setupPcAsHost() (
+func setupPcAsHost(fb *shared_mem_lib.FrameBuffer) (
 	*webrtc.PeerConnection,
 	*webrtc.DataChannel,
 	chan bool, //Signals when dataChannel is open
@@ -141,25 +164,14 @@ func setupPcAsHost() (
 		return nil, nil, nil, nil, fmt.Errorf("Error applying answer: %s\n", err)
 	}
 
-	//Send audio
-	// err = selfVoiceTrack.WriteSample(media.Sample{})
-
-	//Don't do this here
-	//Return and then wait at a higher level after SDP printed
-	remoteVoiceTrack := <-remoteVoiceTrackChan
-
-	//Read incoming audio
-	// Should do this in a gorouting + for loop
-	remoteVoiceTrack.ReadRTP() //Blocking read
-	// remoteVoiceTrack.Read()
-
-	//Send data to processing module
+	//Send voice audio
+	goAndPrintIfError(func() error { return relayAudioOnceConnected(selfVoiceTrack, remoteVoiceTrackChan, fb) })
 
 	keepConnection = true
 	return offerPc, dataChan, dataChanOpen, messages, nil
 }
 
-func setupPcAsAttendee() (
+func setupPcAsAttendee(fb *shared_mem_lib.FrameBuffer) (
 	*webrtc.PeerConnection,
 	chan *webrtc.DataChannel,
 	chan bool, //Signals when dataChannel is open (by closing itself)
@@ -193,8 +205,75 @@ func setupPcAsAttendee() (
 
 	fmt.Printf("Answer SDP:\n%s", getSDPStr(answerPc))
 
+	//Send voice audio
+	goAndPrintIfError(func() error { return relayAudioOnceConnected(selfVoiceTrack, remoteVoiceTrackChan, fb) })
+
 	keepConnection = true
 	return answerPc, dcReady, dataChanOpen, messages, nil
+}
+
+func relayAudioOnceConnected(localTrack *webrtc.TrackLocalStaticSample, remoteTrackChan chan *webrtc.TrackRemote, fb frameBuffer) error {
+
+	goAndPrintIfError(func() error {
+		enc, err := waitForAudioEncodingFromProcessing(fb)
+		if err != nil {
+			return err
+		}
+
+		err = relayOutgoingAudioToRemote(localTrack, fb, enc)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	goAndPrintIfError(func() error {
+		remoteTrack := <-remoteTrackChan
+
+		err := relayIncomingAudioToBuffer(remoteTrack, fb)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	return nil
+}
+
+func waitForAudioEncodingFromProcessing(fb frameBuffer) (shared_mem_lib.Encoding, error) {
+	const timeOut = 100 * time.Second
+	const interval = 500 * time.Millisecond
+	elapsed := 0 * time.Second
+
+	for elapsed < timeOut {
+		encs, succ := fb.ReadEncodings(10)
+		if succ {
+			fb.AlignRingsToConfig()
+			// fmt.Println("Got: ", len(encs), " Encodings")
+			for _, v := range encs {
+				if v.IsOutgoing() && v.IsAudio() {
+					return v, nil
+				}
+			}
+		} else {
+			fmt.Println("Failed to poll encodings")
+		}
+
+		elapsed += interval
+		time.Sleep(interval)
+	}
+
+	return shared_mem_lib.Encoding{}, fmt.Errorf("Did not find audio encoding after %s", string(timeOut))
+}
+
+func goAndPrintIfError(f func() error) {
+	go func() {
+		err := f()
+		if err != nil {
+			fmt.Println("Error in concurrent func: " + err.Error())
+		}
+	}()
 }
 
 // Read SDP string from input stream (console for now)

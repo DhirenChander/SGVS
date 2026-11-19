@@ -21,11 +21,11 @@ const managementChannelName = "transceiver_management"
 const voiceAudioChannelName = "voice_audio"
 
 var StunServers = []string{
-	"stun.l.google.com:19302",
-	"stun1.l.google.com:19302",
-	"stun2.l.google.com:19302",
-	"stun3.l.google.com:19302",
-	"stun4.l.google.com:19302",
+	"stun:stun.l.google.com:19302",
+	// "stun:stun1.l.google.com:19302",
+	// "stun:stun2.l.google.com:19302",
+	"stun:stun3.l.google.com:19302",
+	// "stun:stun4.l.google.com:19302",
 }
 
 var ICEConfiguration = webrtc.Configuration{
@@ -36,6 +36,18 @@ var ICEConfiguration = webrtc.Configuration{
 
 // Where connection logging goes. Stdout normally; stderr in ipc mode so stdout stays a clean protocol stream.
 var logOut io.Writer = os.Stdout
+
+// Webrtc API with adjusted timeouts
+var peerAPI = func() *webrtc.API {
+	settings := webrtc.SettingEngine{}
+	settings.SetICETimeouts(
+		1*time.Minute, // disconnected timeout
+		5*time.Minute, // failed timeout
+		5*time.Second, // keep-alive interval
+	)
+
+	return webrtc.NewAPI(webrtc.WithSettingEngine(settings))
+}()
 
 // Setting up connections
 // Switch to named return?
@@ -52,7 +64,7 @@ func generateOffer() (
 	error) {
 
 	// create a peer connection
-	pc, err := webrtc.NewPeerConnection(ICEConfiguration)
+	pc, err := peerAPI.NewPeerConnection(ICEConfiguration)
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
@@ -152,7 +164,7 @@ func generateAnswer(offerSDP string) (
 
 	error) {
 
-	pc, err := webrtc.NewPeerConnection(ICEConfiguration)
+	pc, err := peerAPI.NewPeerConnection(ICEConfiguration)
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
@@ -301,9 +313,9 @@ func AddVoiceTrack(pc *webrtc.PeerConnection) (
 
 }
 
-func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.FrameBuffer) error {
+func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error {
 
-	const minimumBufferedPackets = 5 // -> 50ms delay
+	const minimumBufferedPackets = 10 // -> 100ms delay
 	const audioFrameDuration = 10 * time.Millisecond
 
 	enc := shared_mem_lib.NewAudioEncoding(true) // Is_input is not important here
@@ -337,6 +349,7 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 				fmt.Println("Error reading incoming audio")
 				return
 			}
+			fmt.Printf("Received audio packet from remote:\n\tSequence: %d\n", packet.SequenceNumber)
 
 			sequenceNum := packet.Header.SequenceNumber
 			if hasStarted.Load() {
@@ -373,8 +386,14 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 			//Potential addition: speed up timer temporarily if buffer is overflowing?
 			case <-ticker.C:
 				packet, err := jb.Pop()
-				if errors.Is(err, jitterbuffer.ErrBufferUnderrun) {
+				if errors.Is(err, jitterbuffer.ErrNotFound) {
 					jb.SetPlayoutHead(jb.PlayoutHead() + 1)
+					//Next packet not yet received
+					//Should we push blank audio to shared buffer?
+					continue
+				}
+				if errors.Is(err, jitterbuffer.ErrInvalidOperation) {
+					//Queue empty
 					continue
 				}
 				if err != nil {
@@ -386,8 +405,10 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 				copy(gcFrame.Bytes, packet.Payload)
 				if !fb.PushFrames([]shared_mem_lib.GCFrame{gcFrame}) {
 					fmt.Println("Error pushing audio frame to shared buffer")
+					gcFrame.Close()
 					return
 				}
+				gcFrame.Close()
 			}
 		}
 	}()
@@ -397,45 +418,71 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 
 // Add way to stop sending frames?
 // Add a channel to signal something has failed?
-func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared_mem_lib.FrameBuffer, enc shared_mem_lib.Encoding) error {
-
-	const timeOutMs = 10000
+func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBuffer, enc shared_mem_lib.Encoding) error {
+	const timeOutMs = 100000
 	const maxAudioFrames = 100 // 10ms per frame -> 1 seconds
 
 	//Hard code for now
 	const audioFrameDuration = 10 * time.Millisecond
 
 	go func() {
-		err := error(nil)
-		ok := true
-		for ok && err == nil {
-			var framesToSend []shared_mem_lib.GCFrame
-			ok, framesToSend = fb.BlockingPopFrames(enc, maxAudioFrames, timeOutMs) //BlockingPopFrames resizes slice to only be as long as needed
-
-			for i := 0; i < len(framesToSend); i++ {
-				var media media.Sample = media.Sample{
-					Data:     framesToSend[i].Bytes,
-					Duration: audioFrameDuration,
-				}
-				err = track.WriteSample(media)
-				// framesToSend[i].Close()
-				// (check if anything is still using bytes by reference)
-				if err != nil {
-					break
-				}
+		var err error
+		var ok bool
+		for err == nil {
+			ok, err = popAndCopyFrames(track, fb, enc, maxAudioFrames, timeOutMs, audioFrameDuration)
+			if !ok {
+				<-time.After(audioFrameDuration / 2)
 			}
 		}
 
-		if !ok {
-			fmt.Println("Error popping audio frames")
-		}
-
-		if err != nil {
-			fmt.Println("Error relaying outgoing audio: " + err.Error())
-		}
+		//Will have error if we exited the loop
+		fmt.Println("Error relaying outgoing audio: " + err.Error())
 	}()
 
 	return nil
+}
+
+func popAndCopyFrames(
+	track *webrtc.TrackLocalStaticSample, fb frameBuffer, enc shared_mem_lib.Encoding,
+	maxAudioFrames uint32, timeOutMs uint32, audioFrameDuration time.Duration) (bool, error) {
+
+	var framesToSend []shared_mem_lib.GCFrame
+	ok, framesToSend := fb.BlockingPopFrames(enc, maxAudioFrames, timeOutMs) //BlockingPopFrames resizes slice to only be as long as needed
+
+	if !ok {
+		return false, nil
+	}
+
+	//Default value of bool is false, no need to initialize
+	var closed = make([]bool, len(framesToSend))
+	defer closeAll(framesToSend, closed)
+
+	fmt.Println("Received frames to send from processing module")
+
+	var err error
+	for i := 0; i < len(framesToSend) && err != nil; i++ {
+
+		framesCopy := make([]byte, len(framesToSend[i].Bytes))
+		copy(framesCopy, framesToSend[i].Bytes)
+		framesToSend[i].Close()
+		closed[i] = true
+
+		var media media.Sample = media.Sample{
+			Data:     framesCopy,
+			Duration: audioFrameDuration,
+		}
+		err = track.WriteSample(media)
+	}
+
+	return true, err
+}
+
+func closeAll(frames []shared_mem_lib.GCFrame, closed []bool) {
+	for i, fr := range frames {
+		if !closed[i] {
+			fr.Close()
+		}
+	}
 }
 
 // Generated with AI
