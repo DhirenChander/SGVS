@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"shared_mem_lib"
 	"time"
 
@@ -26,15 +25,6 @@ type frameBuffer interface {
 }
 
 func main() {
-	// var x shared_mem_lib.FrameBuffer
-	// x.AlignRingsToConfig()
-	// Receive JSON commands (on stdin) from frontend,
-	// Send JSON events on stdout, logs on stderr
-
-	//TODO: change to no longer use stdin, stdout
-	//Use message passing via shared mem lib
-	go runIPC(os.Stdin, os.Stdout)
-
 	var fb shared_mem_lib.FrameBuffer
 	ok := shared_mem_lib.NewFrameBuffer(&fb)
 
