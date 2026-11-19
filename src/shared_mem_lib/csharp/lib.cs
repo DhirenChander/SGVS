@@ -76,11 +76,36 @@ public struct MsgData
     private byte _element0;
 }
 
+[StructLayout(LayoutKind.Sequential)]
 public struct Message
 {
     MsgData data;
     Module src, dest;
     Operation opcode;
+
+    public Message(byte[] data, Module src, Module dest, Operation opcode)
+    {
+        this.src = src;
+        this.dest = dest;
+        this.opcode = opcode;
+
+        if (data == null)
+        {
+            return;
+        }
+
+        if (data.Length > 255)
+        {
+            throw new Exception("Data is too long to be converted to a message");
+        }
+
+        for (int i = 0; i < data.Length; i++)
+        {
+            this.data[i] = data[i];
+        }
+
+        this.data[data.Length + 1] = 0x00;
+    }
 };
 
 [StructLayout(LayoutKind.Explicit)]

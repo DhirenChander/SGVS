@@ -28,12 +28,11 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
     private readonly TimeSpan _setupTimeout;
 
     private readonly Func<INetworkingProcess> _startProcess;
-    private readonly Func<IFrameBuffer> _openSharedMemory;
     private readonly Action<Action> _post;
     private readonly ObservableCollection<Participant> _members = [];
 
     private INetworkingProcess? _process;
-    private IFrameBuffer? _sharedMemory;
+    private IFrameBuffer _sharedMemory;
 
     // the host/join/accept the networking module still owes an answer to. completes true on success
     private TaskCompletionSource<bool>? _pending;
@@ -45,14 +44,18 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
     public NetworkMeetingService(
         string selfName,
         Func<INetworkingProcess> startProcess,
-        Func<IFrameBuffer> openSharedMemory,
         Action<Action> post,
         TimeSpan? setupTimeout = null)
     {
+        Console.WriteLine("Creating meeting service...");
         _setupTimeout = setupTimeout ?? DefaultSetupTimeout;
         _startProcess = startProcess;
-        _openSharedMemory = openSharedMemory;
         _post = post;
+        Console.Write("Initializing shared memory...");
+
+        _sharedMemory = new GCFrameBuffer();
+
+        Console.WriteLine("Done.");
 
         Self = new Participant { Name = selfName, IsSelf = true, Tone = AvatarTone.Teal };
         _members.Add(Self);
@@ -79,15 +82,14 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
 
     public bool AcceptReply(string replyCode)
     {
-        return _sharedMemory.PushMessage(new(Encoding.UTF8.GetBytes(replyCode), Module.App, Module.Network, Operation.JoinCode));
+        return _sharedMemory.PushMessage(new(System.Text.Encoding.UTF8.GetBytes(replyCode), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.AnswerCode));
     }
 
     public void StartStream(ShareSource source)
     {
         try
         {
-            _sharedMemory ??= new GCFrameBuffer();
-            _sharedMemory.PushMessage(new(new(0x0), Module.App, Module.Network, Operation.StartSharing));
+            _sharedMemory.PushMessage(new(null, SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, Operation.StartSharing));
         }
         catch (Exception e) when (e is InvalidOperationException or DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
@@ -103,7 +105,7 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         Self.IsStreamer = false;
         Self.StreamPreview = null;
 
-        try { _sharedMemory?.PushMessage(new(new(0x0), Module.App, Module.Network, Operation.StopSharing)); }
+        try { _sharedMemory.PushMessage(new(null, SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.StopSharing)); }
         catch (Exception e) when (e is InvalidOperationException) { Error = "Could not update the shared memory: " + e.Message; }
     }
 
@@ -144,7 +146,7 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         Error = null;
         IsHost = isHost;
 
-        try
+        /*try
         {
             _process = _startProcess(isHost);
         }
@@ -152,10 +154,10 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         {
             Error = $"{failurePrefix}: {e.Message}";
             return false;
-        }
+        }*/
 
-        _process.EventReceived += OnEvent;
-        _process.Exited += OnExited;
+        //_process.EventReceived += OnEvent;
+        //_process.Exited += OnExited;
 
         /*var pending = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending = pending;
@@ -163,15 +165,13 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         _process.Send(command);*/
 
         //var finished = await Task.WhenAny(pending.Task, Task.Delay(_setupTimeout));
-        _sharedMemory ??= new GCFrameBuffer();
-
         if (isHost)
         {
-            _sharedMemory.PushMessage(new(new(0x0), Module.App, Module.Network, Operation.HostCode));
+            _sharedMemory.PushMessage(new(null, SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.HostCode));
         }
         else
         {
-            _sharedMemory.PushMessage(new(Encoding.UTF8.GetBytes(hostCode), Module.App, Module.Network, Operation.JoinCode));
+            _sharedMemory.PushMessage(new(System.Text.Encoding.UTF8.GetBytes(hostCode), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.AnswerCode));
         }
 
         /*if (finished != pending.Task)
@@ -184,7 +184,8 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         return true; //await pending.Task;
     }
 
-    private void OnEvent(NetworkingEvent evt) => _post(() => Handle(evt));
+    /*
+    private void OnEvent(SharedMemLibrary.Operation evt) => _post(() => Handle(evt));
 
     private void OnExited() => _post(() =>
     {
@@ -194,14 +195,14 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         //FailPending();
     });
 
-    private void Handle(Operation op)
+    private void Handle(SharedMemLibrary.Operation op)
     {
         switch (op)
         {
-            case StartSharing:
-            case StopSharing:
-            case HostCode:
-            case JoinCode:
+            case SharedMemLibrary.Operation.StartSharing:
+            case SharedMemLibrary.Operation.StopSharing:
+            case SharedMemLibrary.Operation.HostCode:
+            case SharedMemLibrary.Operation.AnswserCode:
             default:
                 Console.WriteLine("Handle for operation not implemented");
         }
@@ -249,8 +250,8 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
                 Error = evt.Message ?? "Something went wrong.";
                 FailPending();
                 break;
-        }*/
-    }
+        }
+    }*/
 
     /*
     private void OnConnectionState(string? state)

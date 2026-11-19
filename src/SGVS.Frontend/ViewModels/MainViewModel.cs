@@ -63,15 +63,24 @@ public partial class MainViewModel : ViewModelBase
         if (Environment.GetEnvironmentVariable("SGVS_FAKE") == "1") return new FakeMeetingService();
 
         // display names aren't decided yet, so for now it's whoever is signed in to the PC
-        return new NetworkMeetingService(Environment.UserName, StartNetworking, () => new GCFrameBuffer(),
+        return new NetworkMeetingService(Environment.UserName, StartNetworking,
             action => Dispatcher.UIThread.Post(action));
     }
 
     private static INetworkingProcess StartNetworking()
     {
-        var path = NetworkingProcess.FindExecutable()
-                   ?? throw new FileNotFoundException("The networking module (backend/sgvs-networking) was not found next to the app.");
-        Trace.WriteLine("[networking] starting " + path);
-        return new NetworkingProcess(path);
+        try
+        {
+            var path = NetworkingProcess.FindExecutable()
+                       ?? throw new FileNotFoundException("The networking module (backend/sgvs-networking) was not found next to the app.");
+
+            Trace.WriteLine("[networking] starting " + path);
+            return new NetworkingProcess(path);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+            throw;
+        }
     }
 }
