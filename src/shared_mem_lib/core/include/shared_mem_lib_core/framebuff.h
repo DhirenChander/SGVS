@@ -43,6 +43,7 @@ extern "C"
 #ifdef _WIN32
                 // Encs_ev is using for encoding updates, msg_evs is used for any other config updates
                 HANDLE encs_ev, conf_map, conf_mu;
+                // TODO: Change this to an SRW lock
                 CRITICAL_SECTION cs;
 #endif
                 uint8_t ring_count;
