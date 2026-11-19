@@ -1,3 +1,10 @@
 **/.vscode
 **/build
 **/*.exe
+**/.vscode/**
+bin/
+obj/
+.vs/
+*.user
+.DS_Store
+HANDOFF.md

@@ -1,0 +1,60 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SGVS.Frontend.ViewModels"
+             xmlns:m="using:SGVS.Frontend.Models"
+             xmlns:controls="using:SGVS.Frontend.Views.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="720"
+             x:Class="SGVS.Frontend.Views.WatchView"
+             x:DataType="vm:WatchViewModel">
+
+    <!-- everything below binds to this. at runtime the ViewLocator sets it from MainViewModel.CurrentView -->
+    <Design.DataContext>
+        <vm:WatchViewModel />
+    </Design.DataContext>
+
+    <!-- no title-bar margin hack here anymore - MainWindow draws its own 36px bar on top
+         of whatever view is current, so every element below just leaves 36px at the top
+         itself (see the Stream border and member rail margins) -->
+    <Panel Background="{DynamicResource SgvsGroundBrush}">
+
+        <!-- the stream: placeholder image with the control overlay on top -->
+        <Border x:Name="StreamBorder" Margin="8,36,72,9" CornerRadius="8" ClipToBounds="True"
+                BoxShadow="0 12 34 0 #80000000">
+            <Panel x:Name="StreamHost" Background="Black">
+                <Image x:Name="StreamImage" Source="{Binding StreamFrame}" Stretch="UniformToFill" />
+                <!-- the bar, gear and dialogs. they run on the shared OverlayViewModel -->
+                <controls:StreamOverlay x:Name="Overlay" DataContext="{Binding Overlay}"
+                                        FullscreenRequested="OnFullscreenRequested" />
+            </Panel>
+        </Border>
+
+        <!-- member rail: one small avatar per person, the same one the Meeting gallery shows. no camera
+             tiles and no header text in this design - just a gradient "live" ring drawn around
+             whoever is currently streaming -->
+        <ItemsControl x:Name="MembersRail" Width="72" HorizontalAlignment="Right" VerticalAlignment="Center"
+                      Margin="0,36,0,74" ItemsSource="{Binding Participants}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Spacing="12" HorizontalAlignment="Center" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="m:Participant">
+                    <Panel Width="44" Height="44" ToolTip.Tip="{Binding Name}">
+                        <Ellipse Width="50" Height="50" StrokeThickness="1.5" Stroke="{StaticResource SgvsLiveStrokeBrush}"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsStreamer}" />
+                        <!-- same avatar as the Meeting gallery, just smaller -->
+                        <controls:MemberAvatar />
+                    </Panel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- join-code rail, bottom-right. lives outside the stream border on purpose,
+             it's never supposed to be hidden by the auto-hide timer -->
+        <controls:JoinCodeRail x:Name="CodeRail" DataContext="{Binding JoinCode}"
+                               HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,14" />
+    </Panel>
+</UserControl>

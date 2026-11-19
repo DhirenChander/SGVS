@@ -18,7 +18,7 @@ bool uint256_eq(uint256_t a, uint256_t b)
 
 int write_uint256(char *buff, uint256_t val)
 {
-    return sprintf(buff, PRIu64 PRIu64 PRIu64 PRIu64, val.limbs[0], val.limbs[1], val.limbs[2], val.limbs[3]);
+    return sprintf(buff, "%016" PRIx64 "%016" PRIx64 "%016" PRIx64 "%016" PRIx64, val.limbs[0], val.limbs[1], val.limbs[2], val.limbs[3]);
 }
 
 #ifdef _WIN32
