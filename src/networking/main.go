@@ -27,20 +27,6 @@ type frameBuffer interface {
 func main() {
 	args := os.Args[1:]
 
-	if len(args) >= 1 && args[0] == "test" {
-		success := runTests()
-
-		var msg string
-		if success {
-			msg = "Tests passed"
-		} else {
-			msg = "Tests failed"
-		}
-
-		fmt.Println(msg)
-		return
-	}
-
 	var fb shared_mem_lib.FrameBuffer
 	ok := shared_mem_lib.NewFrameBuffer(&fb)
 

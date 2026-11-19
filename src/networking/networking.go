@@ -381,10 +381,14 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error
 			//Potential addition: speed up timer temporarily if buffer is overflowing?
 			case <-ticker.C:
 				packet, err := jb.Pop()
-				if errors.Is(err, jitterbuffer.ErrInvalidOperation) {
+				if errors.Is(err, jitterbuffer.ErrNotFound) {
 					jb.SetPlayoutHead(jb.PlayoutHead() + 1)
 					//Next packet not yet received
 					//Should we push blank audio to shared buffer?
+					continue
+				}
+				if errors.Is(err, jitterbuffer.ErrInvalidOperation) {
+					//Queue empty
 					continue
 				}
 				if err != nil {
@@ -417,45 +421,63 @@ func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBu
 	const audioFrameDuration = 10 * time.Millisecond
 
 	go func() {
-		err := error(nil)
-		ok := true
+		var err error
+		var ok bool
 		for err == nil {
-			var framesToSend []shared_mem_lib.GCFrame
-			ok, framesToSend = fb.BlockingPopFrames(enc, maxAudioFrames, timeOutMs) //BlockingPopFrames resizes slice to only be as long as needed
-
+			ok, err = popAndCopyFrames(track, fb, enc, maxAudioFrames, timeOutMs, audioFrameDuration)
 			if !ok {
-				continue
-			}
-
-			fmt.Println("Received frames to send from processing module")
-
-			for i := 0; i < len(framesToSend); i++ {
-
-				framesCopy := make([]byte, len(framesToSend[i].Bytes))
-				copy(framesCopy, framesToSend[i].Bytes)
-				framesToSend[i].Close()
-
-				var media media.Sample = media.Sample{
-					Data:     framesCopy,
-					Duration: audioFrameDuration,
-				}
-				err = track.WriteSample(media)
-				if err != nil {
-					break
-				}
+				<-time.After(audioFrameDuration / 2)
 			}
 		}
 
-		if !ok {
-			fmt.Println("Error popping audio frames")
-		}
-
-		if err != nil {
-			fmt.Println("Error relaying outgoing audio: " + err.Error())
-		}
+		//Will have error if we exited the loop
+		fmt.Println("Error relaying outgoing audio: " + err.Error())
 	}()
 
 	return nil
+}
+
+func popAndCopyFrames(
+	track *webrtc.TrackLocalStaticSample, fb frameBuffer, enc shared_mem_lib.Encoding,
+	maxAudioFrames uint32, timeOutMs uint32, audioFrameDuration time.Duration) (bool, error) {
+
+	var framesToSend []shared_mem_lib.GCFrame
+	ok, framesToSend := fb.BlockingPopFrames(enc, maxAudioFrames, timeOutMs) //BlockingPopFrames resizes slice to only be as long as needed
+
+	if !ok {
+		return false, nil
+	}
+
+	//Default value of bool is false, no need to initialize
+	var closed = make([]bool, len(framesToSend))
+	defer closeAll(framesToSend, closed)
+
+	fmt.Println("Received frames to send from processing module")
+
+	var err error
+	for i := 0; i < len(framesToSend) && err != nil; i++ {
+
+		framesCopy := make([]byte, len(framesToSend[i].Bytes))
+		copy(framesCopy, framesToSend[i].Bytes)
+		framesToSend[i].Close()
+		closed[i] = true
+
+		var media media.Sample = media.Sample{
+			Data:     framesCopy,
+			Duration: audioFrameDuration,
+		}
+		err = track.WriteSample(media)
+	}
+
+	return true, err
+}
+
+func closeAll(frames []shared_mem_lib.GCFrame, closed []bool) {
+	for i, fr := range frames {
+		if !closed[i] {
+			fr.Close()
+		}
+	}
 }
 
 // Generated with AI

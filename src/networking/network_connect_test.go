@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"shared_mem_lib"
+	"testing"
 	"time"
 )
 
@@ -15,21 +16,12 @@ type mockFrameBuffer struct {
 	totalPopped  int
 }
 
-func runTests() bool {
-	return testAudioTransfer()
-}
-
-//TODO: Check if we can test with a real frame buffer instead of mocking
-
-func testAudioTransfer() bool {
+// TODO: Check if we can test with a real frame buffer instead of mocking
+func TestAudioTransfer(t *testing.T) {
 
 	//Need one frame buffer for each direction?
 	var fbMockHost *mockFrameBuffer = &mockFrameBuffer{framesToPop: make(chan []shared_mem_lib.GCFrame, 100)}
 	var fbMockOther *mockFrameBuffer = &mockFrameBuffer{framesToPop: make(chan []shared_mem_lib.GCFrame, 100)}
-
-	// connectMocksFbs(fbMockHost, fbMockOther)
-
-	//Set up so that they reference each other?
 
 	hostPc, _, _, _,
 		hostSelfVoiceTrack, _, hostRemoteVoiceTrackChan, _,
@@ -37,7 +29,7 @@ func testAudioTransfer() bool {
 
 	if err != nil {
 		fmt.Println(err.Error())
-		return false
+		t.FailNow()
 	}
 
 	otherPc, _, _, _,
@@ -46,13 +38,13 @@ func testAudioTransfer() bool {
 
 	if err != nil {
 		fmt.Println(err.Error())
-		return false
+		t.FailNow()
 	}
 
 	err = applyAnswer(hostPc, getSDPStr(otherPc))
 	if err != nil {
 		fmt.Println(err.Error())
-		return false
+		t.FailNow()
 	}
 
 	goAndPrintIfError(func() error {
@@ -98,12 +90,9 @@ func testAudioTransfer() bool {
 		fmt.Printf("Frame %d: %s\n", i, bytesToHexStr(v.Bytes))
 	}
 
-	if receiver.totalPushed == numFrameSets*2 {
-		return true
+	if receiver.totalPushed != numFrameSets*2 {
+		t.FailNow()
 	}
-
-	//Keep PCs alive?
-	return false
 }
 
 func bytesToHexStr(bytes []byte) string {
@@ -147,5 +136,5 @@ func (mfb *mockFrameBuffer) AppendFrames(frames []shared_mem_lib.GCFrame) {
 }
 
 func (fb *mockFrameBuffer) ReadEncodings(maxLen uint8) ([]shared_mem_lib.Encoding, bool) {
-	return []shared_mem_lib.Encoding{}, false
+	return []shared_mem_lib.Encoding{}, true
 }
