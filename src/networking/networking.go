@@ -1,31 +1,60 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"sync/atomic"
+	"time"
+
+	"shared_mem_lib"
+
+	"github.com/pion/interceptor/pkg/jitterbuffer"
+	"github.com/pion/webrtc/v4/pkg/media"
 
 	"github.com/pion/webrtc/v4"
 )
 
 const managementChannelName = "transceiver_management"
+const voiceAudioChannelName = "voice_audio"
+
+var StunServers = []string{
+	"stun.l.google.com:19302",
+	"stun1.l.google.com:19302",
+	"stun2.l.google.com:19302",
+	"stun3.l.google.com:19302",
+	"stun4.l.google.com:19302",
+}
+
+var ICEConfiguration = webrtc.Configuration{
+	ICEServers: []webrtc.ICEServer{{
+		URLs: StunServers,
+	}},
+}
 
 // Where connection logging goes. Stdout normally; stderr in ipc mode so stdout stays a clean protocol stream.
 var logOut io.Writer = os.Stdout
 
 // Setting up connections
+// Switch to named return?
+// Or wrap objects together in a struct?
 func generateOffer() (
 	*webrtc.PeerConnection,
 	*webrtc.DataChannel,
-	chan struct{}, //Signals when dataChannel is open (by closing itself) (TODO): See if we can change this into a chan bool
+	chan bool, //Signals when dataChannel is open
 	chan webrtc.DataChannelMessage, //Messages are sent to here (should this be an input instead of output?)
+	*webrtc.TrackLocalStaticSample, //Voice audio track
+	*webrtc.RTPSender, //Voice audio sender
+	chan *webrtc.TrackRemote, //Voice audio channel
+	chan *webrtc.RTPReceiver, //Voice audio receiver
 	error) {
 
 	// create a peer connection
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	pc, err := webrtc.NewPeerConnection(ICEConfiguration)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 	logPeerConnectionState(pc, "host")
 
@@ -42,10 +71,25 @@ func generateOffer() (
 	dataChannel, err := pc.CreateDataChannel(managementChannelName, nil)
 	if err != nil {
 		_ = pc.Close()
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
-	dataChanOpen := make(chan struct{}, 1)
+	voiceTrack, voiceSender, err := AddVoiceTrack(pc)
+
+	remoteAudioChan := make(chan *webrtc.TrackRemote, 1)
+	remoteAudioReceiverChan := make(chan *webrtc.RTPReceiver, 1)
+
+	//When the remote adds their audio track
+	pc.OnTrack(func(remoteTrack *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+		if remoteTrack.ID() != voiceAudioChannelName {
+			return
+		}
+
+		remoteAudioChan <- remoteTrack
+		remoteAudioReceiverChan <- receiver
+	})
+
+	dataChanOpen := make(chan bool, 1)
 	dcMessages := make(chan webrtc.DataChannelMessage, 1)
 
 	dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
@@ -53,15 +97,14 @@ func generateOffer() (
 	})
 
 	dataChannel.OnOpen(func() {
-		//Close channel to signal dataChannel is open
+		dataChanOpen <- true
 		close(dataChanOpen)
-
 	})
 
 	// create a first offer that does not contain any local candidates
 	offer, err := pc.CreateOffer(nil)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	// gatherComplete is a channel that will be closed when
@@ -71,7 +114,7 @@ func generateOffer() (
 	// apply the offer
 	err = pc.SetLocalDescription(offer)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	// wait for gathering of local candidates to complete
@@ -86,11 +129,13 @@ func generateOffer() (
 	// Check that it contains at least one candidate
 	// Potentially move this check outside of this function if we need to differentiate it or act differently
 	if !strings.Contains(offer2.SDP, "\na=candidate:") {
-		return nil, nil, nil, nil, fmt.Errorf("No SDP candidates found, offer is not usable")
+		return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("No SDP candidates found, offer is not usable")
 	}
 
 	keepConnection = true
-	return pc, dataChannel, dataChanOpen, dcMessages, nil
+	return pc, dataChannel, dataChanOpen, dcMessages,
+		voiceTrack, voiceSender, remoteAudioChan, remoteAudioReceiverChan,
+		nil
 }
 
 func generateAnswer(offerSDP string) (
@@ -98,13 +143,18 @@ func generateAnswer(offerSDP string) (
 	chan *webrtc.DataChannel, //Return a channel that will recieve the DataChannel once it is created
 	//                          Because channel is only received once host finished setup, we cannot wait for channel here
 
-	chan struct{}, //Signals when dataChannel is open (by closing itself) (TODO): See if we can change this into a chan bool
+	chan bool, //Signals when dataChannel is open
 	chan webrtc.DataChannelMessage, //Messages are sent to here (should this be an input instead of output?)
+	*webrtc.TrackLocalStaticSample, //Voice audio track
+	*webrtc.RTPSender, //Voice audio sender
+	chan *webrtc.TrackRemote, //Voice audio channel
+	chan *webrtc.RTPReceiver, //Voice audio receiver
+
 	error) {
 
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	pc, err := webrtc.NewPeerConnection(ICEConfiguration)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 	logPeerConnectionState(pc, "attendee")
 
@@ -123,7 +173,7 @@ func generateAnswer(offerSDP string) (
 		SDP:  offerSDP,
 	}
 
-	dataChanOpen := make(chan struct{}, 1)
+	dataChanOpen := make(chan bool, 1)
 	dcMessages := make(chan webrtc.DataChannelMessage, 1)
 
 	dcReady := make(chan *webrtc.DataChannel, 1)
@@ -140,25 +190,43 @@ func generateAnswer(offerSDP string) (
 		})
 
 		dc.OnOpen(func() {
-			//Signal that the data channel is open by closing this channel
+			dataChanOpen <- true
 			close(dataChanOpen)
 		})
 
 		dcReady <- dc
 	})
 
+	remoteAudioChan := make(chan *webrtc.TrackRemote, 1)
+	remoteAudioReceiverChan := make(chan *webrtc.RTPReceiver, 1)
+
+	//When the remote (host for now) adds their audio track
+	pc.OnTrack(func(remoteTrack *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+		if remoteTrack.ID() != voiceAudioChannelName {
+			return
+		}
+
+		remoteAudioChan <- remoteTrack
+		remoteAudioReceiverChan <- receiver
+	})
+
 	if err := pc.SetRemoteDescription(remoteOffer); err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
+	}
+
+	voiceTrack, voiceSender, err := AddVoiceTrack(pc)
+	if err != nil {
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	gatherComplete := webrtc.GatheringCompletePromise(pc)
 	if err := pc.SetLocalDescription(answer); err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	// wait for gathering of candidates to complete
@@ -166,11 +234,14 @@ func generateAnswer(offerSDP string) (
 
 	localAnswer := pc.LocalDescription()
 	if localAnswer == nil {
-		return nil, nil, nil, nil, fmt.Errorf("Local answer could not be generated")
+		return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("Local answer could not be generated")
 	}
 
 	keepConnection = true
-	return pc, dcReady, dataChanOpen, dcMessages, nil
+
+	return pc, dcReady, dataChanOpen, dcMessages,
+		voiceTrack, voiceSender, remoteAudioChan, remoteAudioReceiverChan,
+		nil
 }
 
 func applyAnswer(pc *webrtc.PeerConnection, SDP string) error {
@@ -182,6 +253,189 @@ func applyAnswer(pc *webrtc.PeerConnection, SDP string) error {
 
 func getSDPStr(pc *webrtc.PeerConnection) string {
 	return pc.LocalDescription().SDP
+}
+
+// TODO: Call this before creating offer (for host) and before creating answer but after setting remote (for attendee)
+func AddVoiceTrack(pc *webrtc.PeerConnection) (
+	*webrtc.TrackLocalStaticSample,
+	*webrtc.RTPSender,
+	error,
+) {
+
+	defaultAudioCapability :=
+		webrtc.RTPCodecCapability{
+			MimeType:  webrtc.MimeTypeOpus,
+			ClockRate: 48000,
+			Channels:  2,
+		}
+
+	track, err := webrtc.NewTrackLocalStaticSample(
+		defaultAudioCapability,
+		voiceAudioChannelName,
+		voiceAudioChannelName+"_stream",
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sender, err := pc.AddTrack(track)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Drain the incoming RTCP data until it errors
+	// 		For now just discard the data,
+	// not the audio data, only data about connection stability and performance
+	// Use this to read Receiver Reports and updates on network conditions
+	go func() {
+		buf := make([]byte, 1500)
+		for {
+			//Use ReadRTCP later to get formatted info
+			if _, _, err := sender.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	return track, sender, nil
+
+}
+
+func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.FrameBuffer) error {
+
+	const minimumBufferedPackets = 5 // -> 50ms delay
+	const audioFrameDuration = 10 * time.Millisecond
+
+	enc := shared_mem_lib.NewAudioEncoding(true) // Is_input is not important here
+	enc.SetIncoming()
+
+	if !fb.RequestEncoding(enc) {
+		return fmt.Errorf("Failed to request encoding")
+	}
+
+	if !fb.AlignRingsToConfig() {
+		return fmt.Errorf("Failed to align rings to config")
+	}
+
+	jb := jitterbuffer.New(jitterbuffer.WithMinimumPacketCount(minimumBufferedPackets))
+
+	playbackStarted := make(chan struct{})
+	var hasStarted atomic.Bool
+
+	//
+	jb.Listen(jitterbuffer.BeginPlayback, func(event jitterbuffer.Event, buf *jitterbuffer.JitterBuffer) {
+		hasStarted.Store(true)
+		close(playbackStarted)
+	})
+
+	readDone := make(chan struct{}) //Will stop playing from jitter buffer when this closes
+	go func() {
+		defer close(readDone)
+		for {
+			packet, _, err := track.ReadRTP()
+			if err != nil {
+				fmt.Println("Error reading incoming audio")
+				return
+			}
+
+			sequenceNum := packet.Header.SequenceNumber
+			if hasStarted.Load() {
+				if int16(sequenceNum-jb.PlayoutHead()) < 0 {
+					//We have already played past this packet, arrived too late
+					continue
+				}
+
+				//			sequence is mod 16, so subtract then cast to signed int
+			} else if int16(sequenceNum-jb.PlayoutHead()) < 0 {
+				//During initial buffer filling, if packets arrive earlier
+				//than playoutHead, move head backwards
+				//May or may not happen on first packet retrieval, but doesn't matter (first push sets head automatically)
+				jb.SetPlayoutHead(sequenceNum)
+			}
+			jb.Push(packet)
+		}
+	}()
+
+	go func() {
+		select { //Wait until initial buffer fill is complete
+		case <-playbackStarted:
+		case <-readDone:
+			return
+		}
+
+		ticker := time.NewTicker(audioFrameDuration)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-readDone:
+				return
+			//Potential addition: speed up timer temporarily if buffer is overflowing?
+			case <-ticker.C:
+				packet, err := jb.Pop()
+				if errors.Is(err, jitterbuffer.ErrBufferUnderrun) {
+					jb.SetPlayoutHead(jb.PlayoutHead() + 1)
+					continue
+				}
+				if err != nil {
+					fmt.Printf("Error reading from audio jitter buffer: %v\n", err)
+					return
+				}
+
+				gcFrame := shared_mem_lib.NewGCFrame(enc)
+				copy(gcFrame.Bytes, packet.Payload)
+				if !fb.PushFrames([]shared_mem_lib.GCFrame{gcFrame}) {
+					fmt.Println("Error pushing audio frame to shared buffer")
+					return
+				}
+			}
+		}
+	}()
+
+	return nil
+}
+
+// Add way to stop sending frames?
+// Add a channel to signal something has failed?
+func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared_mem_lib.FrameBuffer, enc shared_mem_lib.Encoding) error {
+
+	const timeOutMs = 10000
+	const maxAudioFrames = 100 // 10ms per frame -> 1 seconds
+
+	//Hard code for now
+	const audioFrameDuration = 10 * time.Millisecond
+
+	go func() {
+		err := error(nil)
+		ok := true
+		for ok && err == nil {
+			var framesToSend []shared_mem_lib.GCFrame
+			ok, framesToSend = fb.BlockingPopFrames(enc, maxAudioFrames, timeOutMs) //BlockingPopFrames resizes slice to only be as long as needed
+
+			for i := 0; i < len(framesToSend); i++ {
+				var media media.Sample = media.Sample{
+					Data:     framesToSend[i].Bytes,
+					Duration: audioFrameDuration,
+				}
+				err = track.WriteSample(media)
+				// framesToSend[i].Close()
+				// (check if anything is still using bytes by reference)
+				if err != nil {
+					break
+				}
+			}
+		}
+
+		if !ok {
+			fmt.Println("Error popping audio frames")
+		}
+
+		if err != nil {
+			fmt.Println("Error relaying outgoing audio: " + err.Error())
+		}
+	}()
+
+	return nil
 }
 
 // Generated with AI
