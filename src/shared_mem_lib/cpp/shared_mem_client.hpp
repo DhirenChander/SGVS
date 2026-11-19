@@ -1,3 +1,4 @@
+// Partially Generated With Claude
 #pragma once
 
 #if defined(_WIN32) || defined(_WIN64)

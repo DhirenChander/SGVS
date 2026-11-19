@@ -1,3 +1,4 @@
+// Generated with Claude
 package shared_mem_lib
 
 /*
