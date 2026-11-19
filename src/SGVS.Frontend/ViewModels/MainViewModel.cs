@@ -62,8 +62,6 @@ public partial class MainViewModel : ViewModelBase
     {
         if (Environment.GetEnvironmentVariable("SGVS_FAKE") == "1") return new FakeMeetingService();
 
-        Console.WriteLine("Here");
-
         // display names aren't decided yet, so for now it's whoever is signed in to the PC
         return new NetworkMeetingService(Environment.UserName, StartNetworking,
             action => Dispatcher.UIThread.Post(action));

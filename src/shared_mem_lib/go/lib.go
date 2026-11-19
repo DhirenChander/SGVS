@@ -1,4 +1,3 @@
-// Generated with Claude
 package shared_mem_lib
 
 /*
@@ -125,9 +124,10 @@ func (fb *FrameBuffer) ReadEncodings(maxLen uint8) ([]Encoding, bool) {
 	return encs[:outLen], true
 }
 
-// bool push_message(FrameBuffer *fb, Message msg);
+// bool push_message(FrameBuffer *fb, Message *msg);
 func (fb *FrameBuffer) PushMessage(msg Message) bool {
-	return bool(C.push_message(fb.c(), C.Message(msg)))
+	// push_message takes a pointer in the c api. msg is a copy, so the caller keeps their message
+	return bool(C.push_message(fb.c(), (*C.Message)(&msg)))
 }
 
 // bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_msg);

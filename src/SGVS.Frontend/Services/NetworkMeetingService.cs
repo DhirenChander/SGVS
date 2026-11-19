@@ -78,11 +78,33 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         Setup("Could not start the meeting", isHost: true, hostCode: "");
 
     public bool Join(string hostCode) =>
-         Setup("Could not join the meeting", isHost: false, hostCode: hostCode);
 
-    public bool AcceptReply(string answerCode)
+         Setup("Could not join the meeting", isHost: false, hostCode: hostCode.Trim());
+
+    public bool AcceptReply(string replyCode)
     {
-        return _sharedMemory.PushMessage(new(System.Text.Encoding.UTF8.GetBytes(answerCode), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.AnswerCode));
+        return TryPush(
+            new(System.Text.Encoding.UTF8.GetBytes(replyCode), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.AnswerCode),
+            "Could not send the reply");
+    }
+
+    // pushes a message to the networking module. a missing/mismatched native library or a full
+    // channel becomes an Error the UI can show instead of an unhandled exception
+    private bool TryPush(Message message, string failurePrefix)
+    {
+        try
+        {
+            // PushMessage returns false when the ring is full, so treat that as a failure too
+            if (_sharedMemory.PushMessage(message)) return true;
+            Error = $"{failurePrefix}: the shared memory channel is full or unavailable.";
+        }
+        // these are what we get if the native dll is missing, the wrong bitness, or out of date with lib.cs
+        catch (Exception e) when (e is InvalidOperationException or DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
+        {
+            Error = $"{failurePrefix}: {e.Message}";
+        }
+
+        return false;
     }
 
     public void StartStream(ShareSource source)
@@ -137,7 +159,6 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
     // called when starting or joining a meeting
     private bool Setup(string failurePrefix, bool isHost, string hostCode)
     {
-        Console.WriteLine("In setup");
         if (State is not (CallState.Idle or CallState.Ended) || _pending is not null)
         {
             Error = "Already in a meeting.";
@@ -166,16 +187,14 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         _process.Send(command);*/
 
         //var finished = await Task.WhenAny(pending.Task, Task.Delay(_setupTimeout));
-        Console.Write("Pushing message...");
-        if (isHost)
-        {
-            _sharedMemory.PushMessage(new(null, SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.HostCode));
-        }
-        else
-        {
-            _sharedMemory.PushMessage(new(System.Text.Encoding.UTF8.GetBytes(hostCode), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.AnswerCode));
-        }
-        Console.WriteLine("Pushed.");
+        // the host just asks the networking module for a host code (no payload), while a joiner
+        // sends the code they were given across as an answer code
+        var message = isHost
+            ? new Message(null, SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.HostCode)
+            : new Message(System.Text.Encoding.UTF8.GetBytes(hostCode), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.AnswerCode);
+
+        // bail out here so the UI shows the error from TryPush instead of waiting on a message that never went out
+        if (!TryPush(message, failurePrefix)) return false;
 
         /*if (finished != pending.Task)
         {
@@ -205,7 +224,7 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
             case SharedMemLibrary.Operation.StartSharing:
             case SharedMemLibrary.Operation.StopSharing:
             case SharedMemLibrary.Operation.HostCode:
-            case SharedMemLibrary.Operation.AnswserCode:
+            case SharedMemLibrary.Operation.AnswerCode:
             default:
                 Console.WriteLine("Handle for operation not implemented");
         }

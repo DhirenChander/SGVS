@@ -1,4 +1,3 @@
-// Partially Generated With Claude
 #pragma once
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -137,7 +136,8 @@ namespace shared_mem_client
 
         bool push_message(Message msg)
         {
-            return ::push_message(&fb_, msg);
+            // the c api takes a pointer to the message, msg is our own copy so taking its address is fine
+            return ::push_message(&fb_, &msg);
         }
 
         bool blocking_pop_message(Module src, Module dst, Message *out_msg)

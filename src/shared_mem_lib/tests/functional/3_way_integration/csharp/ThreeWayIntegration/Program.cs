@@ -27,7 +27,8 @@ class Program {
     static void Main(string[] args) {
         GCFrameBuffer buffer = new GCFrameBuffer();
         
-        HashSet<ulong> running_encs = new HashSet<ulong>();
+        // encodings we already have a task running for, keyed by their 4-limb id
+        HashSet<(ulong, ulong, ulong, ulong)> running_encs = new();
 
         while(true) {
             (Encoding[] encodings, bool success) = buffer.ReadEncodings(10);
@@ -38,7 +39,10 @@ class Program {
                 bool aligned = false;
 
                 foreach (Encoding enc in encodings) {
-                    if(running_encs.Contains(enc.id)) {
+                    // ids are 256 bits wide now, so a single ulong no longer fits. use the four limbs as the set key
+                    var encKey = (enc.id[0], enc.id[1], enc.id[2], enc.id[3]);
+
+                    if(running_encs.Contains(encKey)) {
                         continue;
                     }
 
@@ -48,7 +52,7 @@ class Program {
                         aligned = buffer.AlignRingsToConfig();
                     }
 
-                    running_encs.Add(enc.id);
+                    running_encs.Add(encKey);
 
                     if(enc.IsIncoming()) {
                         _ = Task.Run(() => Receiver(ref buffer, enc));

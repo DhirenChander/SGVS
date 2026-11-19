@@ -473,7 +473,8 @@ bool push_message(FrameBuffer *fb, Message *msg)
     return res;
 }
 
-bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_msg, uint32_t max_timeout)
+// same as blocking_pop_message but lets the caller pick how long to wait (ms on windows)
+bool blocking_pop_message_from(FrameBuffer *fb, Module src, Module dst, Message *out_msg, uint32_t max_timeout)
 {
     Slot out;
     out.bytes = (uint8_t *)malloc(sizeof(Message));
@@ -495,4 +496,15 @@ bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_
     free(out.bytes);
 
     return true;
+}
+
+// waits forever for a message. this is the signature the header and the wrappers expect,
+// so it just forwards to blocking_pop_message_from with no timeout
+bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_msg)
+{
+#ifdef _WIN32
+    return blocking_pop_message_from(fb, src, dst, out_msg, INFINITE);
+#else
+    return blocking_pop_message_from(fb, src, dst, out_msg, 0);
+#endif
 }
