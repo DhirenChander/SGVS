@@ -174,7 +174,7 @@ func setupPcAsAttendee(fb *shared_mem_lib.FrameBuffer) (
 	reader := bufio.NewReader(os.Stdin)
 
 	//Wait for user input
-	fmt.Print("Enter connection string:\n\n")
+	fmt.Println("Enter connection string:\n")
 	SDPOfferStr, err := readSDP(reader)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("Error reading offer: %s\n", err)

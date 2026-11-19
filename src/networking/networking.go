@@ -3,8 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io"
-	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -45,9 +43,6 @@ var peerAPI = func() *webrtc.API {
 
 	return webrtc.NewAPI(webrtc.WithSettingEngine(settings))
 }()
-
-// Where connection logging goes. Stdout normally; stderr in ipc mode so stdout stays a clean protocol stream.
-var logOut io.Writer = os.Stdout
 
 // Setting up connections
 // Switch to named return?
@@ -192,7 +187,7 @@ func generateAnswer(offerSDP string) (
 
 	//Called when a data channel is created by the remote (I think)
 	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
-		fmt.Fprintln(logOut, "Data Channel Created by Remote: "+dc.Label())
+		fmt.Println("Data Channel Created by Remote: " + dc.Label())
 		if dc.Label() != managementChannelName {
 			return
 		}
@@ -489,21 +484,21 @@ func closeAll(frames []shared_mem_lib.GCFrame, closed []bool) {
 func logPeerConnectionState(pc *webrtc.PeerConnection, role string) {
 	pc.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 		if candidate == nil {
-			fmt.Fprintf(logOut, "[%s] ICE candidate gathering complete\n", role)
+			fmt.Printf("[%s] ICE candidate gathering complete\n", role)
 			return
 		}
-		fmt.Fprintf(logOut, "[%s] Local ICE candidate: %s\n", role, candidate.String())
+		fmt.Printf("[%s] Local ICE candidate: %s\n", role, candidate.String())
 	})
 
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
-		fmt.Fprintf(logOut, "[%s] ICE connection state: %s\n", role, state.String())
+		fmt.Printf("[%s] ICE connection state: %s\n", role, state.String())
 	})
 
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
-		fmt.Fprintf(logOut, "[%s] Peer connection state: %s\n", role, state.String())
+		fmt.Printf("[%s] Peer connection state: %s\n", role, state.String())
 	})
 
 	pc.OnSignalingStateChange(func(state webrtc.SignalingState) {
-		fmt.Fprintf(logOut, "[%s] Signaling state: %s\n", role, state.String())
+		fmt.Printf("[%s] Signaling state: %s\n", role, state.String())
 	})
 }

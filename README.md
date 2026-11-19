@@ -12,8 +12,3 @@ Creators:
 - Dhiren Chander
 - Oliver Cameron
 - Leonid Ginzburg
-
-Docs:
-
-- [Frontend / backend integration](docs/integration.md)
-- [Networking module](docs/networking_module.md)
