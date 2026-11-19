@@ -62,7 +62,7 @@ extern "C"
         bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len);
 
         bool push_message(FrameBuffer *fb, Message *msg);
-        bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_msg);
+        bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_msg, uint32_t max_timeout);
 
 #ifdef __cplusplus
 }
