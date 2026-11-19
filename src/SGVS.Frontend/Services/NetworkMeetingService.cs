@@ -78,11 +78,11 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         Setup("Could not start the meeting", isHost: true, hostCode: "");
 
     public bool Join(string hostCode) =>
-         Setup("Could not join the meeting", isHost: false, hostCode: hostCode.Trim());
+         Setup("Could not join the meeting", isHost: false, hostCode: hostCode);
 
-    public bool AcceptReply(string replyCode)
+    public bool AcceptReply(string answerCode)
     {
-        return _sharedMemory.PushMessage(new(System.Text.Encoding.UTF8.GetBytes(replyCode), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.AnswerCode));
+        return _sharedMemory.PushMessage(new(System.Text.Encoding.UTF8.GetBytes(answerCode), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.AnswerCode));
     }
 
     public void StartStream(ShareSource source)
@@ -137,6 +137,7 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
     // called when starting or joining a meeting
     private bool Setup(string failurePrefix, bool isHost, string hostCode)
     {
+        Console.WriteLine("In setup");
         if (State is not (CallState.Idle or CallState.Ended) || _pending is not null)
         {
             Error = "Already in a meeting.";
@@ -165,6 +166,7 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         _process.Send(command);*/
 
         //var finished = await Task.WhenAny(pending.Task, Task.Delay(_setupTimeout));
+        Console.Write("Pushing message...");
         if (isHost)
         {
             _sharedMemory.PushMessage(new(null, SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.HostCode));
@@ -173,6 +175,7 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         {
             _sharedMemory.PushMessage(new(System.Text.Encoding.UTF8.GetBytes(hostCode), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.AnswerCode));
         }
+        Console.WriteLine("Pushed.");
 
         /*if (finished != pending.Task)
         {

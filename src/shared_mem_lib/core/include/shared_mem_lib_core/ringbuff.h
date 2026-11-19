@@ -13,12 +13,10 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include "ring.h"
-<<<<<<< HEAD == == == =
 #include "encoding.h"
-               >>>>>>> feat/shared-mem-client
 
 #ifdef __cplusplus
-    extern "C"
+extern "C"
 {
 #endif
 
@@ -36,13 +34,13 @@
 #endif
     } RingBuffer;
 
-    bool push(RingBuffer * rb, Slot * data, uint32_t size);
-    bool open_ring(RingBuffer * rb, uint64_t slot_size, uint32_t slot_count);
-    bool try_pop(RingBuffer * rb, Slot * out, uint32_t *out_count, uint32_t max_slots_out);
-    bool blocking_pop(RingBuffer * rb, Slot * out, uint32_t *out_count, uint32_t max_slots_out, uint32_t max_timeout);
-    bool pop(RingBuffer * rb, Slot * out, uint32_t *out_count, uint32_t max_slots_out);
-    void free_ringbuffer(RingBuffer * rb);
-    uint32_t available_in_buffer(RingBuffer * rb);
+    bool push(RingBuffer *rb, Slot *data, uint32_t size);
+    bool open_ring(RingBuffer *rb, uint64_t slot_size, uint32_t slot_count);
+    bool try_pop(RingBuffer *rb, Slot *out, uint32_t *out_count, uint32_t max_slots_out);
+    bool blocking_pop(RingBuffer *rb, Slot *out, uint32_t *out_count, uint32_t max_slots_out, uint32_t max_timeout);
+    bool pop(RingBuffer *rb, Slot *out, uint32_t *out_count, uint32_t max_slots_out);
+    void free_ringbuffer(RingBuffer *rb);
+    uint32_t available_in_buffer(RingBuffer *rb);
 
 #ifdef __cplusplus
 }

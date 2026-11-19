@@ -61,7 +61,7 @@ extern "C"
         // TODO: Fix signalling on encodings and hide this method
         bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len);
 
-        bool push_message(FrameBuffer *fb, Message msg);
+        bool push_message(FrameBuffer *fb, Message *msg);
         bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_msg);
 
 #ifdef __cplusplus
