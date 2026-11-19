@@ -10,20 +10,6 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
-// Allows mocking of frameBuffer
-type frameBuffer interface {
-	PushFrames([]shared_mem_lib.GCFrame) bool
-	BlockingPopFrames(
-		shared_mem_lib.Encoding,
-		uint32,
-		uint32,
-	) (bool, []shared_mem_lib.GCFrame)
-
-	ReadEncodings(maxLen uint8) ([]shared_mem_lib.Encoding, bool)
-	RequestEncoding(enc shared_mem_lib.Encoding) bool
-	AlignRingsToConfig() bool
-}
-
 func main() {
 	args := os.Args[1:]
 
@@ -205,7 +191,7 @@ func setupPcAsAttendee(fb *shared_mem_lib.FrameBuffer) (
 	return answerPc, dcReady, dataChanOpen, messages, nil
 }
 
-func relayAudioOnceConnected(localTrack *webrtc.TrackLocalStaticSample, remoteTrackChan chan *webrtc.TrackRemote, fb frameBuffer) error {
+func relayAudioOnceConnected(localTrack *webrtc.TrackLocalStaticSample, remoteTrackChan chan *webrtc.TrackRemote, fb *shared_mem_lib.FrameBuffer) error {
 
 	goAndPrintIfError(func() error {
 		enc, err := waitForAudioEncodingFromProcessing(fb)
@@ -234,7 +220,7 @@ func relayAudioOnceConnected(localTrack *webrtc.TrackLocalStaticSample, remoteTr
 	return nil
 }
 
-func waitForAudioEncodingFromProcessing(fb frameBuffer) (shared_mem_lib.Encoding, error) {
+func waitForAudioEncodingFromProcessing(fb *shared_mem_lib.FrameBuffer) (shared_mem_lib.Encoding, error) {
 	const timeOut = 100 * time.Second
 	const interval = 500 * time.Millisecond
 	elapsed := 0 * time.Second

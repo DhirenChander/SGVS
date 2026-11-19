@@ -308,7 +308,7 @@ func AddVoiceTrack(pc *webrtc.PeerConnection) (
 
 }
 
-func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error {
+func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.FrameBuffer) error {
 
 	const minimumBufferedPackets = 10 // -> 100ms delay
 	const audioFrameDuration = 10 * time.Millisecond
@@ -413,7 +413,7 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error
 
 // Add way to stop sending frames?
 // Add a channel to signal something has failed?
-func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBuffer, enc shared_mem_lib.Encoding) error {
+func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared_mem_lib.FrameBuffer, enc shared_mem_lib.Encoding) error {
 	const timeOutMs = 100000
 	const maxAudioFrames = 100 // 10ms per frame -> 1 seconds
 
@@ -438,7 +438,7 @@ func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBu
 }
 
 func popAndCopyFrames(
-	track *webrtc.TrackLocalStaticSample, fb frameBuffer, enc shared_mem_lib.Encoding,
+	track *webrtc.TrackLocalStaticSample, fb *shared_mem_lib.FrameBuffer, enc shared_mem_lib.Encoding,
 	maxAudioFrames uint32, timeOutMs uint32, audioFrameDuration time.Duration) (bool, error) {
 
 	var framesToSend []shared_mem_lib.GCFrame
