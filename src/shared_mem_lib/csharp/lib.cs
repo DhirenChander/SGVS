@@ -36,51 +36,65 @@ public enum EncodingDir : int
 
 public enum Module : int
 {
-    Processor,
-    Network,
-    Application,
+    Processor = 0,
+    Network = 1,
+    Application = 2,
 }
-
-/*
-typedef enum
-    {
-        START_SHARING,
-        STOP_SHARING,
-        HOST_CODE,
-        ANSWER_CODE,
-        START_HOST,
-        JOIN_CALL,
-        PARTICIPANT_JOINED,
-        PARTICIPANT_LEFT,
-        LEAVE_CALL,
-    } Operation;
-
-*/
 
 public enum Operation : int
 {
-    StartSharing,
-    StopSharing,
-    HostCode,
-    AnswerCode,
-    StartHost,
-    JoinCall,
-    ParticipantJoined,
-    ParticipantLeft,
-    LeaveCall
+    StartSharing = 0,
+    StopSharing = 1,
+    HostCode = 2,
+    AnswerCode = 3,
+    StartHost = 4,
+    JoinCall = 5,
+    ParticipantJoined = 6,
+    ParticipantLeft = 7,
+    LeaveCall = 8,
 }
 
-[InlineArray(256)]
-public struct MsgData
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct Message
 {
-    private byte _element0;
-}
-
-public struct Message
-{
-    MsgData data;
+    fixed byte data[256];
     Module src, dest;
     Operation opcode;
+
+    public readonly Module Src => src;
+    public readonly Module Dest => dest;
+    public readonly Operation Opcode => opcode;
+
+    public Message(byte[] data, Module src, Module dest, Operation opcode)
+    {
+        this = default;
+        this.src = src;
+        this.dest = dest;
+        this.opcode = opcode;
+
+        if (data == null)
+        {
+            return;
+        }
+
+        if (data.Length > 255)
+        {
+            throw new ArgumentException("Data is too long to be converted to a message");
+        }
+
+        fixed (byte* p = this.data)
+        {
+            data.AsSpan().CopyTo(new Span<byte>(p, 256));
+        }
+    }
+
+    public readonly byte[] GetData()
+    {
+        Message copy = this; // local copy so the fixed buffer can be addressed
+        var span = new ReadOnlySpan<byte>(copy.data, 256);
+        int len = span.IndexOf((byte)0);
+        return span[..(len < 0 ? span.Length : len)].ToArray();
+    }
 };
 
 [StructLayout(LayoutKind.Explicit)]
@@ -94,34 +108,15 @@ public struct EncodingData
 public struct Encoding
 {
     public EncodingData data;
-    public ulong id;
+    public uint256 id;
     public EncodingType type;
     public EncodingDir dir;
 
-    public bool IsAudio()
-    {
-        return SharedMemLib.IsAudioEncoding(this);
-    }
-
-    public bool IsVideo()
-    {
-        return SharedMemLib.IsVideoEncoding(this);
-    }
-
-    public bool IsIncoming()
-    {
-        return SharedMemLib.IsIncomingEncoding(this);
-    }
-
-    public bool IsOutgoing()
-    {
-        return SharedMemLib.IsOutgoingEncoding(this);
-    }
-
-    public bool Equals(Encoding enc)
-    {
-        return SharedMemLib.EncEq(this, enc);
-    }
+    public bool IsAudio() => SharedMemLib.IsAudioEncoding(this);
+    public bool IsVideo() => SharedMemLib.IsVideoEncoding(this);
+    public bool IsIncoming() => SharedMemLib.IsIncomingEncoding(this);
+    public bool IsOutgoing() => SharedMemLib.IsOutgoingEncoding(this);
+    public bool Equals(Encoding enc) => SharedMemLib.EncEq(this, enc);
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -139,21 +134,18 @@ public unsafe struct Frame
     public byte* data;
 }
 
-// Safe Verion of Unsafe Frame
+// Safe version of unsafe Frame
 public struct GCFrame
 {
     public Frame raw;
     public required byte[] Data;
 
     [SetsRequiredMembers]
-    public GCFrame(Encoding enc)
+    public unsafe GCFrame(Encoding enc)
     {
-        unsafe
-        {
-            ulong size = 0;
-            raw = SharedMemLib.FrameSizedByEncoding(enc, ref size);
-            Data = new byte[size];
-        }
+        ulong size = 0;
+        raw = SharedMemLib.FrameSizedByEncoding(enc, &size);
+        Data = new byte[size];
     }
 }
 
@@ -161,8 +153,8 @@ public struct GCFrame
 public struct CriticalSection
 {
     private IntPtr DebugInfo;      // PRTL_CRITICAL_SECTION_DEBUG
-    private int LockCount;      // LONG
-    private int RecursionCount; // LONG
+    private int LockCount;         // LONG
+    private int RecursionCount;    // LONG
     private IntPtr OwningThread;   // HANDLE
     private IntPtr LockSemaphore;  // HANDLE
     private UIntPtr SpinCount;     // ULONG_PTR
@@ -195,13 +187,26 @@ public struct MsgChans
 public unsafe struct FrameBuffer
 {
     public MsgChans msg_chns;
-    public void* rings; // RingBuffer*
+    public void* rings;  // RingBuffer*
     public void* config; // Config*
 #if WINDOWS
     public IntPtr encs_ev, conf_map, conf_mu;
     public CriticalSection cs;
 #endif
     public byte ring_count;
+}
+
+// Compare these against sizeof(...) printed from the C side. They must match exactly.
+public static class LayoutCheck
+{
+    public static void Print()
+    {
+        Console.WriteLine($"Message:     {Unsafe.SizeOf<Message>()}");
+        Console.WriteLine($"Encoding:    {Unsafe.SizeOf<Encoding>()}");
+        Console.WriteLine($"Frame:       {Unsafe.SizeOf<Frame>()}");
+        Console.WriteLine($"RingBuffer:  {Unsafe.SizeOf<RingBuffer>()}");
+        Console.WriteLine($"FrameBuffer: {Unsafe.SizeOf<FrameBuffer>()}");
+    }
 }
 
 /*
@@ -216,7 +221,7 @@ bool blocking_read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, u
 bool align_rings_to_config(FrameBuffer *fb);
 bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len);
 bool push_message(FrameBuffer *fb, Message msg);
-bool blocking_pop_message(FrameBuffer *fb, Module dst, Message *out_msg);
+bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_msg);
 */
 public interface IFrameBuffer
 {
@@ -229,21 +234,27 @@ public interface IFrameBuffer
     bool AlignRingsToConfig();
     (Encoding[] encodings, bool success) ReadEncodings(uint max_len);
     bool PushMessage(Message msg);
-    (Message msg, bool success) BlockingPopMessages(Module src, Module dst);
+    (Message msg, bool success) BlockingPopMessage(Module src, Module dst);
 }
 
-// Generated with Claude
-public class GCFrameBuffer : IFrameBuffer, IDisposable
+public unsafe class GCFrameBuffer : IFrameBuffer, IDisposable
 {
-    // Need to pin frame buffer due to critical section pointers
-    private readonly FrameBuffer[] storage = GC.AllocateArray<FrameBuffer>(1, pinned: true);
-    private ref FrameBuffer fb => ref storage[0];
+    // The FrameBuffer lives in unmanaged memory: its address never changes and it is
+    // never copied, which matters because it contains a CRITICAL_SECTION and ring pointers.
+    private FrameBuffer* fbp;
     private bool disposed;
 
     public GCFrameBuffer()
     {
-        if (!SharedMemLib.NewFramebuffer(out fb))
+        fbp = (FrameBuffer*)NativeMemory.AllocZeroed((nuint)sizeof(FrameBuffer));
+
+        if (!SharedMemLib.NewFramebuffer(fbp))
+        {
+            NativeMemory.Free(fbp);
+            fbp = null;
+            disposed = true; // so the finalizer doesn't call free_framebuffer on an uninitialized buffer
             throw new InvalidOperationException("Failed to create shared frame buffer.");
+        }
     }
 
     public bool PushFrames(Frame[] f)
@@ -252,14 +263,10 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
         if (f == null) throw new ArgumentNullException(nameof(f));
         if (f.Length == 0) return true;
 
-        unsafe
+        fixed (Frame* ptr = f)
         {
-            fixed (Frame* ptr = f)
-            {
-                return SharedMemLib.PushFrames(ref fb, ptr, (uint)f.Length);
-            }
+            return SharedMemLib.PushFrames(fbp, ptr, (uint)f.Length);
         }
-
     }
 
     public (GCFrame[] frames, bool success) TryPopFrames(Encoding encoding, uint max_frame_count)
@@ -288,30 +295,32 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
                 pinned++;
 
                 raws[i] = gcFrames[i].raw;
-                unsafe
+                fixed (Frame* pf = &raws[i])
                 {
-                    SharedMemLib.SetFrameData(ref raws[i], (byte*)handles[i].AddrOfPinnedObject());
+                    SharedMemLib.SetFrameData(pf, (byte*)handles[i].AddrOfPinnedObject());
                 }
             }
 
             bool ok;
-            uint count;
-            unsafe
+            uint count = 0;
+            fixed (Frame* ptr = raws)
             {
-                fixed (Frame* ptr = raws)
-                {
-                    ok = blocking
-                        ? SharedMemLib.BlockingPopFrames(ref fb, encoding, ptr, out count, max, timeout)
-                        : SharedMemLib.TryPopFrames(ref fb, encoding, ptr, out count, max);
-                }
+                ok = blocking
+                    ? SharedMemLib.BlockingPopFrames(fbp, encoding, ptr, &count, max, timeout)
+                    : SharedMemLib.TryPopFrames(fbp, encoding, ptr, &count, max);
             }
 
             if (!ok) return (Array.Empty<GCFrame>(), false);
             if (count > max) count = max; // defensive
 
             // Copy native-updated frame metadata (size, timestamp, ...) back into the GCFrames.
+            // The data pointer refers to a buffer that is unpinned in the finally block below,
+            // so null it rather than leave a dangling pointer. Use Data instead.
             for (int i = 0; i < count; i++)
+            {
                 gcFrames[i].raw = raws[i];
+                gcFrames[i].raw.data = null;
+            }
 
             if (count == max) return (gcFrames, true);
 
@@ -329,13 +338,13 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
     public bool RequestEncoding(Encoding encoding)
     {
         ThrowIfDisposed();
-        return SharedMemLib.RequestEncoding(ref fb, encoding);
+        return SharedMemLib.RequestEncoding(fbp, encoding);
     }
 
     public bool RemoveEncoding(Encoding encoding)
     {
         ThrowIfDisposed();
-        return SharedMemLib.RemoveEncoding(ref fb, encoding);
+        return SharedMemLib.RemoveEncoding(fbp, encoding);
     }
 
     public (Encoding[] encodings, bool success) BlockingReadEncodings(uint max_len, uint max_timeout)
@@ -346,13 +355,10 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
 
         var buffer = new Encoding[maxLen];
         bool ok;
-        byte outLen;
-        unsafe
+        byte outLen = 0;
+        fixed (Encoding* ptr = buffer)
         {
-            fixed (Encoding* ptr = buffer)
-            {
-                ok = SharedMemLib.BlockingReadEncodings(ref fb, ptr, out outLen, maxLen, max_timeout);
-            }
+            ok = SharedMemLib.BlockingReadEncodings(fbp, ptr, &outLen, maxLen, max_timeout);
         }
 
         return FinishEncodings(buffer, ok, outLen);
@@ -361,7 +367,7 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
     public bool AlignRingsToConfig()
     {
         ThrowIfDisposed();
-        return SharedMemLib.AlignRingsToConfig(ref fb);
+        return SharedMemLib.AlignRingsToConfig(fbp);
     }
 
     public (Encoding[] encodings, bool success) ReadEncodings(uint max_len)
@@ -372,13 +378,10 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
 
         var buffer = new Encoding[maxLen];
         bool ok;
-        byte outLen;
-        unsafe
+        byte outLen = 0;
+        fixed (Encoding* ptr = buffer)
         {
-            fixed (Encoding* ptr = buffer)
-            {
-                ok = SharedMemLib.ReadEncodings(ref fb, ptr, out outLen, maxLen);
-            }
+            ok = SharedMemLib.ReadEncodings(fbp, ptr, &outLen, maxLen);
         }
 
         return FinishEncodings(buffer, ok, outLen);
@@ -386,16 +389,16 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
 
     public bool PushMessage(Message msg)
     {
-        return SharedMemLib.PushMessage(ref fb, msg);
+        ThrowIfDisposed();
+        return SharedMemLib.PushMessage(fbp, &msg); // Message is passed by value, matching the C signature
     }
 
-    public (Message msg, bool success) BlockingPopMessages(Module src, Module dst)
+    public (Message msg, bool success) BlockingPopMessage(Module src, Module dst)
     {
-        Message out_msg = new Message();
-
-        bool succ = SharedMemLib.BlockingPopMessages(ref fb, src, dst, ref out_msg);
-
-        return (out_msg, succ);
+        ThrowIfDisposed();
+        Message outMsg = default;
+        bool ok = SharedMemLib.BlockingPopMessage(fbp, src, dst, &outMsg);
+        return (outMsg, ok);
     }
 
     // ---- Helpers ----
@@ -404,10 +407,10 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
     // side has somewhere to write the frame data.
     private static Frame[] AllocateFrames(Encoding encoding, uint count)
     {
-        ulong _ = 0;
+        ulong size = 0;
         var frames = new Frame[count];
         for (uint i = 0; i < count; i++)
-            frames[i] = SharedMemLib.FrameSizedByEncoding(encoding, ref _);
+            frames[i] = SharedMemLib.FrameSizedByEncoding(encoding, &size);
         return frames;
     }
 
@@ -452,7 +455,13 @@ public class GCFrameBuffer : IFrameBuffer, IDisposable
     {
         if (disposed) return;
         disposed = true;
-        SharedMemLib.FreeFramebuffer(ref fb);
+
+        if (fbp != null)
+        {
+            SharedMemLib.FreeFramebuffer(fbp);
+            NativeMemory.Free(fbp);
+            fbp = null;
+        }
     }
 
     ~GCFrameBuffer() => Dispose(false);
@@ -464,67 +473,87 @@ public static unsafe class SharedMemLib
     const CallingConvention CC = CallingConvention.Cdecl;
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "frame_sized_by_encoding")]
-    internal static extern Frame FrameSizedByEncoding(Encoding enc, ref ulong out_size);
+    internal static extern Frame FrameSizedByEncoding(Encoding enc, ulong* out_size);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "set_frame_data")]
-    internal static extern void SetFrameData(ref Frame f, byte* data);
+    internal static extern void SetFrameData(Frame* f, byte* data);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "get_frame_size")]
-    internal static extern ulong GetFrameSize(ref Frame f);
+    internal static extern ulong GetFrameSize(Frame* f);
 
     // ---- FrameBuffer functions ----
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "new_framebuffer")]
     [return: MarshalAs(UnmanagedType.U1)]
-    internal static extern bool NewFramebuffer(out FrameBuffer fb);
+    internal static extern bool NewFramebuffer(FrameBuffer* fb);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "free_framebuffer")]
-    internal static extern void FreeFramebuffer(ref FrameBuffer fb);
+    internal static extern void FreeFramebuffer(FrameBuffer* fb);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "push_frames")]
     [return: MarshalAs(UnmanagedType.U1)]
-    internal static extern bool PushFrames(ref FrameBuffer fb, Frame* f, uint frameCount);
+    internal static extern bool PushFrames(FrameBuffer* fb, Frame* f, uint frameCount);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "try_pop_frames")]
     [return: MarshalAs(UnmanagedType.U1)]
-    internal static extern bool TryPopFrames(ref FrameBuffer fb, Encoding encoding, Frame* output, out uint outCount, uint maxFrameCount);
+    internal static extern bool TryPopFrames(FrameBuffer* fb, Encoding encoding, Frame* output, uint* outCount, uint maxFrameCount);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "blocking_pop_frames")]
     [return: MarshalAs(UnmanagedType.U1)]
-    internal static extern bool BlockingPopFrames(ref FrameBuffer fb, Encoding encoding, Frame* output, out uint outCount, uint maxFrameCount, uint maxTimeout);
+    internal static extern bool BlockingPopFrames(FrameBuffer* fb, Encoding encoding, Frame* output, uint* outCount, uint maxFrameCount, uint maxTimeout);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "request_encoding")]
     [return: MarshalAs(UnmanagedType.U1)]
-    internal static extern bool RequestEncoding(ref FrameBuffer fb, Encoding encoding);
+    internal static extern bool RequestEncoding(FrameBuffer* fb, Encoding encoding);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "remove_encoding")]
     [return: MarshalAs(UnmanagedType.U1)]
-    internal static extern bool RemoveEncoding(ref FrameBuffer fb, Encoding encoding);
+    internal static extern bool RemoveEncoding(FrameBuffer* fb, Encoding encoding);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "blocking_read_encodings")]
     [return: MarshalAs(UnmanagedType.U1)]
-    internal static extern bool BlockingReadEncodings(ref FrameBuffer fb, Encoding* output, out byte outLen, byte maxLen, uint maxTimeout);
+    internal static extern bool BlockingReadEncodings(FrameBuffer* fb, Encoding* output, byte* outLen, byte maxLen, uint maxTimeout);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "align_rings_to_config")]
     [return: MarshalAs(UnmanagedType.U1)]
-    internal static extern bool AlignRingsToConfig(ref FrameBuffer fb);
+    internal static extern bool AlignRingsToConfig(FrameBuffer* fb);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "read_encodings")]
     [return: MarshalAs(UnmanagedType.U1)]
-    internal static extern bool ReadEncodings(ref FrameBuffer fb, Encoding* output, out byte outLen, byte maxLen);
+    internal static extern bool ReadEncodings(FrameBuffer* fb, Encoding* output, byte* outLen, byte maxLen);
+
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "push_message")]
+    [return: MarshalAs(UnmanagedType.U1)]
+    internal static extern bool PushMessage(FrameBuffer* fb, Message* msg);
+
+    [DllImport(Lib, CallingConvention = CC, EntryPoint = "blocking_pop_message")]
+    [return: MarshalAs(UnmanagedType.U1)]
+    internal static extern bool BlockingPopMessage(FrameBuffer* fb, Module src, Module dst, Message* out_msg);
 
     // ---- Encoding functions ----
+
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "new_video_encoding")]
     public static extern Encoding NewVideoEncoding(ushort maxBitRate, ushort minBitRate, ushort frameHeight, ushort frameWidth, byte frameRate);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "new_audio_encoding")]
-    public static extern Encoding NewAudioEncoding(bool isInput);
+    public static extern Encoding NewAudioEncoding([MarshalAs(UnmanagedType.U1)] bool isInput);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "set_encoding_outgoing")]
-    public static extern void SetEncodingOutgoing(ref Encoding enc);
+    public static extern void SetEncodingOutgoing(Encoding* enc);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "set_encoding_incoming")]
-    public static extern void SetEncodingIncoming(ref Encoding enc);
+    public static extern void SetEncodingIncoming(Encoding* enc);
+
+    // Convenience overloads so callers don't need an unsafe context.
+    public static void SetEncodingOutgoing(ref Encoding enc)
+    {
+        fixed (Encoding* p = &enc) SetEncodingOutgoing(p);
+    }
+
+    public static void SetEncodingIncoming(ref Encoding enc)
+    {
+        fixed (Encoding* p = &enc) SetEncodingIncoming(p);
+    }
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "is_audio_encoding")]
     [return: MarshalAs(UnmanagedType.U1)]
@@ -545,12 +574,4 @@ public static unsafe class SharedMemLib
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "enc_eq")]
     [return: MarshalAs(UnmanagedType.U1)]
     public static extern bool EncEq(Encoding a, Encoding b);
-
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "push_message")]
-    [return: MarshalAs(UnmanagedType.U1)]
-    public static extern bool PushMessage(ref FrameBuffer fb, Message msg);
-
-    [DllImport(Lib, CallingConvention = CC, EntryPoint = "blocking_pop_messages")]
-    [return: MarshalAs(UnmanagedType.U1)]
-    public static extern bool BlockingPopMessages(ref FrameBuffer fb, Module src, Module dst, ref Message out_msg);
 }
