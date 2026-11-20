@@ -55,6 +55,23 @@ public sealed class FakePcmSink : IPcmSink
         SpinWait.SpinUntil(() => { lock (_chunks) return _chunks.Count >= count; }, timeout);
 }
 
+// Frames shaped the way the wrapper hands them out: a 1275-byte buffer, and raw.size set to the real length.
+// Built by hand, because the GCFrame(Encoding) constructor calls native code.
+public static class TestFrames
+{
+    public const int SlotSize = 1275; // the wrapper always hands out 1275-byte buffers for audio
+
+    public static GCFrame Frame(byte[] data, int size) =>
+        new() { raw = new Frame { size = (nuint)size }, Data = data };
+
+    public static GCFrame Packet(byte[] packet)
+    {
+        var data = new byte[SlotSize];
+        packet.CopyTo(data, 0);
+        return Frame(data, packet.Length);
+    }
+}
+
 // Shared memory without the native library: a config of encodings and one queue of frames.
 // Only the members SharedMemoryAudioSource uses work; the rest throw.
 public sealed class FakeFrameBuffer : IFrameBuffer
@@ -76,16 +93,7 @@ public sealed class FakeFrameBuffer : IFrameBuffer
         return enc;
     }
 
-    // Built by hand, because the GCFrame(Encoding) constructor calls native code.
-    public static GCFrame Frame(byte[] data, int size) =>
-        new() { raw = new Frame { size = (nuint)size }, Data = data };
-
-    public void Push(byte[] packet)
-    {
-        var data = new byte[1275]; // the wrapper always hands out 1275-byte buffers
-        packet.CopyTo(data, 0);
-        Frames.Enqueue(Frame(data, packet.Length));
-    }
+    public void Push(byte[] packet) => Frames.Enqueue(TestFrames.Packet(packet));
 
     public (Encoding[] encodings, bool success) ReadEncodings(uint max_len) =>
         ([.. Encodings.Take((int)max_len)], true);

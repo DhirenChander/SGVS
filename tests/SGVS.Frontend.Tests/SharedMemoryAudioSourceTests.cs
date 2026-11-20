@@ -3,6 +3,7 @@ using SGVS.Frontend.Tests.Support;
 using SharedMemLibrary;
 using Xunit;
 using static SGVS.Frontend.Tests.Support.FakeFrameBuffer;
+using static SGVS.Frontend.Tests.Support.TestFrames;
 
 namespace SGVS.Frontend.Tests;
 
