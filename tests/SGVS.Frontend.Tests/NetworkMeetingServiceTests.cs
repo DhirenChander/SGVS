@@ -1,5 +1,6 @@
 using SGVS.Frontend.Services;
 using SGVS.Frontend.Tests.Support;
+using SharedMemLibrary;
 using Xunit;
 
 namespace SGVS.Frontend.Tests;
@@ -9,14 +10,13 @@ public class NetworkMeetingServiceTests
     private readonly FakeNetworkingProcess _process = new();
     private int _processesStarted;
 
-    // the service opens the shared frame buffer itself now, so the factory it is given never gets used
     private NetworkMeetingService Create() =>
         new("Hazel", () => { _processesStarted++; return _process; },
-            () => throw new NotSupportedException(), action => action());
+            action => action(), new GCFrameBuffer());
 
     private static NetworkMeetingService CreateWithMissingModule() =>
         new("Hazel", () => throw new FileNotFoundException("module missing"),
-            () => throw new NotSupportedException(), action => action());
+            action => action(), new GCFrameBuffer());
 
     // host, join and streaming open the native shared memory, which only exists on Windows
     private static void NeedsSharedMemory() =>

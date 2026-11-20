@@ -11,19 +11,27 @@ namespace SGVS.Frontend.ViewModels;
 // the shell. MainWindow shows whatever page this points at, the ViewLocator picks the view
 public partial class MainViewModel : ViewModelBase
 {
-    private readonly Func<IMeetingService> _createMeeting;
+    private readonly Func<IFrameBuffer, IMeetingService> _createMeeting;
     private IMeetingService? _meeting;
 
+    private readonly IFrameBuffer _sharedMemory;
+
     // the real app. SGVS_FAKE=1 swaps in the pretend call so the UI can be used without the networking module
-    public MainViewModel() : this(CreateMeeting)
+    public MainViewModel(IFrameBuffer sharedMemory) : this(CreateMeeting, sharedMemory)
+    {
+
+    }
+
+    public MainViewModel(Func<IMeetingService> createMeeting) : this(_ => createMeeting(), new GCFrameBuffer())
     {
     }
 
     // createMeeting makes a fresh call for each trip through Start -> Meeting. pages navigate by
     // handing the next page to the callback
-    public MainViewModel(Func<IMeetingService> createMeeting)
+    public MainViewModel(Func<IFrameBuffer, IMeetingService> createMeeting, IFrameBuffer sharedMemory)
     {
         _createMeeting = createMeeting;
+        _sharedMemory = sharedMemory;
         CurrentView = NewStartPage();
     }
 
@@ -48,7 +56,7 @@ public partial class MainViewModel : ViewModelBase
 
     private StartViewModel NewStartPage()
     {
-        var meeting = _createMeeting();
+        var meeting = _createMeeting(_sharedMemory);
         _meeting = meeting;
         return new StartViewModel(meeting, () => GoToMeetingPage(meeting), () => GoToStartPage());
     }
@@ -58,13 +66,13 @@ public partial class MainViewModel : ViewModelBase
         CurrentView = new MeetingViewModel(meeting, page => CurrentView = page, () => GoToStartPage());
     }
 
-    private static IMeetingService CreateMeeting()
+    private static IMeetingService CreateMeeting(IFrameBuffer sharedMemory)
     {
         if (Environment.GetEnvironmentVariable("SGVS_FAKE") == "1") return new FakeMeetingService();
 
         // display names aren't decided yet, so for now it's whoever is signed in to the PC
         return new NetworkMeetingService(Environment.UserName, StartNetworking,
-            action => Dispatcher.UIThread.Post(action));
+            action => Dispatcher.UIThread.Post(action), sharedMemory);
     }
 
     private static INetworkingProcess StartNetworking()

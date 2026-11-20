@@ -45,6 +45,7 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         string selfName,
         Func<INetworkingProcess> startProcess,
         Action<Action> post,
+        IFrameBuffer sharedMemory,
         TimeSpan? setupTimeout = null)
     {
         Console.WriteLine("Creating meeting service...");
@@ -53,7 +54,7 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         _post = post;
         Console.Write("Initializing shared memory...");
 
-        _sharedMemory = new GCFrameBuffer();
+        _sharedMemory = sharedMemory;
 
         Console.WriteLine("Done.");
 
