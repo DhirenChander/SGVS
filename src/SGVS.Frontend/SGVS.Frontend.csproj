@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <!-- the stand-in stream frame is a loose file, not an embedded resource -->
-    <AvaloniaResource Include="Assets\**" Exclude="Assets\Placeholders\**;Assets\clip.mp4" />
+    <AvaloniaResource Include="Assets\**" Exclude="Assets\Placeholders\**" />
   </ItemGroup>
 
   <!-- stand-in stream frame until real call data exists.
@@ -26,7 +26,6 @@
     <Content Include="Assets\Placeholders\StreamPreview\**" Link="StreamPreview\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\PCM_Sounds\**" CopyToOutputDirectory="PreserveNewest" />
     <!-- video file for playback - needs to be copied to output directory, not embedded -->
-    <Content Include="Assets\clip.mp4" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
