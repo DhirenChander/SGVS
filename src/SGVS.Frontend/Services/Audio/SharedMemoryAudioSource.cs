@@ -33,7 +33,7 @@ public sealed class SharedMemoryAudioSource(IFrameBuffer frameBuffer, Action<Tim
             _encoding = found;
             frameBuffer.AlignRingsToConfig();
             // whatever queued up before we started listening is stale: drop it so playback starts live
-            frameBuffer.TryPopFrames(encoding, RingCapacity);
+            // frameBuffer.TryPopFrames(encoding, RingCapacity);
         }
 
         var clock = Stopwatch.StartNew();
