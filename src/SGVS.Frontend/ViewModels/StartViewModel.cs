@@ -70,6 +70,7 @@ public partial class StartViewModel : ViewModelBase
         try
         {
             _meeting.Join(""/*JoinText*/);
+            OpenMeetingOnce();
         }
         finally
         {
