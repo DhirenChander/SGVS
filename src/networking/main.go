@@ -202,6 +202,9 @@ func setupPcAsAttendee(fb frameBuffer, SDPStr string) (
 		return nil, nil, nil, nil, fmt.Errorf("Error generating answer: %s\n", err)
 	}
 
+	fmt.Println("Answer SDP:")
+	fmt.Println(answerPc)
+
 	//TODO: Send SDP to application for message from application
 
 	//Send voice audio
