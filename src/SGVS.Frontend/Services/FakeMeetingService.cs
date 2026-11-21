@@ -69,6 +69,10 @@ public sealed class FakeMeetingService : ObservableObject, IMeetingService
         Self.StreamPreview = null;
     }
 
+    public void OnParticipantJoined(string name)
+    {
+    }
+
     public Task LeaveAsync()
     {
         State = CallState.Ended;

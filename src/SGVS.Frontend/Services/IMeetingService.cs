@@ -66,5 +66,7 @@ public interface IMeetingService : INotifyPropertyChanged
 
     void StopStream();
 
+    void OnParticipantJoined(string name);
+
     // Task LeaveAsync();
 }

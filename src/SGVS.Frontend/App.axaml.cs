@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using SGVS.Frontend.ViewModels;
 using SGVS.Frontend.Views;
 using SGVS.Frontend.Services.Audio;
@@ -14,6 +15,7 @@ public partial class App : Application
     private CancellationTokenSource? _appCts;
     private IFrameBuffer? _sharedMemory;
     private IPcmSink? _pcmSink;
+    private MainViewModel? _main;
 
     public override void Initialize()
     {
@@ -27,6 +29,7 @@ public partial class App : Application
             _pcmSink = new PcmPlayer();
             _sharedMemory = new GCFrameBuffer();
             var main = new MainViewModel(_sharedMemory);
+            _main = main;
             desktop.MainWindow = new MainWindow
             {
                 DataContext = main,
@@ -117,5 +120,7 @@ public partial class App : Application
         SharedMemoryAudioSource audioSource = new SharedMemoryAudioSource(_sharedMemory!);
         IncomingAudioPump audioPump = new IncomingAudioPump(audioSource, _pcmSink!);
         audioPump.Start();
+        var participantName = $"Participant-{_enc.id[0]:x8}";
+        Dispatcher.UIThread.Post(() => _main?.NotifyParticipantJoined(participantName));
     }
 }

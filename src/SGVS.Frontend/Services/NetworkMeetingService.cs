@@ -317,4 +317,19 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         _pending = null;
         pending?.TrySetResult(false);
     }*/
+
+    public void OnParticipantJoined(string name)
+    {
+        Participant member;
+        if (IsHost)
+        {
+            member = new Participant { Name = "Carter", IsSelf = false, Tone = AvatarTone.Amber };
+        }
+        else
+        {
+            member = new Participant { Name = "Austin", IsSelf = false, Tone = AvatarTone.Amber };
+        }
+
+        _members.Add(member);
+    }
 }

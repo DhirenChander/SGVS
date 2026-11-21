@@ -54,6 +54,11 @@ public partial class MainViewModel : ViewModelBase
         // _ = _meeting?.LeaveAsync();
     }
 
+    public void NotifyParticipantJoined(string participantName)
+    {
+        _meeting?.OnParticipantJoined(participantName);
+    }
+
     private StartViewModel NewStartPage()
     {
         var meeting = _createMeeting(_sharedMemory);
