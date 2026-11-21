@@ -16,7 +16,7 @@ AudioProcessor *setup_processor(shared_mem_client::SharedMemoryFrameBuffer *fb, 
 
     AudioProcessor *processor = new AudioProcessor(config, [fb, enc](const uint8_t *data, size_t size)
                                                    {
-                                                    std::cout << "In processor callback" << std::endl;
+                                                    // std::cout << "In processor callback" << std::endl;
 
         // NOTE: Assumption, each callback corresponds to a single frame
         size_t fsize = 0;
@@ -24,14 +24,14 @@ AudioProcessor *setup_processor(shared_mem_client::SharedMemoryFrameBuffer *fb, 
         frame.size = size;
         frame.data = (uint8_t*)data;
 
-        std::cout << "Created frame" << std::endl;
+        // std::cout << "Created frame" << std::endl;
         
         // TODO: Make this more resilient, this will work but might cause some skips when data is dropped
         if (!fb->push_frames(&frame, 1))
         {
             std::cout << "Buffer full, cannot push until data is pulled" << std::endl;
         } 
-        std::cout << "Pushed" << std::endl; });
+        // std::cout << "Pushed" << std::endl; });
 
     std::cout << "Setup processor..." << std::endl;
 

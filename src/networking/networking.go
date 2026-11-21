@@ -319,7 +319,7 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error
 	const minimumBufferedPackets = 4 // -> 40ms delay
 	const audioFrameDuration = 10 * time.Millisecond
 	const maxBufferedPackets = 8 // -> 80ms
-	const skipNumber = (maxBufferedPackets - minimumBufferedPackets) / 2
+	const resetSize = (maxBufferedPackets + minimumBufferedPackets) / 2
 
 	enc := shared_mem_lib.NewAudioEncoding(true) // Is_input is not important here
 	enc.SetIncoming()
@@ -359,7 +359,7 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error
 				continue
 
 			}
-			jb.DiscardIfOverflow(skipNumber)
+			jb.DiscardIfOverflow(resetSize)
 			jb.Push(packet) //First push sets playout head
 			firstPacket = false
 		}
@@ -449,7 +449,7 @@ func popAndCopyFrames(
 	var closed = make([]bool, len(framesToSend))
 	defer closeAll(framesToSend, closed)
 
-	fmt.Println("Received frames to send from processing module")
+	// fmt.Println("Received frames to send from processing module")
 
 	var err error
 	for i := 0; i < len(framesToSend) && err == nil; i++ {

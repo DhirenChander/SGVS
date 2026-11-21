@@ -7,6 +7,7 @@ package jitterbuffer
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/pion/rtp"
@@ -312,14 +313,17 @@ func (jb *JitterBuffer) Clear(resetState bool) {
 	}
 }
 
-// Discards the first n packets in the buffer if at the overflow limit
-// Add as an option when pushing?
-func (jb *JitterBuffer) DiscardIfOverflow(count int) error {
+// Discards packets in the buffer until at desired size if at the overflow limit
+func (jb *JitterBuffer) DiscardIfOverflow(desiredSize uint16) error {
 	if jb.packets.length <= jb.overflowLen {
 		return nil
 	}
 
-	for range count {
+	fmt.Println("Jitter buffer overflow, skipping packets")
+
+	n := jb.packets.Length() - desiredSize
+
+	for range n {
 		_, err := jb.Pop()
 		if err != nil {
 			return err
