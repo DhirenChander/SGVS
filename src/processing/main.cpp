@@ -15,8 +15,8 @@ AudioProcessor *setup_processor(shared_mem_client::SharedMemoryFrameBuffer *fb, 
     config.inputSampleRate = 48000;
 
     AudioProcessor *processor = new AudioProcessor(config, [fb, enc](const uint8_t *data, size_t size)
-                                                   {
-                                                    // std::cout << "In processor callback" << std::endl;
+    {
+        // std::cout << "In processor callback" << std::endl;
 
         // NOTE: Assumption, each callback corresponds to a single frame
         size_t fsize = 0;
@@ -32,6 +32,7 @@ AudioProcessor *setup_processor(shared_mem_client::SharedMemoryFrameBuffer *fb, 
             std::cout << "Buffer full, cannot push until data is pulled" << std::endl;
         } 
         // std::cout << "Pushed" << std::endl; });
+    });
 
     std::cout << "Setup processor..." << std::endl;
 
