@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"shared_mem_lib"
@@ -315,8 +314,12 @@ func AddVoiceTrack(pc *webrtc.PeerConnection) (
 
 func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error {
 
-	const minimumBufferedPackets = 10 // -> 100ms delay
+	//Playback will pause and wait if under minimum in buffer
+	//Or skip over packets if over maximum
+	const minimumBufferedPackets = 4 // -> 40ms delay
 	const audioFrameDuration = 10 * time.Millisecond
+	const maxBufferedPackets = 8 // -> 80ms
+	const skipNumber = (maxBufferedPackets - minimumBufferedPackets) / 2
 
 	enc := shared_mem_lib.NewAudioEncoding(true) // Is_input is not important here
 	enc.SetIncoming()
@@ -329,20 +332,18 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error
 		return fmt.Errorf("Failed to align rings to config")
 	}
 
-	jb := jitterbuffer.New(jitterbuffer.WithMinimumPacketCount(minimumBufferedPackets))
+	opts := []jitterbuffer.Option{
+		jitterbuffer.WithMinimumPacketCount(minimumBufferedPackets),
+		jitterbuffer.WithOverflowPacketCount(maxBufferedPackets),
+	}
 
-	playbackStarted := make(chan struct{})
-	var hasStarted atomic.Bool
-
-	//
-	jb.Listen(jitterbuffer.BeginPlayback, func(event jitterbuffer.Event, buf *jitterbuffer.JitterBuffer) {
-		hasStarted.Store(true)
-		close(playbackStarted)
-	})
+	jb := jitterbuffer.New(opts...)
 
 	readDone := make(chan struct{}) //Will stop playing from jitter buffer when this closes
+
 	go func() {
 		defer close(readDone)
+		firstPacket := true
 		for {
 			packet, _, err := track.ReadRTP()
 			if err != nil {
@@ -352,30 +353,19 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error
 			fmt.Printf("Received audio packet from remote:\n\tSequence: %d\n", packet.SequenceNumber)
 
 			sequenceNum := packet.Header.SequenceNumber
-			if hasStarted.Load() {
-				if int16(sequenceNum-jb.PlayoutHead()) < 0 {
-					//We have already played past this packet, arrived too late
-					continue
-				}
+			if int16(sequenceNum-jb.PlayoutHead()) < 0 && !firstPacket {
+				//We have already played past this packet, arrived too late
+				//Don't push packet
+				continue
 
-				//			sequence is mod 16, so subtract then cast to signed int
-			} else if int16(sequenceNum-jb.PlayoutHead()) < 0 {
-				//During initial buffer filling, if packets arrive earlier
-				//than playoutHead, move head backwards
-				//May or may not happen on first packet retrieval, but doesn't matter (first push sets head automatically)
-				jb.SetPlayoutHead(sequenceNum)
 			}
-			jb.Push(packet)
+			jb.DiscardIfOverflow(skipNumber)
+			jb.Push(packet) //First push sets playout head
+			firstPacket = false
 		}
 	}()
 
 	go func() {
-		select { //Wait until initial buffer fill is complete
-		case <-playbackStarted:
-		case <-readDone:
-			return
-		}
-
 		ticker := time.NewTicker(audioFrameDuration)
 		defer ticker.Stop()
 
@@ -383,17 +373,19 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error
 			select {
 			case <-readDone:
 				return
-			//Potential addition: speed up timer temporarily if buffer is overflowing?
 			case <-ticker.C:
 				packet, err := jb.Pop()
 				if errors.Is(err, jitterbuffer.ErrNotFound) {
+					//Next packet not yet received (but more are queued after it)
 					jb.SetPlayoutHead(jb.PlayoutHead() + 1)
-					//Next packet not yet received
-					//Should we push blank audio to shared buffer?
 					continue
 				}
 				if errors.Is(err, jitterbuffer.ErrInvalidOperation) {
 					//Queue empty
+					continue
+				}
+				if errors.Is(err, jitterbuffer.ErrPopWhileBuffering) {
+					//Buffer waiting until more data arrives
 					continue
 				}
 				if err != nil {
