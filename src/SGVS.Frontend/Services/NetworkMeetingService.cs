@@ -169,6 +169,8 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         Error = null;
         IsHost = isHost;
 
+        Console.WriteLine("Is Host: " + isHost.ToString());
+
         /*try
         {
             _process = _startProcess(isHost);
@@ -191,11 +193,17 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         // the host just asks the networking module for a host code (no payload), while a joiner
         // sends the code they were given across as an answer code
         var message = isHost
-            ? new Message(null, SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.HostCode)
-            : new Message(System.Text.Encoding.UTF8.GetBytes(hostCode), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.AnswerCode);
+            ? new Message(Array.Empty<byte>(), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.StartHost)
+            : new Message(System.Text.Encoding.UTF8.GetBytes(hostCode), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.JoinCall);
+
+        Console.WriteLine("Sending message...");
 
         // bail out here so the UI shows the error from TryPush instead of waiting on a message that never went out
-        if (!TryPush(message, failurePrefix)) return false;
+        if (!TryPush(message, failurePrefix))
+        {
+            Console.WriteLine("Failed to send message...");
+            return false;
+        }
 
         /*if (finished != pending.Task)
         {

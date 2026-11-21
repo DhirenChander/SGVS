@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"reflect"
 	"shared_mem_lib"
 	"time"
 
@@ -18,7 +21,8 @@ type frameBuffer interface {
 		uint32,
 		uint32,
 	) (bool, []shared_mem_lib.GCFrame)
-
+	PushMessage(msg *shared_mem_lib.Message) bool
+	BlockingPopMessage(src, dst shared_mem_lib.Module, max_timeout uint32) (shared_mem_lib.Message, bool)
 	ReadEncodings(maxLen uint8) ([]shared_mem_lib.Encoding, bool)
 	RequestEncoding(enc shared_mem_lib.Encoding) bool
 	AlignRingsToConfig() bool
@@ -58,10 +62,34 @@ func startCallOnMessage(fb frameBuffer) (
 	chan webrtc.DataChannelMessage,
 	error,
 ) {
-	//TODO: Wait for message from application
-
 	host := true
 	offerSDP := "" //Set if message that we are attendee, and gives SDP
+
+	//TODO: Wait for message from application
+	for {
+		fmt.Println("Waiting for messages...")
+		msg, succ := fb.BlockingPopMessage(shared_mem_lib.Application, shared_mem_lib.Network, 100*1000)
+
+		if succ {
+			fmt.Println("Got message:", msg.GetOperation())
+
+			if msg.GetOperation() == shared_mem_lib.StartHost {
+				host = true
+				break
+			} else if msg.GetOperation() == shared_mem_lib.JoinCall {
+				host = false
+				data, err := msg.UnmarshallMessage(reflect.TypeFor[string]())
+
+				if err != nil {
+					fmt.Println("Unable to unmarshall message: %w", err)
+				}
+
+				offerSDP = data[0].(string)
+
+				break
+			}
+		}
+	}
 
 	if host {
 		peerConnection, dataChan, dataChanOpen, messages, err := setupPcAsHost(fb)
@@ -84,6 +112,8 @@ func setupPcAsHost(fb frameBuffer) (
 	chan webrtc.DataChannelMessage, //Messages are sent here
 	error) {
 
+	fmt.Println("Setting up host")
+
 	offerPc, dataChan, dataChanOpen, messages,
 		selfVoiceTrack, _, remoteVoiceTrackChan, _, //Use receivers later to judge network conditions
 		err := generateOffer()
@@ -102,9 +132,30 @@ func setupPcAsHost(fb frameBuffer) (
 
 	//TODO: Send SDP to application for message from application
 	//sdpStr := getSDPStr(offerPc)
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Printf("\nEnter Answer SDP:\n")
+	answerStr, err := readSDP(reader)
 
 	//TODO: Wait for peer SDP from application
-	answerStr, err := "", nil
+	// answerStr, err := "", nil
+
+	for {
+		fmt.Println("Waiting for answer SDP...")
+		msg, succ := fb.BlockingPopMessage(shared_mem_lib.Application, shared_mem_lib.Network, 100*1000)
+
+		if succ {
+			if msg.GetOperation() == shared_mem_lib.AnswerCode {
+				data, err := msg.UnmarshallMessage(reflect.TypeFor[string]())
+
+				if err != nil {
+					fmt.Println("Unable to unmarshall message: %w", err)
+				}
+
+				answerStr = data[0].(string)
+				break
+			}
+		}
+	}
 
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("Error reading answer: %s\n", err)
@@ -129,6 +180,8 @@ func setupPcAsAttendee(fb frameBuffer, SDPStr string) (
 	chan bool, //Signals when dataChannel is open (by closing itself)
 	chan webrtc.DataChannelMessage, //Messages are sent here
 	error) {
+
+	fmt.Println("Setting up attendee")
 
 	answerPc, dcReady, dataChanOpen, messages,
 		selfVoiceTrack, _, remoteVoiceTrackChan, _,
@@ -188,4 +241,18 @@ func goAndPrintIfError(f func() error) {
 			fmt.Println("Error in concurrent func: " + err.Error())
 		}
 	}()
+}
+
+func readSDP(reader *bufio.Reader) (string, error) {
+	SDPStr := ""
+	for {
+		ln, err := reader.ReadString('\n')
+		if err != nil {
+			return SDPStr, err
+		}
+		if ln == "\r\n" || ln == "\n" {
+			return SDPStr, nil
+		}
+		SDPStr += ln
+	}
 }

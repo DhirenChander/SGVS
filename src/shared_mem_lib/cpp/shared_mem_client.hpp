@@ -137,8 +137,7 @@ namespace shared_mem_client
 
         bool push_message(Message *msg)
         {
-            // the c api takes a pointer to the message, msg is our own copy so taking its address is fine
-            return ::push_message(&fb_, &msg);
+            return ::push_message(&fb_, msg);
         }
 
         bool blocking_pop_message(Module src, Module dst, Message *out_msg, uint32_t max_timeout)

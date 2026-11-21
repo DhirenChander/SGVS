@@ -37,7 +37,8 @@ LEAVE_CALL,
 type Operation int
 
 const (
-	StopSharing = iota
+	StartSharing = iota
+	StopSharing
 	HostCode
 	AnswerCode
 	StartHost

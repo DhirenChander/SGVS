@@ -5,6 +5,17 @@
 #include <stdio.h>
 
 int ringbuff_by_encoding(FrameBuffer *fb, Encoding enc);
+static uint256_t message_channel_id(Module src, Module dst);
+
+static uint256_t message_channel_id(Module src, Module dst)
+{
+    uint256_t out = uint256_zero();
+    out.limbs[0] = 0x534756535F4D5347ULL; // "SGVS_MSG"
+    out.limbs[1] = ((uint64_t)(uint32_t)src << 32) | (uint32_t)dst;
+    out.limbs[2] = 0x4348414E4E454C31ULL; // "CHANNEL1"
+    out.limbs[3] = 1;
+    return out;
+}
 
 bool config_has_encoding(Config *conf, Encoding enc)
 {
@@ -348,7 +359,7 @@ bool new_framebuffer(FrameBuffer *out)
     {
         for (int j = 0; j < MSG_EV_COUNT; j++)
         {
-            out->msg_chans[i][j].id = generate_id();
+            out->msg_chans[i][j].id = message_channel_id((Module)i, (Module)j);
             if (!open_ring(&out->msg_chans[i][j], sizeof(Message), 10))
             {
                 return false;
@@ -464,11 +475,10 @@ bool align_rings_to_config(FrameBuffer *fb)
 bool push_message(FrameBuffer *fb, Message *msg)
 {
     Slot slot;
-    slot.bytes = (uint8_t *)calloc(sizeof(Message), 1); // Slight over allocation
+    slot.bytes = (uint8_t *)calloc(sizeof(Message), 1);
     slot.len = sizeof(Message);
 
-    memcpy(slot.bytes, msg->data, 256);
-    memcpy(&slot.bytes[sizeof(msg->data)], &msg->opcode, sizeof(Operation));
+    memcpy(slot.bytes, msg, sizeof(Message));
 
     bool res = push(&fb->msg_chans[msg->src][msg->dest], &slot, 1);
 
@@ -491,23 +501,9 @@ bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_
         return false;
     }
 
-    memcpy(out_msg->data, out.bytes, 256);
-    memcpy(&out_msg->opcode, &out.bytes[256], sizeof(Operation));
-    out_msg->dest = dst;
-    out_msg->src = src;
+    memcpy(out_msg, out.bytes, sizeof(Message));
 
     free(out.bytes);
 
     return true;
-}
-
-// waits forever for a message. this is the signature the header and the wrappers expect,
-// so it just forwards to blocking_pop_message_from with no timeout
-bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_msg)
-{
-#ifdef _WIN32
-    return blocking_pop_message_from(fb, src, dst, out_msg, INFINITE);
-#else
-    return blocking_pop_message_from(fb, src, dst, out_msg, 0);
-#endif
 }
