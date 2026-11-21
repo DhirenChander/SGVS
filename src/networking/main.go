@@ -78,13 +78,16 @@ func startCallOnMessage(fb frameBuffer) (
 				break
 			} else if msg.GetOperation() == shared_mem_lib.JoinCall {
 				host = false
-				data, err := msg.UnmarshallMessage(reflect.TypeFor[string]())
+				/*data, err := msg.UnmarshallMessage(reflect.TypeFor[string]())
 
 				if err != nil {
 					fmt.Println("Unable to unmarshall message: %w", err)
 				}
 
-				offerSDP = data[0].(string)
+				offerSDP = data[0].(string)*/
+				reader := bufio.NewReader(os.Stdin)
+				fmt.Printf("\nEnter Answer SDP:\n")
+				offerSDP, _ = readSDP(reader)
 
 				break
 			}

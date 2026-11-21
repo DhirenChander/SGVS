@@ -69,7 +69,7 @@ public partial class StartViewModel : ViewModelBase
         IsBusy = true;
         try
         {
-            _meeting.Join(JoinText);
+            _meeting.Join(""/*JoinText*/);
         }
         finally
         {
