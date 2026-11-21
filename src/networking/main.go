@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"reflect"
 	"shared_mem_lib"
 	"time"
 
@@ -145,7 +144,7 @@ func setupPcAsHost(fb frameBuffer) (
 	//TODO: Wait for peer SDP from application
 	// answerStr, err := "", nil
 
-	for {
+	/*for {
 		fmt.Println("Waiting for answer SDP...")
 		msg, succ := fb.BlockingPopMessage(shared_mem_lib.Application, shared_mem_lib.Network, 100*1000)
 
@@ -161,7 +160,7 @@ func setupPcAsHost(fb frameBuffer) (
 				break
 			}
 		}
-	}
+	}*/
 
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("Error reading answer: %s\n", err)
@@ -206,7 +205,7 @@ func setupPcAsAttendee(fb frameBuffer, SDPStr string) (
 	}
 
 	fmt.Println("Answer SDP:")
-	fmt.Println(answerPc)
+	fmt.Println(getSDPStr(answerPc))
 
 	//TODO: Send SDP to application for message from application
 
