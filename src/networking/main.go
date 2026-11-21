@@ -122,6 +122,9 @@ func setupPcAsHost(fb frameBuffer) (
 		return nil, nil, nil, nil, fmt.Errorf("Error generating offer: %s\n", err)
 	}
 
+	fmt.Println("Offer SDP:")
+	fmt.Println(getSDPStr(offerPc))
+
 	keepConnection := false
 	defer func() {
 		if !keepConnection {
