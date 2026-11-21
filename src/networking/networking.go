@@ -460,7 +460,7 @@ func popAndCopyFrames(
 	fmt.Println("Received frames to send from processing module")
 
 	var err error
-	for i := 0; i < len(framesToSend) && err != nil; i++ {
+	for i := 0; i < len(framesToSend) && err == nil; i++ {
 
 		framesCopy := make([]byte, len(framesToSend[i].Bytes))
 		copy(framesCopy, framesToSend[i].Bytes)
