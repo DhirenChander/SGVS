@@ -220,7 +220,7 @@ bool remove_encoding(FrameBuffer *fb, Encoding encoding);
 bool blocking_read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len, uint32_t max_timeout);
 bool align_rings_to_config(FrameBuffer *fb);
 bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len);
-bool push_message(FrameBuffer *fb, Message *msg);
+bool push_message(FrameBuffer *fb, Message msg);
 bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_msg);
 */
 public interface IFrameBuffer
@@ -390,8 +390,7 @@ public unsafe class GCFrameBuffer : IFrameBuffer, IDisposable
     public bool PushMessage(Message msg)
     {
         ThrowIfDisposed();
-        // msg is a local copy of the struct so taking its address is safe for the duration of the call
-        return SharedMemLib.PushMessage(fbp, &msg);
+        return SharedMemLib.PushMessage(fbp, &msg); // Message is passed by value, matching the C signature
     }
 
     public (Message msg, bool success) BlockingPopMessage(Module src, Module dst)

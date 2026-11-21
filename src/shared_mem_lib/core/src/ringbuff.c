@@ -149,11 +149,8 @@ bool open_ring(RingBuffer *rb, uint64_t slot_size, uint32_t slot_count)
     char id_str[80];
     write_uint256(id_str, rb->id);
 
-    // the ids are 64 hex chars, so with the prefix these names are well over 64 wide chars. when the
-    // limit was 64 they got cut short and the map and event ended up with the same name, which made
-    // CreateEventW fail. the limit has to match the size of the buffers above
-    swprintf(map_name, 128, L"Local\\sgvs_ring_%hs", id_str);
-    swprintf(event_name, 128, L"Local\\sgvs_ring_%hs_ev", id_str);
+    swprintf(map_name, 64, L"Local\\sgvs_ring_%hs", id_str);
+    swprintf(event_name, 64, L"Local\\sgvs_ring_%hs_ev", id_str);
 
     rb->map = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
                                  (DWORD)(size >> 32), (DWORD)(size & 0xFFFFFFFF),

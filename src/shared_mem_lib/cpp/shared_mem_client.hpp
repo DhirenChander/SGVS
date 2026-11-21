@@ -24,9 +24,9 @@ namespace shared_mem_client
         return ::frame_sized_by_encoding(enc, out_size);
     }
 
-    void set_frame_data(Frame *f, uint8_t *data)
+    void set_frame_data(Frame *f, uint8_t *data, size_t size)
     {
-        return ::set_frame_data(f, data);
+        return ::set_frame_data(f, data, size);
     }
 
     size_t get_frame_size(Frame *f)
@@ -135,15 +135,15 @@ namespace shared_mem_client
             return ::align_rings_to_config(&fb_);
         }
 
-        bool push_message(Message msg)
+        bool push_message(Message *msg)
         {
             // the c api takes a pointer to the message, msg is our own copy so taking its address is fine
             return ::push_message(&fb_, &msg);
         }
 
-        bool blocking_pop_message(Module src, Module dst, Message *out_msg)
+        bool blocking_pop_message(Module src, Module dst, Message *out_msg, uint32_t max_timeout)
         {
-            return ::blocking_pop_message(&fb_, src, dst, out_msg);
+            return ::blocking_pop_message(&fb_, src, dst, out_msg, max_timeout);
         }
 
     private:

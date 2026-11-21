@@ -43,6 +43,7 @@ extern "C"
 #ifdef _WIN32
                 // Encs_ev is using for encoding updates, msg_evs is used for any other config updates
                 HANDLE encs_ev, conf_map, conf_mu;
+                // TODO: Change this to an SRW lock
                 CRITICAL_SECTION cs;
 #endif
                 uint8_t ring_count;
@@ -62,7 +63,7 @@ extern "C"
         bool read_encodings(FrameBuffer *fb, Encoding *out, uint8_t *out_len, uint8_t max_len);
 
         bool push_message(FrameBuffer *fb, Message *msg);
-        bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_msg);
+        bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_msg, uint32_t max_timeout);
 
 #ifdef __cplusplus
 }
