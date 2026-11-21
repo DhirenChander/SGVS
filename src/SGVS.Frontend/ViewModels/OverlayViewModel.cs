@@ -244,12 +244,39 @@ public partial class OverlayViewModel : ViewModelBase
     {
         //IsMuted = !IsMuted;
 
-        var pcmPath = Path.Combine(
-            AppContext.BaseDirectory,
-            "Assets",
-            "PCM_Sounds",
-            "metal_pipe.pcm");
+        // var pcmPath = Path.Combine(
+        //     AppContext.BaseDirectory,
+        //     "Assets",
+        //     "PCM_Sounds",
+        //     "metal_pipe.pcm");
 
-        await _pcmPlayer.PlayAsync(pcmPath);
+        // await _pcmPlayer.PlayAsync(pcmPath);
+
+        var player = new PcmPlayer();
+
+        var pcm = new byte[1920 * 100]; // 100 x 10 ms
+        short amplitude = 8000;
+
+        for (var frame = 0; frame < pcm.Length / 4; frame++)
+        {
+            short sample = (short)(
+                amplitude *
+                Math.Sin(2 * Math.PI * 440 * frame / 48000));
+
+            int offset = frame * 4;
+            pcm[offset] = (byte)(sample & 0xff);
+            pcm[offset + 1] = (byte)((sample >> 8) & 0xff);
+            pcm[offset + 2] = pcm[offset];
+            pcm[offset + 3] = pcm[offset + 1];
+        }
+
+        for (var i = 0; i < pcm.Length; i += 1920)
+        {
+            player.Enqueue(pcm.AsSpan(i, 1920));
+            await Task.Delay(10);
+        }
+
+        await Task.Delay(500);
+        player.Dispose();
     }
 }

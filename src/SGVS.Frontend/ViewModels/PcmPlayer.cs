@@ -1,36 +1,62 @@
 using NAudio.Wave;
+using SGVS.Frontend.Services.Audio;
 
 namespace SGVS.Frontend.ViewModels;
 
-public sealed class PcmPlayer
+public sealed class PcmPlayer : IPcmSink, IDisposable
 {
-    private readonly WaveFormat _format = new(44100, 16, 2);
+    private readonly BufferedWaveProvider _buffer;
+    private readonly WaveOut _output;
+    private readonly object _disposeLock = new();
+    private bool _disposed;
 
-    public async Task PlayAsync(string filePath)
+    public PcmPlayer()
     {
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException(
                 "PCM playback requires Windows.");
 
-        if (!File.Exists(filePath))
-            throw new FileNotFoundException(
-                $"PCM file was not found: {filePath}",
-                filePath);
+        var format = new WaveFormat(
+            rate: 48000,
+            bits: 16,
+            channels: 2);
 
-        var pcm = await File.ReadAllBytesAsync(filePath);
+        _buffer = new BufferedWaveProvider(format, TimeSpan.FromMilliseconds(250));
+        _buffer.DiscardOnBufferOverflow = true;
 
-        using var memory = new MemoryStream(pcm, writable: false);
-        using var source = new RawSourceWaveStream(memory, _format);
-        using var output = new WaveOut();
+        _output = new WaveOut();
+        _output.Init(_buffer);
+        _output.Play();
+    }
 
-        var stopped = new TaskCompletionSource(
-            TaskCreationOptions.RunContinuationsAsynchronously);
+    public void Enqueue(ReadOnlySpan<byte> pcm)
+    {
+        lock (_disposeLock)
+        {
+            if (_disposed)
+                return;
 
-        output.PlaybackStopped += (_, _) => stopped.TrySetResult();
+            if (pcm.Length == 0)
+                return;
 
-        output.Init(source);
-        output.Play();
+            _buffer.AddSamples(pcm);
+        }
+    }
 
-        await stopped.Task;
+    public void Dispose()
+    {
+        lock (_disposeLock)
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            if (OperatingSystem.IsWindows())
+            {
+                _output.Stop();
+                _output.Dispose();
+            }
+
+        }
     }
 }
