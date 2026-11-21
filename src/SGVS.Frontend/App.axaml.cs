@@ -3,6 +3,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using SGVS.Frontend.ViewModels;
 using SGVS.Frontend.Views;
+using SGVS.Frontend.Services.Audio;
 using System.Threading.Channels;
 using SharedMemLibrary;
 
@@ -12,6 +13,7 @@ public partial class App : Application
 {
     private CancellationTokenSource? _appCts;
     private IFrameBuffer? _sharedMemory;
+    private IPcmSink? _pcmSink;
 
     public override void Initialize()
     {
@@ -22,6 +24,7 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            _pcmSink = new PcmPlayer();
             _sharedMemory = new GCFrameBuffer();
             var main = new MainViewModel(_sharedMemory);
             desktop.MainWindow = new MainWindow
@@ -35,7 +38,7 @@ public partial class App : Application
             var appToken = _appCts.Token;
 
             // 1. Start the app-lifetime background thread here
-            StartBackgroundWorkers(audioChan.Writer, appToken);
+            StartBackgroundWorkers(appToken);
 
             // the networking module is a child process, don't leave it running
             desktop.ShutdownRequested += (_, _) =>
@@ -49,9 +52,9 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    private void StartBackgroundWorkers(ChannelWriter<GCFrame> audioWriter, CancellationToken appToken)
+    private void StartBackgroundWorkers(CancellationToken appToken)
     {
-        Task.Factory.StartNew(() => EncodingWatcher(audioWriter, appToken), cancellationToken: appToken);
+        Task.Factory.StartNew(() => EncodingWatcher(appToken), cancellationToken: appToken);
 
         Task.Factory.StartNew(MessageWatcher, cancellationToken: appToken);
     }
@@ -61,7 +64,7 @@ public partial class App : Application
 
     }
 
-    private void EncodingWatcher(ChannelWriter<GCFrame> audioWriter, CancellationToken appToken)
+    private void EncodingWatcher(CancellationToken appToken)
     {
         if (_sharedMemory is null) return;
         HashSet<(ulong, ulong, ulong, ulong)> running_encs = new();
@@ -96,7 +99,7 @@ public partial class App : Application
 
                     if (enc.IsIncoming())
                     {
-                        Task.Factory.StartNew(() => Receiver(enc, audioWriter, appToken), cancellationToken: appToken);
+                        StartReceiver(enc, appToken);
                     }
                 }
             }
@@ -109,30 +112,10 @@ public partial class App : Application
         }
     }
 
-    private async Task Receiver(Encoding enc, ChannelWriter<GCFrame> audioWriter, CancellationToken appToken)
+    private void StartReceiver(Encoding _enc, CancellationToken _appToken)
     {
-        if (_sharedMemory is null) return;
-        Console.WriteLine("Receiving for encoding...");
-        while (!appToken.IsCancellationRequested)
-        {
-            (GCFrame[] Frames, bool success) = _sharedMemory.BlockingPopFrames(enc, 120, 2000);
-
-            if (success && Frames.Length > 0)
-            {
-                foreach (GCFrame f in Frames)
-                {
-                    await audioWriter.WriteAsync(f, appToken);
-                }
-            }
-            else if (success)
-            {
-                Console.WriteLine("Got frames successfully, but no frames were present.");
-            }
-            else
-            {
-                Console.WriteLine("Failed to get frames.");
-            }
-        }
-
+        SharedMemoryAudioSource audioSource = new SharedMemoryAudioSource(_sharedMemory!);
+        IncomingAudioPump audioPump = new IncomingAudioPump(audioSource, _pcmSink!);
+        audioPump.Start();
     }
 }

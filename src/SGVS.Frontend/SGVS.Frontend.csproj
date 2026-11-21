@@ -24,6 +24,7 @@
   <ItemGroup>
     <!-- frame shown for anyone streaming, on their gallery tile and on the Watch screen (the landscape from the Figma mockup) -->
     <Content Include="Assets\Placeholders\StreamPreview\**" Link="StreamPreview\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\PCM_Sounds\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -38,6 +39,7 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <!-- managed Opus decoder for incoming call audio -->
     <PackageReference Include="Concentus" Version="2.2.3" />
+    <PackageReference Include="NAudio" Version="3.3.0" />
   </ItemGroup>
 
   <!-- shared memory the processing and networking modules also use (Windows only at runtime) -->
