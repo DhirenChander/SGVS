@@ -1,8 +1,132 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SGVS.Frontend.ViewModels"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
-             x:Class="SGVS.Frontend.Views.StartView">
-  Welcome to Avalonia!
+             mc:Ignorable="d"
+             d:DesignWidth="700"
+             d:DesignHeight="450"
+             x:Class="SGVS.Frontend.Views.StartView"
+             x:DataType="vm:StartViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="TextBox.meeting-code">
+            <Setter Property="Width" Value="162" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Padding" Value="12,0,42,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="Foreground" Value="#FFD4D4D4" />
+            <Setter Property="Background" Value="#FF1E1E1E" />
+            <Setter Property="BorderBrush" Value="#FF777777" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Watermark" Value="Meeting code" />
+        </Style>
+        <Style Selector="TextBox.meeting-code:focus">
+            <Setter Property="BorderBrush" Value="#FFB8DADA" />
+        </Style>
+        <Style Selector="Button.meeting-arrow">
+            <Setter Property="Width" Value="40" />
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Foreground" Value="#FF1E1E1E" />
+            <Setter Property="Background" Value="#FF53C9C9" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter x:Name="PART_ContentPresenter"
+                                      Background="{TemplateBinding Background}"
+                                      BorderBrush="{TemplateBinding BorderBrush}"
+                                      BorderThickness="{TemplateBinding BorderThickness}"
+                                      CornerRadius="{TemplateBinding CornerRadius}"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Padding="{TemplateBinding Padding}"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.meeting-arrow:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#FF78DADA" />
+        </Style>
+        <Style Selector="Button.new-meeting">
+            <Setter Property="Width" Value="162" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Foreground" Value="#FFD4D4D4" />
+            <Setter Property="Background" Value="#FF2C2927" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter x:Name="PART_ContentPresenter"
+                                      Background="{TemplateBinding Background}"
+                                      BorderBrush="{TemplateBinding BorderBrush}"
+                                      BorderThickness="{TemplateBinding BorderThickness}"
+                                      CornerRadius="{TemplateBinding CornerRadius}"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Padding="{TemplateBinding Padding}"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.new-meeting:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#FF3A3735" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Background="#FF1E1E1E">
+        <StackPanel HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="8">
+            <!-- joining: paste the host's connection string, the reply to send back shows up below -->
+            <StackPanel Spacing="8" IsVisible="{Binding !IsAwaitingHost}">
+                <Grid Width="162"
+                      Height="40">
+                    <TextBox Classes="meeting-code"
+                             Text="{Binding JoinText}"
+                             PlaceholderText="Paste host's code" />
+                    <Button Classes="meeting-arrow"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,1,0"
+                            Content="→"
+                            IsEnabled="{Binding !IsBusy}"
+                            Command="{Binding JoinCommand}" />
+                </Grid>
+                <Button Classes="new-meeting"
+                        IsEnabled="{Binding !IsBusy}"
+                        Command="{Binding HostCommand}"
+                        Content="New meeting" />
+            </StackPanel>
+
+            <StackPanel Spacing="8" Width="260" IsVisible="{Binding IsAwaitingHost}">
+                <TextBlock Foreground="#FFD4D4D4" FontSize="13" TextWrapping="Wrap"
+                           Text="Send this reply to the host. You'll join as soon as they paste it in." />
+                <TextBox Classes="meeting-code" Width="260" IsReadOnly="True" Text="{Binding ReplyCode, Mode=OneWay}"
+                         Padding="12,0,12,0" AutomationProperties.Name="Reply for the host" />
+                <Button Classes="new-meeting" Width="260" Click="OnCopyReplyClick" Content="Copy reply" />
+                <Button Classes="new-meeting" Width="260" Command="{Binding CancelCommand}" Content="Cancel" />
+            </StackPanel>
+
+            <TextBlock Width="260" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"
+                       Foreground="#FFF09A8E" FontSize="12"
+                       IsVisible="{Binding HasError}" Text="{Binding ErrorMessage}" />
+        </StackPanel>
+
+        <TextBlock HorizontalAlignment="Left"
+                   VerticalAlignment="Bottom"
+                   Margin="22,0,0,15"
+                   Foreground="#FFD4D4D4"
+                   FontSize="13"
+                   Text="⚙"
+                   Opacity="0.9" />
+    </Grid>
 </UserControl>
