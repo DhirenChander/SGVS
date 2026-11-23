@@ -29,6 +29,20 @@ set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
 set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(opus)
 
+# Local prebuilt shared_mem_client library
+set(SHARED_MEM_CLIENT_LIB
+  "${CMAKE_CURRENT_SOURCE_DIR}/../shared_mem_lib/cpp/lib/shared_mem_client.lib"
+)
+
+if(NOT EXISTS "${SHARED_MEM_CLIENT_LIB}")
+  message(FATAL_ERROR "shared_mem_client.lib not found at: ${SHARED_MEM_CLIENT_LIB}")
+endif()
+
+add_library(shared_mem_client_local STATIC IMPORTED)
+set_target_properties(shared_mem_client_local PROPERTIES
+  IMPORTED_LOCATION "${SHARED_MEM_CLIENT_LIB}"
+)
+
 # Your code as a library so both the app and tests can link to it
 add_library(processing_module
   audio_processor.cpp
@@ -55,6 +69,7 @@ if(MSVC)  # true for both cl.exe and clang-cl
     mmdevapi.lib
     avrt.lib
     runtimeobject.lib
+    bcrypt
     # Added for screen capture:
     windowsapp.lib   # C++/WinRT / Windows.Graphics.Capture
     d3d11.lib        # Direct3D 11
@@ -69,6 +84,10 @@ FetchContent_Declare(
 )
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
+
+# Main executable
+add_executable(processing_main main.cpp)
+target_link_libraries(processing_main PRIVATE processing_module shared_mem_client_local)
 
 enable_testing()
 
@@ -90,6 +109,7 @@ target_link_libraries(mic_audio_recorder PRIVATE processing_module)
 
 add_executable(desktop_audio_encoder tests/functional/desktop_audio_encoder.cpp)
 target_link_libraries(desktop_audio_encoder PRIVATE processing_module)
+
 
 add_executable(screen_capture_demo tests/functional/screen_capture_demo.cpp)
 target_link_libraries(screen_capture_demo PRIVATE processing_module)

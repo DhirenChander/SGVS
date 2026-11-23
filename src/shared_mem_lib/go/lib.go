@@ -3,7 +3,8 @@ package shared_mem_lib
 
 /*
 #cgo CFLAGS: -I../core/include
-#cgo LDFLAGS: -L./lib -lshared_mem_client -lcrypto
+#cgo LDFLAGS: -L./lib -lshared_mem_client
+#cgo windows LDFLAGS: -lbcrypt
 #include "shared_mem_lib_core/encoding.h"
 #include "shared_mem_lib_core/framebuff.h"
 */
@@ -160,15 +161,15 @@ func (fb *FrameBuffer) ReadEncodings(maxLen uint8) ([]Encoding, bool) {
 }
 
 // bool push_message(FrameBuffer *fb, Message msg);
-func (fb *FrameBuffer) PushMessage(msg Message) bool {
-	return bool(C.push_message(fb.c(), C.Message(msg)))
+func (fb *FrameBuffer) PushMessage(msg *Message) bool {
+	return bool(C.push_message(fb.c(), (*C.Message)(msg)))
 }
 
 // bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_msg);
-func (fb *FrameBuffer) BlockingPopMessage(src, dst Module) (Message, bool) {
+func (fb *FrameBuffer) BlockingPopMessage(src, dst Module, max_timeout uint32) (Message, bool) {
 	var out Message
 
-	res := bool(C.blocking_pop_message(fb.c(), C.Module(src), C.Module(dst), (*C.Message)(&out)))
+	res := bool(C.blocking_pop_message(fb.c(), C.Module(src), C.Module(dst), (*C.Message)(&out), C.uint32_t(max_timeout)))
 
 	return out, res
 }
@@ -180,7 +181,7 @@ func FrameSizedByEncoding(enc Encoding) (Frame, uint64) {
 }
 
 func (f *Frame) SetFrameData(buff []byte) {
-	C.set_frame_data((*C.Frame)(f), (*C.uint8_t)(&buff[0]))
+	C.set_frame_data((*C.Frame)(f), (*C.uint8_t)(&buff[0]), C.size_t(len(buff)))
 }
 
 func (f *Frame) GetFrameSize() uint64 {
@@ -193,11 +194,16 @@ func NewGCFrame(enc Encoding) GCFrame {
 	f, size := FrameSizedByEncoding(enc)
 	g.Raw = &f
 
-	g.Bytes = make([]byte, size)
-	g.pinner.Pin(&g.Bytes[0])
-	f.SetFrameData(g.Bytes)
+	g.SetData(make([]byte, size))
 
 	return g
+}
+
+func (gc *GCFrame) SetData(buff []byte) {
+	gc.pinner.Unpin()
+	gc.Bytes = buff
+	gc.pinner.Pin(&gc.Bytes[0])
+	gc.Raw.SetFrameData(gc.Bytes)
 }
 
 func (g *GCFrame) Close() {

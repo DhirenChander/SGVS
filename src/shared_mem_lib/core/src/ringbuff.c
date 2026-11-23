@@ -149,8 +149,8 @@ bool open_ring(RingBuffer *rb, uint64_t slot_size, uint32_t slot_count)
     char id_str[80];
     write_uint256(id_str, rb->id);
 
-    swprintf(map_name, 64, L"Local\\sgvs_ring_%s", id_str);
-    swprintf(event_name, 64, L"Local\\sgvs_ring_%s_ev", id_str);
+    swprintf(map_name, 128, L"Local\\sgvs_ring_%hs", id_str);
+    swprintf(event_name, 128, L"Local\\sgvs_ring_%hs_ev", id_str);
 
     rb->map = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
                                  (DWORD)(size >> 32), (DWORD)(size & 0xFFFFFFFF),
