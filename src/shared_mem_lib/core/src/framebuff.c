@@ -22,6 +22,7 @@ bool config_has_encoding(Config *conf, Encoding enc)
 bool add_ring(FrameBuffer *fb, Encoding enc)
 {
 #ifdef _WIN32
+    // TODO: Change this to SRW Exclusive
     EnterCriticalSection(&fb->cs);
 #endif
 
@@ -58,6 +59,7 @@ bool remove_ring(FrameBuffer *fb, Encoding enc)
     free_ringbuffer(&fb->rings[rb_ind]);
 
 #ifdef _WIN32
+    // TODO: Change this to SRW Exclusive
     EnterCriticalSection(&fb->cs);
 #endif
 
@@ -270,6 +272,7 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *ou
     }
 
 #ifdef _WIN32
+    // TODO: Change this to SRW Shared
     EnterCriticalSection(&fb->cs);
 #endif
 
@@ -317,6 +320,7 @@ bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count)
     }
 
 #ifdef _WIN32
+    // TODO: Change this to SRW Shared
     EnterCriticalSection(&fb->cs);
 #endif
 
