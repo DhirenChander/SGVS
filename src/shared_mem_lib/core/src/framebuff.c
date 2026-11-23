@@ -22,8 +22,12 @@ bool config_has_encoding(Config *conf, Encoding enc)
 bool add_ring(FrameBuffer *fb, Encoding enc)
 {
 #ifdef _WIN32
-    // TODO: Change this to SRW Exclusive
-    EnterCriticalSection(&fb->cs);
+    < < < < < < < HEAD
+        // TODO: Change this to SRW Exclusive
+        == == ==
+        =
+>>>>>>> a52a5f8f9996c6ac3af56d051310d255b4c2cd1d
+            EnterCriticalSection(&fb->cs);
 #endif
 
     // TODO: Use a more efficient allocating strategy when allocating rings
@@ -59,8 +63,12 @@ bool remove_ring(FrameBuffer *fb, Encoding enc)
     free_ringbuffer(&fb->rings[rb_ind]);
 
 #ifdef _WIN32
-    // TODO: Change this to SRW Exclusive
-    EnterCriticalSection(&fb->cs);
+    < < < < < < < HEAD
+        // TODO: Change this to SRW Exclusive
+        == == ==
+        =
+>>>>>>> a52a5f8f9996c6ac3af56d051310d255b4c2cd1d
+            EnterCriticalSection(&fb->cs);
 #endif
 
     memmove(&fb->rings[rb_ind], &fb->rings[rb_ind + 1], (fb->ring_count - rb_ind - 1) * sizeof(RingBuffer));
@@ -272,8 +280,12 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *ou
     }
 
 #ifdef _WIN32
-    // TODO: Change this to SRW Shared
-    EnterCriticalSection(&fb->cs);
+    < < < < < < < HEAD
+        // TODO: Change this to SRW Shared
+        == == ==
+        =
+>>>>>>> a52a5f8f9996c6ac3af56d051310d255b4c2cd1d
+            EnterCriticalSection(&fb->cs);
 #endif
 
     bool res = blocking_pop(&fb->rings[rb_ind], raw_out, out_count, max_frame_count, max_timeout);
@@ -320,8 +332,12 @@ bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count)
     }
 
 #ifdef _WIN32
-    // TODO: Change this to SRW Shared
-    EnterCriticalSection(&fb->cs);
+    < < < < < < < HEAD
+        // TODO: Change this to SRW Shared
+        == == ==
+        =
+>>>>>>> a52a5f8f9996c6ac3af56d051310d255b4c2cd1d
+            EnterCriticalSection(&fb->cs);
 #endif
 
     bool res = push(&fb->rings[rb_ind], data, frame_count);
@@ -349,10 +365,14 @@ bool new_framebuffer(FrameBuffer *out)
         for (int j = 0; j < MSG_EV_COUNT; j++)
         {
             out->msg_chans[i][j].id = generate_id();
+<<<<<<< HEAD
             if (!open_ring(&out->msg_chans[i][j], sizeof(Message), 10))
             {
                 return false;
             }
+            == == == =
+                         open_ring(&out->msg_chans[i][j], sizeof(Message), 10);
+>>>>>>> a52a5f8f9996c6ac3af56d051310d255b4c2cd1d
         }
     }
 
@@ -497,6 +517,5 @@ bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_
     out_msg->src = src;
 
     free(out.bytes);
-
     return true;
 }
