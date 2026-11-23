@@ -1,0 +1,91 @@
+using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
+using Avalonia.Media.Imaging;
+using SGVS.Frontend.Models;
+
+namespace SGVS.Frontend.Services;
+
+// pretend call with the people from the Figma mockup. no networking, everything happens instantly.
+// hosting or joining just puts you straight into the call
+public sealed class FakeMeetingService : ObservableObject, IMeetingService
+{
+    // stand-in stream frame, StreamPreview/landscape.jpg next to the exe. null if it's missing
+    private readonly Bitmap? _preview = LoadImage("StreamPreview", "landscape.jpg");
+
+    public FakeMeetingService()
+    {
+        // display names aren't decided yet. Aurko is you, Austin is the one streaming
+        Self = new Participant { Name = "Aurko", IsSelf = true, Tone = AvatarTone.Teal };
+
+        Members = new ReadOnlyObservableCollection<Participant>(
+        [
+            Self,
+            new Participant { Name = "Austin", Tone = AvatarTone.Amber, IsStreamer = true, StreamPreview = _preview },
+            new Participant { Name = "Dhiren", Tone = AvatarTone.Sand },
+            new Participant { Name = "Leo", Tone = AvatarTone.Neutral },
+            new Participant { Name = "Carter", Tone = AvatarTone.Teal },
+            new Participant { Name = "Oliver", Tone = AvatarTone.Amber },
+        ]);
+    }
+
+    public string Code => "KX7-29Q";
+
+    public CallState State
+    {
+        get;
+        private set => SetProperty(ref field, value);
+    } = CallState.Idle;
+
+    public bool IsHost => true;
+
+    public string? Error => null;
+
+    public bool Host() => Connect();
+
+    public bool Join(string hostCode) => Connect();
+
+    public bool AcceptReply(string replyCode) => Connect();
+
+    private bool Connect()
+    {
+        State = CallState.Connected;
+        return true;
+    }
+
+    public Participant Self { get; }
+
+    public ReadOnlyObservableCollection<Participant> Members { get; }
+
+    // screen and app share the same placeholder until capture exists
+    public void StartStream(ShareSource source)
+    {
+        Self.StreamPreview = _preview;
+        Self.IsStreamer = true;
+    }
+
+    public void StopStream()
+    {
+        Self.IsStreamer = false;
+        Self.StreamPreview = null;
+    }
+
+    public void OnParticipantJoined(string name)
+    {
+    }
+
+    public Task LeaveAsync()
+    {
+        State = CallState.Ended;
+        return Task.CompletedTask;
+    }
+
+    // images live in folders next to the exe, null if missing or unreadable
+    private static Bitmap? LoadImage(string folder, string file)
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, folder, file);
+        if (!File.Exists(path)) return null;
+
+        try { return new Bitmap(path); }
+        catch (Exception) { return null; }
+    }
+}
