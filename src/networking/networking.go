@@ -33,9 +33,12 @@ var ICEConfiguration = webrtc.Configuration{
 	}},
 }
 
+<<<<<<< HEAD
 // Where connection logging goes. Stdout normally; stderr in ipc mode so stdout stays a clean protocol stream.
 var logOut io.Writer = os.Stdout
 
+=======
+>>>>>>> develop
 // Webrtc API with adjusted timeouts
 var peerAPI = func() *webrtc.API {
 	settings := webrtc.SettingEngine{}

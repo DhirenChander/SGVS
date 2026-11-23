@@ -212,6 +212,9 @@ func setupPcAsAttendee(fb frameBuffer, SDPStr string) (
 	//Send voice audio
 	goAndPrintIfError(func() error { return relayAudioOnceConnected(selfVoiceTrack, remoteVoiceTrackChan, fb) })
 
+	//Send voice audio
+	goAndPrintIfError(func() error { return relayAudioOnceConnected(selfVoiceTrack, remoteVoiceTrackChan, fb) })
+
 	keepConnection = true
 	return answerPc, dcReady, dataChanOpen, messages, nil
 }
@@ -251,6 +254,7 @@ func goAndPrintIfError(f func() error) {
 	}()
 }
 
+// Read SDP string from input stream (console for now)
 func readSDP(reader *bufio.Reader) (string, error) {
 	SDPStr := ""
 	for {

@@ -360,6 +360,7 @@ bool new_framebuffer(FrameBuffer *out)
         for (int j = 0; j < MSG_EV_COUNT; j++)
         {
             out->msg_chans[i][j].id = message_channel_id((Module)i, (Module)j);
+
             if (!open_ring(&out->msg_chans[i][j], sizeof(Message), 10))
             {
                 return false;

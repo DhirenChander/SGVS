@@ -32,4 +32,5 @@ require (
 )
 
 replace shared_mem_lib => ../shared_mem_lib/go
+
 replace github.com/pion/interceptor => ./custom-packages/interceptor-main
