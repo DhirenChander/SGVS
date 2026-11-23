@@ -1,0 +1,120 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SGVS.Frontend.ViewModels"
+             xmlns:m="using:SGVS.Frontend.Models"
+             xmlns:controls="using:SGVS.Frontend.Views.Controls"
+             xmlns:conv="using:SGVS.Frontend.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="720"
+             x:Class="SGVS.Frontend.Views.MeetingView"
+             x:DataType="vm:MeetingViewModel">
+
+    <!-- built from Figma "In-Meeting" (frames 30:155, 30:218, 30:279, 30:356, 30:420). sizes are the Figma ones -->
+
+    <Design.DataContext>
+        <vm:MeetingViewModel />
+    </Design.DataContext>
+
+    <UserControl.Styles>
+        <!-- names over a stream get a soft shadow so they read on bright frames -->
+        <Style Selector="TextBlock.tilename.overstream">
+            <Setter Property="Effect" Value="{DynamicResource SgvsTileNameShadow}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Panel>
+        <!-- gallery. one tile per member, the grid widens as people join.
+             top 44 leaves room for the title bar (36) plus the 8px gap -->
+        <ItemsControl ItemsSource="{Binding Members}" Margin="24,44,24,78">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Columns="{Binding GalleryColumns}" ColumnSpacing="8" RowSpacing="8" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="m:Participant">
+                    <Panel>
+                        <!-- not streaming: avatar on a flat tile -->
+                        <Border IsVisible="{Binding !IsStreamer}" Background="{DynamicResource SgvsSurfaceBrush}"
+                                CornerRadius="{DynamicResource SgvsRadiusControl}">
+                            <controls:MemberAvatar Width="76" Height="76" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+
+                        <!-- streaming: their latest frame with the gradient edge. outer border carries the shadow,
+                             inner one clips the frame to the rounded corners -->
+                        <Border IsVisible="{Binding IsStreamer}" Background="{DynamicResource SgvsSurfaceBrush}"
+                                CornerRadius="{DynamicResource SgvsRadiusControl}"
+                                BoxShadow="{DynamicResource SgvsLiveTileShadow}">
+                            <Border CornerRadius="{DynamicResource SgvsRadiusControl}" ClipToBounds="True">
+                                <Panel>
+                                    <Image Source="{Binding StreamPreview}" Stretch="UniformToFill" />
+                                    <!-- drawn on top of the frame like Figma's inside stroke -->
+                                    <Border BorderBrush="{DynamicResource SgvsLiveStrokeBrush}" BorderThickness="1.5"
+                                            CornerRadius="{DynamicResource SgvsRadiusControl}" />
+                                    <!-- your own stream has no Watch button -->
+                                    <Button Classes="flat accent" IsVisible="{Binding !IsSelf}"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                                            Command="{Binding $parent[ItemsControl].((vm:MeetingViewModel)DataContext).WatchCommand}"
+                                            CommandParameter="{Binding}"
+                                            AutomationProperties.Name="{Binding Name, StringFormat='Watch {0}'}">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Panel Width="18" Height="18">
+                                                <Path Classes="lineicon onaccent" Data="{StaticResource SgvsEyeIcon}" />
+                                            </Panel>
+                                            <TextBlock Classes="label" Text="Watch" Foreground="{DynamicResource SgvsOnAccentBrush}" />
+                                        </StackPanel>
+                                    </Button>
+                                </Panel>
+                            </Border>
+                        </Border>
+
+                        <TextBlock Classes="tilename" Classes.overstream="{Binding IsStreamer}" Text="{Binding TileLabel}"
+                                   Margin="12,0,0,10" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                   IsHitTestVisible="False" />
+                    </Panel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- control bar + settings gear, shared with the Watch screen. it hides itself after a
+             moment of no mouse movement, MeetingView.axaml.cs feeds it the movement -->
+        <controls:StreamOverlay x:Name="Overlay" DataContext="{Binding Overlay}" />
+
+        <!-- meeting code, bottom-right: key icon -> code -> click to copy. same rail as the Watch screen -->
+        <!-- only the host has a code to give out -->
+        <Panel IsVisible="{Binding IsHost}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,14,14">
+            <controls:JoinCodeRail DataContext="{Binding JoinCode}" IsVisible="{Binding $parent[UserControl].((vm:MeetingViewModel)DataContext).Overlay.ShowJoinCode}" />
+        </Panel>
+
+        <!-- host: the guest's reply goes in here to finish connecting. no short code to type, both strings are
+             pasted. also where problems are reported -->
+        <Border HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,44,0,0" Padding="14,12" MaxWidth="560"
+                IsVisible="{Binding IsWaitingForReply}"
+                Background="{DynamicResource SgvsGlassBrush}" BorderBrush="{DynamicResource SgvsGlassEdgeBrush}"
+                BorderThickness="1" CornerRadius="{DynamicResource SgvsRadiusControl}">
+            <StackPanel Spacing="8">
+                <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource SgvsTextMutedBrush}"
+                           Text="Waiting for a guest. Send them the code (the key at the bottom right copies it), then paste their reply here." />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <TextBox Grid.Column="0" Text="{Binding ReplyText}" PlaceholderText="Paste the guest's reply" AutomationProperties.Name="Guest reply" />
+                    <Button Grid.Column="1" Classes="flat accent" Content="Connect" Command="{Binding AcceptReplyCommand}" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <Border HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,44,0,0" Padding="14,10" MaxWidth="560"
+                IsVisible="{Binding HasError}"
+                Background="{DynamicResource SgvsGlassBrush}" BorderBrush="{DynamicResource SgvsDangerTextBrush}"
+                BorderThickness="1" CornerRadius="{DynamicResource SgvsRadiusControl}">
+            <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" Foreground="{DynamicResource SgvsDangerTextBrush}" />
+        </Border>
+
+        <Border HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,44,0,0" Padding="14,10" MaxWidth="560"
+                IsVisible="{Binding IsCallEnded}"
+                Background="{DynamicResource SgvsGlassBrush}" BorderBrush="{DynamicResource SgvsGlassEdgeBrush}"
+                BorderThickness="1" CornerRadius="{DynamicResource SgvsRadiusControl}">
+            <TextBlock Text="The call has ended. Leave to go back to the start screen." TextWrapping="Wrap" />
+        </Border>
+    </Panel>
+</UserControl>

@@ -37,7 +37,8 @@ LEAVE_CALL,
 type Operation int
 
 const (
-	StopSharing = iota
+	StartSharing = iota
+	StopSharing
 	HostCode
 	AnswerCode
 	StartHost
@@ -200,10 +201,12 @@ func NewGCFrame(enc Encoding) GCFrame {
 }
 
 func (gc *GCFrame) SetData(buff []byte) {
-	gc.pinner.Unpin()
+	var newPinner runtime.Pinner
 	gc.Bytes = buff
-	gc.pinner.Pin(&gc.Bytes[0])
+	newPinner.Pin(&gc.Bytes[0])
 	gc.Raw.SetFrameData(gc.Bytes)
+	gc.pinner.Unpin()
+	gc.pinner = newPinner
 }
 
 func (g *GCFrame) Close() {

@@ -19,7 +19,11 @@ bool try_pop(RingBuffer *rb, Slot *out, uint32_t *out_count, uint32_t max_slots_
 
 bool blocking_pop(RingBuffer *rb, Slot *out, uint32_t *out_count, uint32_t max_slots_out, uint32_t max_timeout)
 {
-    printf("Popping %d...\n", max_slots_out);
+<<<<<<< HEAD
+    // printf("Popping %d...\n", max_slots_out);
+    == == == =
+                 printf("Popping %d...\n", max_slots_out);
+>>>>>>> develop
 
     if (rb == nullptr || out == nullptr || max_slots_out == 0)
     {
@@ -79,12 +83,12 @@ bool blocking_pop(RingBuffer *rb, Slot *out, uint32_t *out_count, uint32_t max_s
     for (uint32_t i = 0; i < *out_count; i++)
     {
         size_t len = rb->lens[(tail + i) % rb->ring->slot_count];
-        fprintf(stderr, "Copying %d, %zu...\n", i, len);
+        // fprintf(stderr, "Copying %d, %zu...\n", i, len);
         // Deep copy each slot
         uint8_t *slot = get_slot(rb, (tail + i) % rb->ring->slot_count);
         memcpy(out[i].bytes, slot, len);
         out[i].len = len;
-        fprintf(stderr, "Size: %zu...\n", out[i].len);
+        // fprintf(stderr, "Size: %zu...\n", out[i].len);
     }
 
     atomic_store(&rb->ring->tail, next);

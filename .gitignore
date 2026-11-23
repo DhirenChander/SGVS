@@ -5,3 +5,5 @@ bin/
 obj/
 .vs/
 *.user
+.DS_Store
+HANDOFF.md

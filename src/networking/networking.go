@@ -3,8 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"shared_mem_lib"
@@ -32,6 +33,12 @@ var ICEConfiguration = webrtc.Configuration{
 	}},
 }
 
+<<<<<<< HEAD
+// Where connection logging goes. Stdout normally; stderr in ipc mode so stdout stays a clean protocol stream.
+var logOut io.Writer = os.Stdout
+
+=======
+>>>>>>> develop
 // Webrtc API with adjusted timeouts
 var peerAPI = func() *webrtc.API {
 	settings := webrtc.SettingEngine{}
@@ -187,7 +194,7 @@ func generateAnswer(offerSDP string) (
 
 	//Called when a data channel is created by the remote (I think)
 	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
-		fmt.Println("Data Channel Created by Remote: " + dc.Label())
+		fmt.Fprintln(logOut, "Data Channel Created by Remote: "+dc.Label())
 		if dc.Label() != managementChannelName {
 			return
 		}
@@ -308,10 +315,14 @@ func AddVoiceTrack(pc *webrtc.PeerConnection) (
 
 }
 
-func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.FrameBuffer) error {
+func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error {
 
-	const minimumBufferedPackets = 10 // -> 100ms delay
+	//Playback will pause and wait if under minimum in buffer
+	//Or skip over packets if over maximum
+	const minimumBufferedPackets = 4 // -> 40ms delay
 	const audioFrameDuration = 10 * time.Millisecond
+	const maxBufferedPackets = 8 // -> 80ms
+	const resetSize = (maxBufferedPackets + minimumBufferedPackets) / 2
 
 	enc := shared_mem_lib.NewAudioEncoding(true) // Is_input is not important here
 	enc.SetIncoming()
@@ -324,20 +335,18 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 		return fmt.Errorf("Failed to align rings to config")
 	}
 
-	jb := jitterbuffer.New(jitterbuffer.WithMinimumPacketCount(minimumBufferedPackets))
+	opts := []jitterbuffer.Option{
+		jitterbuffer.WithMinimumPacketCount(minimumBufferedPackets),
+		jitterbuffer.WithOverflowPacketCount(maxBufferedPackets),
+	}
 
-	playbackStarted := make(chan struct{})
-	var hasStarted atomic.Bool
-
-	//
-	jb.Listen(jitterbuffer.BeginPlayback, func(event jitterbuffer.Event, buf *jitterbuffer.JitterBuffer) {
-		hasStarted.Store(true)
-		close(playbackStarted)
-	})
+	jb := jitterbuffer.New(opts...)
 
 	readDone := make(chan struct{}) //Will stop playing from jitter buffer when this closes
+
 	go func() {
 		defer close(readDone)
+		firstPacket := true
 		for {
 			packet, _, err := track.ReadRTP()
 			if err != nil {
@@ -347,30 +356,19 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 			fmt.Printf("Received audio packet from remote:\n\tSequence: %d\n", packet.SequenceNumber)
 
 			sequenceNum := packet.Header.SequenceNumber
-			if hasStarted.Load() {
-				if int16(sequenceNum-jb.PlayoutHead()) < 0 {
-					//We have already played past this packet, arrived too late
-					continue
-				}
+			if int16(sequenceNum-jb.PlayoutHead()) < 0 && !firstPacket {
+				//We have already played past this packet, arrived too late
+				//Don't push packet
+				continue
 
-				//			sequence is mod 16, so subtract then cast to signed int
-			} else if int16(sequenceNum-jb.PlayoutHead()) < 0 {
-				//During initial buffer filling, if packets arrive earlier
-				//than playoutHead, move head backwards
-				//May or may not happen on first packet retrieval, but doesn't matter (first push sets head automatically)
-				jb.SetPlayoutHead(sequenceNum)
 			}
-			jb.Push(packet)
+			jb.DiscardIfOverflow(resetSize)
+			jb.Push(packet) //First push sets playout head
+			firstPacket = false
 		}
 	}()
 
 	go func() {
-		select { //Wait until initial buffer fill is complete
-		case <-playbackStarted:
-		case <-readDone:
-			return
-		}
-
 		ticker := time.NewTicker(audioFrameDuration)
 		defer ticker.Stop()
 
@@ -378,17 +376,19 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 			select {
 			case <-readDone:
 				return
-			//Potential addition: speed up timer temporarily if buffer is overflowing?
 			case <-ticker.C:
 				packet, err := jb.Pop()
 				if errors.Is(err, jitterbuffer.ErrNotFound) {
+					//Next packet not yet received (but more are queued after it)
 					jb.SetPlayoutHead(jb.PlayoutHead() + 1)
-					//Next packet not yet received
-					//Should we push blank audio to shared buffer?
 					continue
 				}
 				if errors.Is(err, jitterbuffer.ErrInvalidOperation) {
 					//Queue empty
+					continue
+				}
+				if errors.Is(err, jitterbuffer.ErrPopWhileBuffering) {
+					//Buffer waiting until more data arrives
 					continue
 				}
 				if err != nil {
@@ -413,7 +413,7 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb *shared_mem_lib.Fr
 
 // Add way to stop sending frames?
 // Add a channel to signal something has failed?
-func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared_mem_lib.FrameBuffer, enc shared_mem_lib.Encoding) error {
+func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBuffer, enc shared_mem_lib.Encoding) error {
 	const timeOutMs = 100000
 	const maxAudioFrames = 100 // 10ms per frame -> 1 seconds
 
@@ -438,7 +438,7 @@ func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb *shared
 }
 
 func popAndCopyFrames(
-	track *webrtc.TrackLocalStaticSample, fb *shared_mem_lib.FrameBuffer, enc shared_mem_lib.Encoding,
+	track *webrtc.TrackLocalStaticSample, fb frameBuffer, enc shared_mem_lib.Encoding,
 	maxAudioFrames uint32, timeOutMs uint32, audioFrameDuration time.Duration) (bool, error) {
 
 	var framesToSend []shared_mem_lib.GCFrame
@@ -452,10 +452,10 @@ func popAndCopyFrames(
 	var closed = make([]bool, len(framesToSend))
 	defer closeAll(framesToSend, closed)
 
-	fmt.Println("Received frames to send from processing module")
+	// fmt.Println("Received frames to send from processing module")
 
 	var err error
-	for i := 0; i < len(framesToSend) && err != nil; i++ {
+	for i := 0; i < len(framesToSend) && err == nil; i++ {
 
 		framesCopy := make([]byte, len(framesToSend[i].Bytes))
 		copy(framesCopy, framesToSend[i].Bytes)
@@ -480,25 +480,54 @@ func closeAll(frames []shared_mem_lib.GCFrame, closed []bool) {
 	}
 }
 
+func relayAudioOnceConnected(localTrack *webrtc.TrackLocalStaticSample, remoteTrackChan chan *webrtc.TrackRemote, fb frameBuffer) error {
+
+	goAndPrintIfError(func() error {
+		enc, err := waitForAudioEncodingFromProcessing(fb)
+		if err != nil {
+			return err
+		}
+
+		err = relayOutgoingAudioToRemote(localTrack, fb, enc)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	goAndPrintIfError(func() error {
+		remoteTrack := <-remoteTrackChan
+
+		err := relayIncomingAudioToBuffer(remoteTrack, fb)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	return nil
+}
+
 // Generated with AI
 func logPeerConnectionState(pc *webrtc.PeerConnection, role string) {
 	pc.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 		if candidate == nil {
-			fmt.Printf("[%s] ICE candidate gathering complete\n", role)
+			fmt.Fprintf(logOut, "[%s] ICE candidate gathering complete\n", role)
 			return
 		}
-		fmt.Printf("[%s] Local ICE candidate: %s\n", role, candidate.String())
+		fmt.Fprintf(logOut, "[%s] Local ICE candidate: %s\n", role, candidate.String())
 	})
 
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
-		fmt.Printf("[%s] ICE connection state: %s\n", role, state.String())
+		fmt.Fprintf(logOut, "[%s] ICE connection state: %s\n", role, state.String())
 	})
 
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
-		fmt.Printf("[%s] Peer connection state: %s\n", role, state.String())
+		fmt.Fprintf(logOut, "[%s] Peer connection state: %s\n", role, state.String())
 	})
 
 	pc.OnSignalingStateChange(func(state webrtc.SignalingState) {
-		fmt.Printf("[%s] Signaling state: %s\n", role, state.String())
+		fmt.Fprintf(logOut, "[%s] Signaling state: %s\n", role, state.String())
 	})
 }

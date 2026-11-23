@@ -7,7 +7,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(unity)
 
-foreach(t ringbuff_test encoding_test)
+foreach(t ringbuff_test encoding_test framebuff_test)
   add_executable(${t} ${t}.c)
   target_include_directories(${t} PRIVATE 
     "${CMAKE_CURRENT_SOURCE_DIR}/../include"
