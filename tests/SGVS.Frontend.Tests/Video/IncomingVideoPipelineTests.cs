@@ -36,6 +36,40 @@ public class IncomingVideoPipelineTests
         Assert.Equal(3, pipeline.AccessUnits);
     }
 
+    // ffmpeg that stops reading its input leaves Decode stuck writing. Stop must still return (it is called on
+    // the UI thread when you leave or stop watching): disposing the decoder is what unblocks the write
+    [Fact]
+    public void Stop_returns_even_while_the_decoder_is_stuck()
+    {
+        var stuck = new StuckDecoder();
+        var pipeline = new IncomingVideoPipeline(new ChannelVideoSource(_channel.Reader), stuck, _sink);
+        pipeline.Start();
+        _channel.Writer.TryWrite([1]);
+        Assert.True(stuck.Entered.Wait(TimeSpan.FromSeconds(2)));
+
+        var stop = Task.Run(pipeline.Stop);
+
+        Assert.True(stop.Wait(TimeSpan.FromSeconds(3)), "Stop waited on a decoder that never returns");
+        Assert.True(_sink.Disposed);
+    }
+
+    private sealed class StuckDecoder : IVideoDecoder
+    {
+        private readonly ManualResetEventSlim _released = new();
+        public ManualResetEventSlim Entered { get; } = new();
+
+        public event Action<byte[]>? FrameDecoded { add { } remove { } }
+        public event Action? Failed { add { } remove { } }
+
+        public void Decode(ReadOnlySpan<byte> accessUnit)
+        {
+            Entered.Set();
+            _released.Wait(); // until Dispose, like a write to a pipe nobody reads
+        }
+
+        public void Dispose() => _released.Set();
+    }
+
     [Fact]
     public void Decoded_frames_reach_the_sink()
     {

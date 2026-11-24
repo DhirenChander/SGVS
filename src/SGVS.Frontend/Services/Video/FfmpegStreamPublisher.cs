@@ -24,6 +24,7 @@ public sealed class FfmpegStreamPublisher(string ffmpegPath, IReadOnlyList<strin
     private Process? _process;
     private Thread? _reader;
     private volatile bool _stopping;
+    private volatile string? _lastError; // ffmpeg's last stderr line, -loglevel error keeps that to real errors
 
     public event Action<byte[]>? AccessUnitEncoded;
     public event Action<string>? Failed;
@@ -62,14 +63,18 @@ public sealed class FfmpegStreamPublisher(string ffmpegPath, IReadOnlyList<strin
             _stopping = false;
 
             string[] head = ["-hide_banner", "-loglevel", "error", "-nostdin"];
-            _process = Ffmpeg.Start(ffmpegPath, [.. head, .. inputArgs, .. EncodeArgs], writesStdin: false);
-            var stdout = _process.StandardOutput.BaseStream;
-            _reader = new Thread(() => ReadLoop(stdout)) { IsBackground = true, Name = "Stream encoder" };
+            _lastError = null;
+            var process = Ffmpeg.Start(ffmpegPath, [.. head, .. inputArgs, .. EncodeArgs], writesStdin: false,
+                onStderr: line => _lastError = line);
+            _process = process;
+            // taken here, under the lock: Stop can dispose the process, after which StandardOutput throws
+            var stdout = process.StandardOutput.BaseStream;
+            _reader = new Thread(() => ReadLoop(process, stdout)) { IsBackground = true, Name = "Stream encoder" };
             _reader.Start();
         }
     }
 
-    private void ReadLoop(Stream stdout)
+    private void ReadLoop(Process process, Stream stdout)
     {
         var splitter = new AnnexBAccessUnitSplitter();
         var chunk = new byte[64 * 1024];
@@ -90,7 +95,24 @@ public sealed class FfmpegStreamPublisher(string ffmpegPath, IReadOnlyList<strin
             // the pipe closed under us, same as the end of the output
         }
 
-        if (!_stopping) Failed?.Invoke("The stream encoder stopped unexpectedly.");
+        if (_stopping) return;
+        WaitForErrorOutput(process);
+        if (_stopping) return;
+        Failed?.Invoke(_lastError is { } error ? $"The stream encoder stopped unexpectedly: {error}" : "The stream encoder stopped unexpectedly.");
+    }
+
+    // stderr is read on its own, so it can still be on its way when stdout ends. only the parameterless WaitForExit
+    // waits for it, and only once the process has exited
+    private static void WaitForErrorOutput(Process process)
+    {
+        try
+        {
+            if (process.WaitForExit(TimeSpan.FromSeconds(2))) process.WaitForExit();
+        }
+        catch (InvalidOperationException)
+        {
+            // Stop disposed the process meanwhile
+        }
     }
 
     public void Stop()

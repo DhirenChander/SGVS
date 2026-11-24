@@ -21,10 +21,17 @@ public class WatchViewModel : ViewModelBase
         _member = member;
         Participants = meeting.Members;
 
-        // the stream is live: its frames keep replacing the preview, and it goes null when they stop
+        // the stream is live: its frames keep replacing the preview, and it goes null when they stop.
+        // once they stop streaming (or their stream can't be shown) there is nothing left to watch, so go back
+        var leftWatch = false;
         member.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Participant.StreamPreview)) OnPropertyChanged(nameof(StreamFrame));
+            if (e.PropertyName == nameof(Participant.IsStreamer) && !member.IsStreamer && !leftWatch)
+            {
+                leftWatch = true;
+                stopWatching();
+            }
         };
         JoinCode = new JoinCodeViewModel(meeting.Code);
 

@@ -72,6 +72,31 @@ public class FfmpegVideoDecoderTests
     }
 
     [Fact]
+    public void A_decoder_whose_ffmpeg_dies_raises_Failed()
+    {
+        var decoder = new FfmpegVideoDecoder(RequireFfmpeg());
+        using var failed = new ManualResetEventSlim();
+        decoder.Failed += failed.Set;
+
+        decoder.KillForTest();
+
+        Assert.True(failed.Wait(TimeSpan.FromSeconds(5)));
+        decoder.Dispose();
+    }
+
+    [Fact]
+    public void Disposing_a_decoder_does_not_raise_Failed()
+    {
+        var decoder = new FfmpegVideoDecoder(RequireFfmpeg());
+        var failures = 0;
+        decoder.Failed += () => Interlocked.Increment(ref failures);
+
+        decoder.Dispose();
+
+        Assert.Equal(0, failures);
+    }
+
+    [Fact]
     public void Decode_after_process_exit_does_not_throw()
     {
         var units = TwoSeconds.Value;

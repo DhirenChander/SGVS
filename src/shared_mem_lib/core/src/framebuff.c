@@ -3,6 +3,7 @@
 #include "shared_mem_lib_core/ring.h"
 #include "shared_mem_lib_core/ringbuff.h"
 #include <stdio.h>
+#include <string.h>
 
 int ringbuff_by_encoding(FrameBuffer *fb, Encoding enc);
 static uint256_t message_channel_id(Module src, Module dst);
@@ -30,32 +31,58 @@ bool config_has_encoding(Config *conf, Encoding enc)
     return false;
 }
 
+// Opens the ring first, without the lock (mapping a video ring takes a while), then appends it under the lock.
+// Several threads can add the same encoding at once (each one aligning to the config): the first to append wins
+// and the others free their copy, so every ring is in the list once and every entry in it is fully opened.
 bool add_ring(FrameBuffer *fb, Encoding enc)
 {
+    RingBuffer rb;
+    memset(&rb, 0, sizeof(rb));
+    rb.id = enc.id;
+    // TODO: Make this dependent on the encoding
+    if (!open_ring(&rb, (enc.type == Audio) ? 1275 : 500000, (enc.type == Audio) ? 201 : 121))
+        return false;
+
+    bool present = false;
+    bool appended = false;
+
 #ifdef _WIN32
     // TODO: Change this to SRW Exclusive
     EnterCriticalSection(&fb->cs);
 #endif
 
-    // TODO: Use a more efficient allocating strategy when allocating rings
-    fb->ring_count += 1;
-    fb->rings = (RingBuffer *)realloc(fb->rings, fb->ring_count * sizeof(RingBuffer));
+    for (int i = 0; i < fb->ring_count && !present; i++)
+        present = uint256_eq(fb->rings[i].id, enc.id);
+
+    if (!present)
+    {
+        // TODO: Use a more efficient allocating strategy when allocating rings
+        // realloc into a temporary: on failure the old list is still valid
+        RingBuffer *grown = (RingBuffer *)realloc(fb->rings, (fb->ring_count + 1) * sizeof(RingBuffer));
+        if (grown != nullptr)
+        {
+            fb->rings = grown;
+            fb->rings[fb->ring_count] = rb;
+            fb->ring_count += 1;
+            appended = true;
+        }
+    }
 
 #ifdef _WIN32
     LeaveCriticalSection(&fb->cs);
 #endif
 
-    if (fb->rings == nullptr)
-    {
-        char id_str[80];
-        write_uint256(id_str, enc.id);
-        printf("Unable to allocate new ring for encoding: %s\n", id_str);
-        return false;
-    }
+    if (appended)
+        return true;
 
-    fb->rings[fb->ring_count - 1].id = enc.id;
-    // TODO: Make this dependent on the encoding
-    return open_ring(&fb->rings[fb->ring_count - 1], (enc.type == Audio) ? 1275 : 500000, (enc.type == Audio) ? 201 : 121);
+    free_ringbuffer(&rb);
+    if (present)
+        return true;
+
+    char id_str[80];
+    write_uint256(id_str, enc.id);
+    printf("Unable to allocate new ring for encoding: %s\n", id_str);
+    return false;
 }
 
 bool remove_ring(FrameBuffer *fb, Encoding enc)
@@ -258,6 +285,7 @@ int ringbuff_by_encoding(FrameBuffer *fb, Encoding enc)
 
 // Copies the ring's handle under the lock so a blocking pop or push can run without holding it.
 // The copy only holds pointers and handles into the shared mapping, and nothing removes rings while frames move.
+// add_ring only appends rings that are already open, so a ring found here is always usable.
 static bool copy_ring_by_encoding(FrameBuffer *fb, Encoding enc, RingBuffer *out)
 {
     bool found = false;

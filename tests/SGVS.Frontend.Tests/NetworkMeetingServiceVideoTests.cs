@@ -28,9 +28,9 @@ public class NetworkMeetingServiceVideoTests
     }
 
     private NetworkMeetingService Create(Func<IStreamPublisher>? publisherFactory = null, Func<IVideoDecoder>? decoderFactory = null,
-        Action<Action>? post = null) =>
+        Action<Action>? post = null, TimeSpan? stallTimeout = null) =>
         new("Hazel", () => new FakeNetworkingProcess(), post ?? (action => action()), _fb,
-            video: new VideoServices(publisherFactory ?? NewPublisher, decoderFactory ?? NewDecoder));
+            video: new VideoServices(publisherFactory ?? NewPublisher, decoderFactory ?? NewDecoder, stallTimeout));
 
     private static void WaitUntil(Func<bool> condition)
     {
@@ -84,6 +84,25 @@ public class NetworkMeetingServiceVideoTests
         _publishers[0].Emit([0, 0, 0, 1, 9, 0xF0, 7]);
         Assert.Single(_fb.Pushed);
         Assert.Empty(_decoders[0].Received);
+    }
+
+    // the decoder only stops in the background, and can still put out frames it had buffered. none of them
+    // may replace the still, and once you stop streaming none may bring a picture back
+    [AvaloniaFact]
+    public void Frames_after_the_freeze_do_not_change_your_still()
+    {
+        var service = Create();
+        service.StartStream(ShareSource.Screen);
+        var decoder = _decoders[0];
+
+        decoder.Raise(new byte[VideoFormat.FrameBytes]);
+        var still = service.Self.StreamPreview;
+        decoder.Raise(new byte[VideoFormat.FrameBytes]);
+        Assert.Same(still, service.Self.StreamPreview);
+
+        service.StopStream();
+        decoder.Raise(new byte[VideoFormat.FrameBytes]);
+        Assert.Null(service.Self.StreamPreview);
     }
 
     // the freeze is posted to the UI thread. if the stream was restarted before it ran, the new stream's
@@ -147,6 +166,99 @@ public class NetworkMeetingServiceVideoTests
         Assert.False(service.Self.IsStreamer);
         Assert.Equal("boom", service.Error);
         Assert.True(_publishers[0].Disposed);
+    }
+
+    [Fact]
+    public void A_late_failure_from_an_old_publisher_leaves_the_new_stream_running()
+    {
+        var service = Create();
+        service.StartStream(ShareSource.Screen);
+        service.StopStream();
+        service.StartStream(ShareSource.Screen);
+
+        _publishers[0].Fail("old encoder exited");
+
+        Assert.True(service.Self.IsStreamer);
+        Assert.Null(service.Error);
+        Assert.False(_publishers[1].Disposed);
+    }
+
+    [Fact]
+    public void An_encoder_that_stops_sending_video_stops_the_stream_with_an_error()
+    {
+        var service = Create(stallTimeout: TimeSpan.FromMilliseconds(200));
+        service.StartStream(ShareSource.Screen);
+        _publishers[0].Emit([0, 0, 0, 1, 9, 0xF0, 7]);
+
+        WaitUntil(() => !service.Self.IsStreamer);
+
+        Assert.False(service.Self.IsStreamer);
+        Assert.Contains("stopped sending video", service.Error);
+        Assert.True(_publishers[0].Disposed);
+    }
+
+    [Fact]
+    public void An_encoder_that_keeps_sending_video_is_left_running()
+    {
+        var service = Create(stallTimeout: TimeSpan.FromMilliseconds(300));
+        service.StartStream(ShareSource.Screen);
+
+        for (var i = 0; i < 20; i++)
+        {
+            _publishers[0].Emit([0, 0, 0, 1, 9, 0xF0, 7]);
+            Thread.Sleep(50);
+        }
+
+        Assert.True(service.Self.IsStreamer);
+        Assert.Null(service.Error);
+    }
+
+    [Fact]
+    public void A_remote_decoder_that_dies_is_replaced()
+    {
+        var service = Create();
+        var channel = Channel.CreateUnbounded<byte[]>();
+        service.AttachRemoteVideo(new ChannelVideoSource(channel.Reader));
+
+        _decoders[0].Die();
+
+        Assert.Equal(2, _decoders.Count);
+        Assert.True(_decoders[0].Disposed);
+        Assert.Null(service.Error);
+        channel.Writer.TryWrite([1, 2, 3]);
+        WaitUntil(() => _decoders[1].Received.Length == 1);
+        Assert.Equal([1, 2, 3], Assert.Single(_decoders[1].Received));
+    }
+
+    [Fact]
+    public void A_remote_decoder_that_keeps_dying_gives_up_with_an_error()
+    {
+        var service = Create();
+        service.AttachRemoteVideo(new ChannelVideoSource(Channel.CreateUnbounded<byte[]>().Reader));
+        var peer = service.Members.Single(m => !m.IsSelf);
+        peer.IsStreamer = true;
+
+        for (var i = 0; i < 4; i++) _decoders[i].Die();
+
+        Assert.Equal(4, _decoders.Count); // the first one plus three replacements
+        Assert.All(_decoders, d => Assert.True(d.Disposed));
+        Assert.Contains("video decoder keeps stopping", service.Error);
+        Assert.False(peer.IsStreamer);
+    }
+
+    // a decoder that dies now and then over a long call is fine, as long as each new one gets going
+    [Fact]
+    public void A_replacement_decoder_that_decodes_a_frame_earns_back_the_restarts()
+    {
+        var service = Create();
+        service.AttachRemoteVideo(new ChannelVideoSource(Channel.CreateUnbounded<byte[]>().Reader));
+
+        for (var i = 0; i < 3; i++) _decoders[i].Die();
+        _decoders[3].Raise([0]); // a frame came out (wrong size, so the tile ignores it)
+        _decoders[3].Die();
+
+        Assert.Equal(5, _decoders.Count);
+        Assert.Null(service.Error);
     }
 
     [Fact]

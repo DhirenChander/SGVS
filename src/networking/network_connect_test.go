@@ -223,10 +223,13 @@ func TestVideoTransfer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// closing ends the relays too (they stop once the connection is closed), so nothing outlives the test
+	defer hostPc.Close()
 	otherPc, _, _, _, otherMedia, err := generateAnswer(getSDPStr(hostPc))
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer otherPc.Close()
 	if err := applyAnswer(hostPc, getSDPStr(otherPc)); err != nil {
 		t.Fatal(err)
 	}

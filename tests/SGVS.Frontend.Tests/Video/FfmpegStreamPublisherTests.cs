@@ -46,6 +46,22 @@ public class FfmpegStreamPublisherTests
     }
 
     [Fact]
+    public void A_failure_says_what_ffmpeg_reported()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), "sgvs-no-such-video.mp4");
+        using var publisher = new FfmpegStreamPublisher(RequireFfmpeg(), ["-i", missing]);
+        string? message = null;
+        using var ended = new ManualResetEventSlim();
+        publisher.Failed += m => { message = m; ended.Set(); };
+
+        publisher.Start();
+
+        Assert.True(ended.Wait(TimeSpan.FromSeconds(10)));
+        Assert.StartsWith("The stream encoder stopped unexpectedly: ", message);
+        Assert.Contains("No such file", message);
+    }
+
+    [Fact]
     public void Stop_kills_ffmpeg()
     {
         using var publisher = new FfmpegStreamPublisher(RequireFfmpeg(),

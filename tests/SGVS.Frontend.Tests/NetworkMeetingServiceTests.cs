@@ -87,6 +87,22 @@ public class NetworkMeetingServiceTests
         Assert.Equal([Operation.StartHost, Operation.MicMuted, Operation.MicUnmuted], fb.Messages.Select(m => m.Opcode));
     }
 
+    // the button must never say muted while networking is still sending your mic
+    [Fact]
+    public void A_mute_that_could_not_be_sent_is_undone_with_an_error()
+    {
+        var fb = new FakeFrameBuffer();
+        var service = Create(fb);
+        service.Host();
+        fb.FullMessages = true;
+
+        service.Self.IsMuted = true;
+
+        Assert.False(service.Self.IsMuted);
+        Assert.StartsWith("Could not mute your mic", service.Error);
+        Assert.Equal([Operation.StartHost], fb.Messages.Select(m => m.Opcode));
+    }
+
     [Fact]
     public void Muting_before_the_call_is_sent_once_the_call_starts()
     {

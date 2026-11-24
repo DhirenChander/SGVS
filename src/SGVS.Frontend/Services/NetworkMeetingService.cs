@@ -43,6 +43,9 @@ public sealed partial class NetworkMeetingService : ObservableObject, IMeetingSe
     // networking has been asked to host or join. before that nothing reads mute messages, so they wait
     private bool _callStarted;
 
+    // set while a mute that could not be sent is put back, so putting it back sends nothing
+    private bool _undoingMute;
+
     // startProcess: launches the networking module. openSharedMemory: opens the shared frame buffer, called
     // the first time you stream. post: runs something on the UI thread (tests pass a direct call).
     // setupTimeout: how long host/join may take, 30 seconds if left out.
@@ -69,7 +72,7 @@ public sealed partial class NetworkMeetingService : ObservableObject, IMeetingSe
         Self = new Participant { Name = selfName, IsSelf = true, Tone = AvatarTone.Teal };
         Self.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(Participant.IsMuted) && _callStarted) SendMicState();
+            if (e.PropertyName == nameof(Participant.IsMuted) && _callStarted && !_undoingMute) SendMicState();
         };
         _members.Add(Self);
         Members = new ReadOnlyObservableCollection<Participant>(_members);
@@ -121,12 +124,25 @@ public sealed partial class NetworkMeetingService : ObservableObject, IMeetingSe
         return false;
     }
 
-    // tells networking to stop or resume sending your mic audio to the call
+    // tells networking to stop or resume sending your mic audio to the call. if the message can't go out (the
+    // channel is full) the button goes back to what networking is still doing, so it never shows muted while
+    // your voice is being sent. Error says why
     private void SendMicState()
     {
         var op = Self.IsMuted ? Operation.MicMuted : Operation.MicUnmuted;
-        TryPush(() => new Message(null, SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, op),
-            Self.IsMuted ? "Could not mute your mic" : "Could not unmute your mic");
+        if (TryPush(() => new Message(Array.Empty<byte>(), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, op),
+                Self.IsMuted ? "Could not mute your mic" : "Could not unmute your mic"))
+            return;
+
+        _undoingMute = true;
+        try
+        {
+            Self.IsMuted = !Self.IsMuted;
+        }
+        finally
+        {
+            _undoingMute = false;
+        }
     }
 
     public void StartStream(ShareSource source)

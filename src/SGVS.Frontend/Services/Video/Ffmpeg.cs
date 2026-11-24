@@ -30,8 +30,8 @@ public static class Ffmpeg
         return null;
     }
 
-    // args go through ArgumentList so paths with spaces survive. stderr lines go to the trace output
-    public static Process Start(string ffmpegPath, IReadOnlyList<string> args, bool writesStdin)
+    // args go through ArgumentList so paths with spaces survive. stderr lines go to the trace output, and to onStderr
+    public static Process Start(string ffmpegPath, IReadOnlyList<string> args, bool writesStdin, Action<string>? onStderr = null)
     {
         var info = new ProcessStartInfo(ffmpegPath)
         {
@@ -46,7 +46,9 @@ public static class Ffmpeg
         var process = new Process { StartInfo = info };
         process.ErrorDataReceived += (_, e) =>
         {
-            if (e.Data is not null) Trace.WriteLine("[ffmpeg] " + e.Data);
+            if (e.Data is null) return;
+            Trace.WriteLine("[ffmpeg] " + e.Data);
+            onStderr?.Invoke(e.Data);
         };
         process.Start();
         // an undrained stderr pipe blocks ffmpeg once it fills

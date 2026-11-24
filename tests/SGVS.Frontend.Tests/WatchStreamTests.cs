@@ -40,6 +40,20 @@ public class WatchStreamTests
     }
 
     [AvaloniaFact]
+    public void Watch_page_goes_back_to_the_meeting_once_the_stream_ends()
+    {
+        var member = new Participant { Name = "Pat", IsStreamer = true };
+        var wentBack = 0;
+        _ = new WatchViewModel(member, new ScriptedMeetingService(), () => wentBack++, () => { });
+
+        member.IsStreamer = false;
+        member.IsStreamer = true;
+        member.IsStreamer = false;
+
+        Assert.Equal(1, wentBack);
+    }
+
+    [AvaloniaFact]
     public void Your_own_tile_shows_a_streaming_badge_and_no_watch_button()
     {
         var service = new ScriptedMeetingService();

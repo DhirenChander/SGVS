@@ -44,6 +44,23 @@ public class ParticipantVideoSinkTests
         Assert.Same(first, _participant.StreamPreview);
     }
 
+    // a sink that replaced one whose decoder died: the old picture is still up, and if no frame ever comes
+    // through the new one it must still be cleared
+    [AvaloniaFact]
+    public void A_stream_that_never_sends_a_frame_is_cleared_after_two_seconds()
+    {
+        _participant.IsStreamer = true;
+        _participant.StreamPreview = new Avalonia.Media.Imaging.WriteableBitmap(new PixelSize(2, 2), new Vector(96, 96),
+            Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+        using var sink = Create(tracksActivity: true);
+
+        _now = TimeSpan.FromSeconds(2.1);
+        sink.CheckIdle();
+
+        Assert.False(_participant.IsStreamer);
+        Assert.Null(_participant.StreamPreview);
+    }
+
     [AvaloniaFact]
     public void Idle_for_two_seconds_clears_streamer_and_preview()
     {

@@ -49,7 +49,12 @@ public sealed class ParticipantVideoSink : IVideoFrameSink
         _clock = clock ?? (() => watch.Elapsed);
 
         if (tracksActivity)
+        {
+            // the idle clock starts now, not at the first frame: a sink that replaced one whose decoder died may
+            // never get a frame, and the old picture must not stay up forever
+            _lastFrameAt = _clock();
             _idleTimer = new Timer(_ => CheckIdle(), null, TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(500));
+        }
     }
 
     // called on the decoder's thread. the newest frame wins: a frame still waiting for the UI is overwritten

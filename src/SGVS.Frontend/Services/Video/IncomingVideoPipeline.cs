@@ -46,9 +46,11 @@ public sealed class IncomingVideoPipeline(IEncodedVideoSource source, IVideoDeco
             _thread = null;
         }
 
+        // dispose the decoder first: a decoder stuck writing to an ffmpeg that stopped reading only lets go once
+        // it is disposed (FfmpegVideoDecoder kills the process), and the thread can't finish until then
+        decoder.Dispose();
         if (thread is not null && thread != Thread.CurrentThread) thread.Join();
         decoder.FrameDecoded -= OnFrame;
-        decoder.Dispose();
         sink.Dispose();
     }
 

@@ -22,9 +22,10 @@ public sealed class FfmpegVideoDecoder : IVideoDecoder
     private readonly Thread _reader;
     private readonly object _writeLock = new();
     private volatile bool _dead;
-    private bool _disposed;
+    private int _disposed; // 1 once Dispose has started. not guarded by _writeLock, a stuck Decode can hold that
 
     public event Action<byte[]>? FrameDecoded;
+    public event Action? Failed;
 
     public FfmpegVideoDecoder(string ffmpegPath)
     {
@@ -39,7 +40,7 @@ public sealed class FfmpegVideoDecoder : IVideoDecoder
     {
         lock (_writeLock)
         {
-            if (_dead || _disposed) return;
+            if (_dead || Volatile.Read(ref _disposed) == 1) return;
             try
             {
                 _stdin.Write(accessUnit);
@@ -72,6 +73,9 @@ public sealed class FfmpegVideoDecoder : IVideoDecoder
         {
             _dead = true;
         }
+
+        // Dispose sets _disposed before it closes the input, so an output that ended because of Dispose is not a failure
+        if (Volatile.Read(ref _disposed) == 0) Failed?.Invoke();
     }
 
     // lets a test make the process die underneath the decoder
@@ -82,24 +86,36 @@ public sealed class FfmpegVideoDecoder : IVideoDecoder
         _process.WaitForExit(2000);
     }
 
+    // a Decode still writing after a short wait is stuck on an ffmpeg that stopped reading its input. waiting for it
+    // would hang whoever is disposing (the UI thread, on Leave), so ffmpeg is killed first, which fails that write
     public void Dispose()
     {
-        lock (_writeLock)
-        {
-            if (_disposed) return;
-            _disposed = true;
-        }
+        if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
 
-        try { _stdin.Close(); } // ends the input so ffmpeg flushes the frames it still holds
+        var gotLock = Monitor.TryEnter(_writeLock, TimeSpan.FromMilliseconds(500));
+        if (!gotLock) Kill();
+        try
+        {
+            _stdin.Close(); // ends the input so ffmpeg flushes the frames it still holds
+        }
         catch (Exception e) when (e is IOException or ObjectDisposedException) { }
+        finally
+        {
+            if (gotLock) Monitor.Exit(_writeLock);
+        }
 
         if (_reader != Thread.CurrentThread && !_reader.Join(TimeSpan.FromSeconds(2)))
         {
-            try { _process.Kill(entireProcessTree: true); }
-            catch (InvalidOperationException) { }
+            Kill();
             _reader.Join(TimeSpan.FromSeconds(2));
         }
 
         _process.Dispose();
+    }
+
+    private void Kill()
+    {
+        try { _process.Kill(entireProcessTree: true); }
+        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { } // already exited
     }
 }

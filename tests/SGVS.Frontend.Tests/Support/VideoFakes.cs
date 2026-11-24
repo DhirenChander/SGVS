@@ -8,9 +8,13 @@ public sealed class FakeVideoDecoder : IVideoDecoder
     private readonly List<byte[]> _received = [];
 
     public event Action<byte[]>? FrameDecoded;
+    public event Action? Failed;
 
     public bool Disposed { get; private set; }
     public bool ThrowOnDecode { get; set; }
+
+    // the decoder's process died on its own
+    public void Die() => Failed?.Invoke();
 
     public byte[][] Received
     {

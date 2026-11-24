@@ -156,8 +156,11 @@ public sealed class FakeFrameBuffer : IFrameBuffer
     public bool RemoveEncoding(Encoding encoding) => throw new NotSupportedException();
     public (Encoding[] encodings, bool success) BlockingReadEncodings(uint max_len, uint max_timeout) =>
         throw new NotSupportedException();
+    public bool FullMessages { get; set; }               // makes PushMessage fail, like a full message ring
+
     public bool PushMessage(Message msg)
     {
+        if (FullMessages) return false;
         Messages.Add(msg);
         return true;
     }
