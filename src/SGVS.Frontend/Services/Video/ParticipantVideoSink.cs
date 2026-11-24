@@ -22,6 +22,7 @@ public sealed class ParticipantVideoSink : IVideoFrameSink
     private readonly bool _tracksActivity;
     private readonly Func<TimeSpan> _clock;
     private readonly Timer? _idleTimer;
+    private Action? _onFirstFrame;
 
     private readonly object _lock = new();
     private readonly byte[] _pending = new byte[VideoFormat.FrameBytes];
@@ -34,11 +35,15 @@ public sealed class ParticipantVideoSink : IVideoFrameSink
     private readonly WriteableBitmap?[] _bitmaps = new WriteableBitmap?[2];
     private int _next;
 
-    public ParticipantVideoSink(Participant participant, Action<Action> post, bool tracksActivity, Func<TimeSpan>? clock = null)
+    // onFirstFrame runs once, on the UI thread, right after the first frame is on the tile. your own tile uses it to
+    // keep that frame as a still and stop decoding
+    public ParticipantVideoSink(Participant participant, Action<Action> post, bool tracksActivity, Func<TimeSpan>? clock = null,
+        Action? onFirstFrame = null)
     {
         _participant = participant;
         _post = post;
         _tracksActivity = tracksActivity;
+        _onFirstFrame = onFirstFrame;
 
         var watch = Stopwatch.StartNew();
         _clock = clock ?? (() => watch.Elapsed);
@@ -116,6 +121,10 @@ public sealed class ParticipantVideoSink : IVideoFrameSink
         // a different bitmap each frame is what makes the Image redraw
         _participant.StreamPreview = bitmap;
         if (_tracksActivity) _participant.IsStreamer = true;
+
+        var first = _onFirstFrame;
+        _onFirstFrame = null;
+        first?.Invoke();
     }
 
     public void Dispose()

@@ -36,7 +36,7 @@ public:
     }
     // PID 0 => Read all audio (except for the SGVS process)
     ProcessAudioReader(uint32_t pid, AudioFormat format);
-    ProcessAudioReader(wchar_t *device_id);
+    ProcessAudioReader(const wchar_t *device_id);
     // Starts reading audio under the given format, and calls the callback with the starting buffer index and the number of frames
     // This automatically starts running on the capture function on a separate thread
     bool start(uint32_t buffer_time, Callback callback);

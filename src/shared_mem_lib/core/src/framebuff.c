@@ -379,8 +379,16 @@ bool new_framebuffer(FrameBuffer *out)
     }
 
 #ifdef _WIN32
+    // every named object gets the SGVS_SHM_INSTANCE suffix, so two instances can share a PC
+    wchar_t suffix[18];
+    shm_name_suffix(suffix);
+    wchar_t mu_name[64], conf_name[64], ev_name[64];
+    swprintf(mu_name, 64, L"Local\\svgs_mu%ls", suffix);
+    swprintf(conf_name, 64, L"Local\\sgvs_conf%ls", suffix);
+    swprintf(ev_name, 64, L"Local\\sgvs_conf_encs_ev%ls", suffix);
+
     // Create mutex that is immediately owned
-    out->conf_mu = CreateMutexA(NULL, TRUE, "Local\\svgs_mu");
+    out->conf_mu = CreateMutexW(NULL, TRUE, mu_name);
 
     if (out->conf_mu == nullptr)
     {
@@ -395,7 +403,7 @@ bool new_framebuffer(FrameBuffer *out)
 
     out->conf_map = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
                                        (DWORD)(conf_size >> 32), (DWORD)(conf_size & 0xFFFFFFFF),
-                                       L"Local\\sgvs_conf");
+                                       conf_name);
     if (out->conf_map == nullptr)
     {
         free_framebuffer(out);
@@ -418,7 +426,7 @@ bool new_framebuffer(FrameBuffer *out)
     }
 
     // TODO: Change this to an event that is suitable to multiple waiters
-    out->encs_ev = CreateEventW(nullptr, FALSE, FALSE, L"Local\\sgvs_conf_encs_ev");
+    out->encs_ev = CreateEventW(nullptr, FALSE, FALSE, ev_name);
     if (out->encs_ev == nullptr)
     {
         free_framebuffer(out);

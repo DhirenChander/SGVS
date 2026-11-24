@@ -2,10 +2,40 @@
 #include <windows.h>
 #endif
 #include <stdio.h>
+#include <string.h>
 #include <stdint.h>
 #include <stdatomic.h>
 #include <inttypes.h>
 #include "shared_mem_lib_core/ringbuff.h"
+
+#if defined(_WIN32) || defined(_WIN64)
+void shm_name_suffix(wchar_t out[18])
+{
+    out[0] = L'\0';
+    wchar_t value[18];
+    DWORD n = GetEnvironmentVariableW(L"SGVS_SHM_INSTANCE", value, 18);
+    // unset or empty: no suffix, the normal case
+    if (n == 0) return;
+
+    // too long, or anything but letters and digits (a backslash would change which object the name points at).
+    // falling back to the shared names silently would mix this instance's traffic with another's, so say so once
+    bool valid = n < 17;
+    for (DWORD i = 0; valid && i < n; i++)
+    {
+        wchar_t c = value[i];
+        valid = (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z');
+    }
+    if (!valid)
+    {
+        static volatile LONG warned = 0;
+        if (InterlockedExchange(&warned, 1) == 0)
+            fprintf(stderr, "SGVS_SHM_INSTANCE ignored: use 1-16 letters or digits. Using the default shared memory names.\n");
+        return;
+    }
+    out[0] = L'_';
+    memcpy(out + 1, value, (n + 1) * sizeof(wchar_t));
+}
+#endif
 
 uint8_t *get_slot(RingBuffer *rb, uint32_t ind)
 {
@@ -149,8 +179,10 @@ bool open_ring(RingBuffer *rb, uint64_t slot_size, uint32_t slot_count)
     char id_str[80];
     write_uint256(id_str, rb->id);
 
-    swprintf(map_name, 128, L"Local\\sgvs_ring_%hs", id_str);
-    swprintf(event_name, 128, L"Local\\sgvs_ring_%hs_ev", id_str);
+    wchar_t suffix[18];
+    shm_name_suffix(suffix);
+    swprintf(map_name, 128, L"Local\\sgvs_ring_%hs%ls", id_str, suffix);
+    swprintf(event_name, 128, L"Local\\sgvs_ring_%hs%ls_ev", id_str, suffix);
 
     rb->map = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
                                  (DWORD)(size >> 32), (DWORD)(size & 0xFFFFFFFF),

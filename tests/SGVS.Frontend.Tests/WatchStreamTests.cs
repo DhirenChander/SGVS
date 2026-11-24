@@ -40,7 +40,7 @@ public class WatchStreamTests
     }
 
     [AvaloniaFact]
-    public void Your_own_tile_can_be_watched()
+    public void Your_own_tile_shows_a_streaming_badge_and_no_watch_button()
     {
         var service = new ScriptedMeetingService();
         service.Self.IsStreamer = true;
@@ -53,6 +53,8 @@ public class WatchStreamTests
         var watchButtons = window.GetVisualDescendants().OfType<Button>()
             .Where(b => b.IsEffectivelyVisible && AutomationProperties.GetName(b) == "Watch Hazel");
 
-        Assert.Single(watchButtons);
+        Assert.Empty(watchButtons);
+        Assert.Single(window.GetVisualDescendants().OfType<TextBlock>()
+            .Where(t => t.IsEffectivelyVisible && t.Text == "Streaming"));
     }
 }

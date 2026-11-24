@@ -84,6 +84,22 @@ public class ParticipantVideoSinkTests
     }
 
     [AvaloniaFact]
+    public void OnFirstFrame_runs_once_after_the_first_frame_is_on_the_tile()
+    {
+        var calls = 0;
+        var previewWhenCalled = (Avalonia.Media.Imaging.Bitmap?)null;
+        using var sink = new ParticipantVideoSink(_participant, action => action(), false, () => _now,
+            onFirstFrame: () => { calls++; previewWhenCalled = _participant.StreamPreview; });
+
+        sink.Present(Frame);
+        sink.Present(Frame);
+        sink.Present(Frame);
+
+        Assert.Equal(1, calls);
+        Assert.NotNull(previewWhenCalled);
+    }
+
+    [AvaloniaFact]
     public void Present_after_dispose_is_ignored()
     {
         var sink = Create(tracksActivity: true);

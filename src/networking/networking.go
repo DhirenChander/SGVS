@@ -28,6 +28,7 @@ const screenVideoTrackID = "screen_video"
 const videoFrameDuration = time.Second / 30
 const videoBitrateKbps = 3000                                                                    // matches VideoFormat.BitrateKbps in the frontend
 const maxVideoFrameBytes = 500000                                                                // one video slot in shared memory, bigger access units are dropped
+const maxVideoLateness = 150 * time.Millisecond                                                 // how long an incomplete frame waits for a missing packet
 const screenVideoFmtp = "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f" // pion's default H.264 line
 
 // audBytes is put in front of every received access unit. The frontend's decoder only emits a frame once it
@@ -664,7 +665,9 @@ func relayIncomingVideoToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error
 		return fmt.Errorf("Failed to align rings to config")
 	}
 
-	sb := samplebuilder.New(256, &codecs.H264Packet{}, 90000)
+	// A lost packet that NACK does not recover would otherwise hold every later frame until 256 more packets
+	// arrive (~0.8 s at 3 Mbps). Give up on it after maxVideoLateness instead; the next keyframe repairs the picture
+	sb := samplebuilder.New(256, &codecs.H264Packet{}, 90000, samplebuilder.WithMaxTimeDelay(maxVideoLateness))
 
 	for {
 		packet, _, err := track.ReadRTP()

@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using Avalonia.Headless.XUnit;
 using SGVS.Frontend.Services;
 using SGVS.Frontend.Services.Video;
 using SGVS.Frontend.Tests.Support;
@@ -26,8 +27,9 @@ public class NetworkMeetingServiceVideoTests
         return decoder;
     }
 
-    private NetworkMeetingService Create(Func<IStreamPublisher>? publisherFactory = null, Func<IVideoDecoder>? decoderFactory = null) =>
-        new("Hazel", () => new FakeNetworkingProcess(), action => action(), _fb,
+    private NetworkMeetingService Create(Func<IStreamPublisher>? publisherFactory = null, Func<IVideoDecoder>? decoderFactory = null,
+        Action<Action>? post = null) =>
+        new("Hazel", () => new FakeNetworkingProcess(), post ?? (action => action()), _fb,
             video: new VideoServices(publisherFactory ?? NewPublisher, decoderFactory ?? NewDecoder));
 
     private static void WaitUntil(Func<bool> condition)
@@ -62,6 +64,48 @@ public class NetworkMeetingServiceVideoTests
         Assert.Equal([0, 0, 0, 1, 9, 0xF0, 7], data);
         WaitUntil(() => _decoders.Count == 1 && _decoders[0].Received.Length == 1);
         Assert.Equal([0, 0, 0, 1, 9, 0xF0, 7], Assert.Single(_decoders[0].Received));
+    }
+
+    // your own tile keeps the first decoded frame as a still: decoding stops, sending to the network does not
+    [AvaloniaFact]
+    public void First_decoded_frame_freezes_your_tile_and_stops_your_decoder()
+    {
+        var service = Create();
+        service.StartStream(ShareSource.Screen);
+
+        _decoders[0].Raise(new byte[VideoFormat.FrameBytes]);
+        WaitUntil(() => _decoders[0].Disposed);
+
+        Assert.True(_decoders[0].Disposed);
+        Assert.NotNull(service.Self.StreamPreview);
+        Assert.True(service.Self.IsStreamer);
+        Assert.False(_publishers[0].Disposed);
+
+        _publishers[0].Emit([0, 0, 0, 1, 9, 0xF0, 7]);
+        Assert.Single(_fb.Pushed);
+        Assert.Empty(_decoders[0].Received);
+    }
+
+    // the freeze is posted to the UI thread. if the stream was restarted before it ran, the new stream's
+    // preview must be left alone
+    [AvaloniaFact]
+    public void A_late_freeze_from_an_old_stream_leaves_the_new_one_running()
+    {
+        var queued = new Queue<Action>();
+        var service = Create(post: queued.Enqueue);
+        service.StartStream(ShareSource.Screen);
+
+        _decoders[0].Raise(new byte[VideoFormat.FrameBytes]);
+        queued.Dequeue()(); // the frame lands on the tile and queues the freeze
+
+        service.StopStream();
+        service.StartStream(ShareSource.Screen);
+        while (queued.Count > 0) queued.Dequeue()(); // the old stream's freeze runs now
+
+        _publishers[1].Emit([0, 0, 0, 1, 9, 0xF0, 7]);
+        WaitUntil(() => _decoders[1].Received.Length == 1);
+        Assert.False(_decoders[1].Disposed);
+        Assert.Single(_decoders[1].Received);
     }
 
     [Fact]

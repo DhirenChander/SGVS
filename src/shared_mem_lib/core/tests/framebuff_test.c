@@ -1,5 +1,6 @@
 #include <unity.h>
 #include <string.h>
+#include <wchar.h>
 #include "shared_mem_lib_core/framebuff.h"
 
 void setUp(void) {}
@@ -7,12 +8,16 @@ void tearDown(void) {}
 
 void test_push_and_pop_message_between_framebuffers(void);
 void test_blocking_pop_on_one_ring_does_not_block_push_on_another(void);
+void test_instances_with_different_names_do_not_share_memory(void);
+void test_instance_suffix_accepts_only_short_alphanumeric_names(void);
 
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_push_and_pop_message_between_framebuffers);
     RUN_TEST(test_blocking_pop_on_one_ring_does_not_block_push_on_another);
+    RUN_TEST(test_instances_with_different_names_do_not_share_memory);
+    RUN_TEST(test_instance_suffix_accepts_only_short_alphanumeric_names);
     return UNITY_END();
 }
 
@@ -103,4 +108,52 @@ void test_blocking_pop_on_one_ring_does_not_block_push_on_another(void)
     WaitForSingleObject(thread, 5000);
     CloseHandle(thread);
     free_framebuffer(&fb);
+}
+
+// SGVS_SHM_INSTANCE gives each instance its own set of shared memory objects, so two copies of the app
+// can run on one PC. a message pushed in one instance must not show up in the other
+void test_instances_with_different_names_do_not_share_memory(void)
+{
+    FrameBuffer a;
+    FrameBuffer b;
+    Message out = {0};
+
+    SetEnvironmentVariableA("SGVS_SHM_INSTANCE", "isoa");
+    TEST_ASSERT_TRUE(new_framebuffer(&a));
+    SetEnvironmentVariableA("SGVS_SHM_INSTANCE", "isob");
+    TEST_ASSERT_TRUE(new_framebuffer(&b));
+    SetEnvironmentVariableA("SGVS_SHM_INSTANCE", NULL);
+
+    Message msg = {0};
+    msg.src = Application;
+    msg.dest = Network;
+    msg.opcode = START_HOST;
+
+    TEST_ASSERT_TRUE(push_message(&a, &msg));
+    TEST_ASSERT_FALSE(blocking_pop_message(&b, Application, Network, &out, 200));
+    TEST_ASSERT_TRUE(blocking_pop_message(&a, Application, Network, &out, 1000));
+
+    free_framebuffer(&b);
+    free_framebuffer(&a);
+}
+
+static void assert_suffix(const char *value, const wchar_t *expected)
+{
+    wchar_t suffix[18];
+    SetEnvironmentVariableA("SGVS_SHM_INSTANCE", value);
+    shm_name_suffix(suffix);
+    SetEnvironmentVariableA("SGVS_SHM_INSTANCE", NULL);
+    TEST_ASSERT_EQUAL_INT(0, wcscmp(expected, suffix));
+}
+
+// a rejected value falls back to the default names (and warns once on stderr)
+void test_instance_suffix_accepts_only_short_alphanumeric_names(void)
+{
+    assert_suffix(NULL, L"");
+    assert_suffix("a", L"_a");
+    assert_suffix("Pc2", L"_Pc2");
+    assert_suffix("abcdefghijklmnop", L"_abcdefghijklmnop"); // 16, the longest allowed
+    assert_suffix("abcdefghijklmnopq", L"");                 // 17
+    assert_suffix("pc-2", L"");
+    assert_suffix("a\b", L"");
 }

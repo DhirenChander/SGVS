@@ -15,7 +15,8 @@ public class FfmpegVideoDecoderTests
     // two seconds of test pattern encoded the way the app encodes: 60 access units, keyframes at 0 and 30
     private static readonly Lazy<List<byte[]>> TwoSeconds = new(() =>
     {
-        using var publisher = new FfmpegStreamPublisher(Ffmpeg.Find()!,
+        // skips (rather than fails) every test that needs the clip when ffmpeg is not installed
+        using var publisher = new FfmpegStreamPublisher(RequireFfmpeg(),
             ["-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30", "-t", "2"]);
         var units = new List<byte[]>();
         using var ended = new ManualResetEventSlim();

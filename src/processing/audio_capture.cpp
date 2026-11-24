@@ -111,12 +111,12 @@ ProcessAudioReader::ProcessAudioReader(uint32_t pid, AudioFormat format)
 #endif
 }
 
-ProcessAudioReader::ProcessAudioReader(wchar_t *device_id)
+ProcessAudioReader::ProcessAudioReader(const wchar_t *device_id)
 {
 #ifdef _WIN32
     // Need to initialize before creating the audio client
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    m_client = ActivateDeviceLoopback((LPWSTR)device_id);
+    m_client = ActivateDeviceLoopback(const_cast<LPWSTR>(device_id));
     m_stream_flags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
 
     // Get default device format instead of taking format as input

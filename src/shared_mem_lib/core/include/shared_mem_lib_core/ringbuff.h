@@ -36,6 +36,11 @@ extern "C"
 
     bool push(RingBuffer *rb, Slot *data, uint32_t size);
     bool open_ring(RingBuffer *rb, uint64_t slot_size, uint32_t slot_count);
+#if defined(_WIN32) || defined(_WIN64)
+    // "" or "_<name>" from the optional SGVS_SHM_INSTANCE env var (1-16 letters/digits). It is appended to every
+    // shared memory object name so two instances can run on one PC. out must hold 18 wchar_t
+    void shm_name_suffix(wchar_t out[18]);
+#endif
     bool try_pop(RingBuffer *rb, Slot *out, uint32_t *out_count, uint32_t max_slots_out);
     bool blocking_pop(RingBuffer *rb, Slot *out, uint32_t *out_count, uint32_t max_slots_out, uint32_t max_timeout);
     bool pop(RingBuffer *rb, Slot *out, uint32_t *out_count, uint32_t max_slots_out);

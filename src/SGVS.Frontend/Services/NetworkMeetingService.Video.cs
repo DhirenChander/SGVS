@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Threading.Channels;
 using SGVS.Frontend.Services.Video;
 using SharedMemLibrary;
@@ -78,10 +79,14 @@ public sealed partial class NetworkMeetingService
             return false;
         }
 
+        // your own tile only shows the first decoded frame as a faded still, so decoding stops after it
+        IncomingVideoPipeline? selfPipeline = null;
         _selfVideoWriter = loopback.Writer;
-        _selfVideo = new IncomingVideoPipeline(new ChannelVideoSource(loopback.Reader), decoder,
-            new ParticipantVideoSink(Self, _post, tracksActivity: false));
-        _selfVideo.Start();
+        selfPipeline = new IncomingVideoPipeline(new ChannelVideoSource(loopback.Reader), decoder,
+            new ParticipantVideoSink(Self, _post, tracksActivity: false,
+                onFirstFrame: () => _post(() => FreezeSelfPreview(selfPipeline!))));
+        _selfVideo = selfPipeline;
+        selfPipeline.Start();
 
         publisher.AccessUnitEncoded += au => OnAccessUnitEncoded(outgoing, loopback.Writer, au);
         publisher.Failed += message => _post(() =>
@@ -120,6 +125,33 @@ public sealed partial class NetworkMeetingService
         }
 
         loopback.TryWrite(accessUnit);
+    }
+
+    // UI thread. stops the loopback decoder once the still is on your tile; the publisher keeps sending to the
+    // network. a no-op if the stream was already stopped or restarted
+    private void FreezeSelfPreview(IncomingVideoPipeline pipeline)
+    {
+        if (_selfVideo != pipeline) return;
+
+        var writer = _selfVideoWriter;
+        _selfVideo = null;
+        _selfVideoWriter = null;
+
+        writer?.TryComplete();
+
+        // Stop waits for the pipeline thread and for ffmpeg to exit, which can take seconds: not on the UI thread.
+        // the sink ignores anything that arrives meanwhile
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                pipeline.Stop();
+            }
+            catch (Exception e)
+            {
+                Trace.WriteLine("[video] stopping your preview decoder failed: " + e.Message);
+            }
+        });
     }
 
     private void StopVideo()
