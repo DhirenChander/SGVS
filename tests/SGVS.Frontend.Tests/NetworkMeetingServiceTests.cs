@@ -73,4 +73,31 @@ public class NetworkMeetingServiceTests
         Assert.False(service.Self.IsStreamer);
         Assert.Null(service.Self.StreamPreview);
     }
+
+    [Fact]
+    public void Muting_during_a_call_tells_networking_to_stop_sending_your_mic()
+    {
+        var fb = new FakeFrameBuffer();
+        var service = Create(fb);
+        service.Host();
+
+        service.Self.IsMuted = true;
+        service.Self.IsMuted = false;
+
+        Assert.Equal([Operation.StartHost, Operation.MicMuted, Operation.MicUnmuted], fb.Messages.Select(m => m.Opcode));
+    }
+
+    [Fact]
+    public void Muting_before_the_call_is_sent_once_the_call_starts()
+    {
+        var fb = new FakeFrameBuffer();
+        var service = Create(fb);
+
+        service.Self.IsMuted = true;
+        Assert.Empty(fb.Messages);
+
+        service.Join("host-code");
+
+        Assert.Equal([Operation.JoinCall, Operation.MicMuted], fb.Messages.Select(m => m.Opcode));
+    }
 }

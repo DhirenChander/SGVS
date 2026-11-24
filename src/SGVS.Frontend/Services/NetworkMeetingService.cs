@@ -40,6 +40,9 @@ public sealed partial class NetworkMeetingService : ObservableObject, IMeetingSe
     private TaskCompletionSource<bool>? _pending;
     private string _pendingEvent = "";
 
+    // networking has been asked to host or join. before that nothing reads mute messages, so they wait
+    private bool _callStarted;
+
     // startProcess: launches the networking module. openSharedMemory: opens the shared frame buffer, called
     // the first time you stream. post: runs something on the UI thread (tests pass a direct call).
     // setupTimeout: how long host/join may take, 30 seconds if left out.
@@ -64,6 +67,10 @@ public sealed partial class NetworkMeetingService : ObservableObject, IMeetingSe
         Console.WriteLine("Done.");
 
         Self = new Participant { Name = selfName, IsSelf = true, Tone = AvatarTone.Teal };
+        Self.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Participant.IsMuted) && _callStarted) SendMicState();
+        };
         _members.Add(Self);
         Members = new ReadOnlyObservableCollection<Participant>(_members);
     }
@@ -112,6 +119,14 @@ public sealed partial class NetworkMeetingService : ObservableObject, IMeetingSe
         }
 
         return false;
+    }
+
+    // tells networking to stop or resume sending your mic audio to the call
+    private void SendMicState()
+    {
+        var op = Self.IsMuted ? Operation.MicMuted : Operation.MicUnmuted;
+        TryPush(() => new Message(null, SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, op),
+            Self.IsMuted ? "Could not mute your mic" : "Could not unmute your mic");
     }
 
     public void StartStream(ShareSource source)
@@ -215,6 +230,10 @@ public sealed partial class NetworkMeetingService : ObservableObject, IMeetingSe
             Console.WriteLine("Failed to send message...");
             return false;
         }
+
+        // networking starts every call unmuted, so a mute from before the call has to follow the start message
+        _callStarted = true;
+        if (Self.IsMuted) SendMicState();
 
         /*if (finished != pending.Task)
         {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"shared_mem_lib"
@@ -71,6 +72,7 @@ type peerMedia struct {
 	RemoteVoice chan *webrtc.TrackRemote       // their voice, once it starts arriving
 	RemoteVideo chan *webrtc.TrackRemote       // their screen stream, once it starts arriving
 	Closed      chan struct{}                  // closed when the connection is closed or failed
+	MicMuted    atomic.Bool                    // set by the frontend's mic button, our voice isn't sent while true
 
 	closeOnce sync.Once
 }
@@ -470,7 +472,7 @@ func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error
 
 // Add way to stop sending frames?
 // Add a channel to signal something has failed?
-func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBuffer, enc shared_mem_lib.Encoding) error {
+func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBuffer, enc shared_mem_lib.Encoding, muted *atomic.Bool) error {
 	const timeOutMs = 100000
 	const maxAudioFrames = 100 // 10ms per frame -> 1 seconds
 
@@ -481,7 +483,7 @@ func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBu
 		var err error
 		var ok bool
 		for err == nil {
-			ok, err = popAndCopyFrames(track, fb, enc, maxAudioFrames, timeOutMs, audioFrameDuration)
+			ok, err = popAndCopyFrames(track, fb, enc, maxAudioFrames, timeOutMs, audioFrameDuration, muted)
 			if !ok {
 				<-time.After(audioFrameDuration / 2)
 			}
@@ -496,7 +498,7 @@ func relayOutgoingAudioToRemote(track *webrtc.TrackLocalStaticSample, fb frameBu
 
 func popAndCopyFrames(
 	track *webrtc.TrackLocalStaticSample, fb frameBuffer, enc shared_mem_lib.Encoding,
-	maxAudioFrames uint32, timeOutMs uint32, audioFrameDuration time.Duration) (bool, error) {
+	maxAudioFrames uint32, timeOutMs uint32, audioFrameDuration time.Duration, muted *atomic.Bool) (bool, error) {
 
 	var framesToSend []shared_mem_lib.GCFrame
 	ok, framesToSend := fb.BlockingPopFrames(enc, maxAudioFrames, timeOutMs) //BlockingPopFrames resizes slice to only be as long as needed
@@ -508,6 +510,11 @@ func popAndCopyFrames(
 	//Default value of bool is false, no need to initialize
 	var closed = make([]bool, len(framesToSend))
 	defer closeAll(framesToSend, closed)
+
+	// Muted: the frames were still popped so the ring keeps draining, they're just dropped
+	if muted.Load() {
+		return true, nil
+	}
 
 	// fmt.Println("Received frames to send from processing module")
 
@@ -537,7 +544,7 @@ func closeAll(frames []shared_mem_lib.GCFrame, closed []bool) {
 	}
 }
 
-func relayAudioOnceConnected(localTrack *webrtc.TrackLocalStaticSample, remoteTrackChan chan *webrtc.TrackRemote, fb frameBuffer) error {
+func relayAudioOnceConnected(localTrack *webrtc.TrackLocalStaticSample, remoteTrackChan chan *webrtc.TrackRemote, fb frameBuffer, muted *atomic.Bool) error {
 
 	goAndPrintIfError(func() error {
 		enc, err := waitForAudioEncodingFromProcessing(fb)
@@ -545,7 +552,7 @@ func relayAudioOnceConnected(localTrack *webrtc.TrackLocalStaticSample, remoteTr
 			return err
 		}
 
-		err = relayOutgoingAudioToRemote(localTrack, fb, enc)
+		err = relayOutgoingAudioToRemote(localTrack, fb, enc, muted)
 		if err != nil {
 			return err
 		}
@@ -569,7 +576,9 @@ func relayAudioOnceConnected(localTrack *webrtc.TrackLocalStaticSample, remoteTr
 // Starts every relay between this peer connection and shared memory: voice and screen video, both directions.
 // Doesn't block, the relays run on their own goroutines
 func relayMediaOnceConnected(m *peerMedia, fb frameBuffer) {
-	goAndPrintIfError(func() error { return relayAudioOnceConnected(m.VoiceTrack, m.RemoteVoice, fb) })
+	goAndPrintIfError(func() error { return relayAudioOnceConnected(m.VoiceTrack, m.RemoteVoice, fb, &m.MicMuted) })
+
+	go listenForMicMute(m, fb)
 
 	go watchOutgoingVideo(m, fb)
 
@@ -581,6 +590,34 @@ func relayMediaOnceConnected(m *peerMedia, fb frameBuffer) {
 			return nil
 		}
 	})
+}
+
+// Reads the frontend's messages for the rest of the call and follows its mic button. Other messages are dropped,
+// nothing else is handled once the call is set up. Runs until the connection closes
+func listenForMicMute(m *peerMedia, fb frameBuffer) {
+	const popTimeoutMs = 500
+	for {
+		select {
+		case <-m.Closed:
+			return
+		default:
+		}
+
+		msg, ok := fb.BlockingPopMessage(shared_mem_lib.Application, shared_mem_lib.Network, popTimeoutMs)
+		if !ok {
+			continue
+		}
+		switch msg.GetOperation() {
+		case shared_mem_lib.MicMuted:
+			if !m.MicMuted.Swap(true) {
+				fmt.Println("Mic muted, your voice is no longer sent")
+			}
+		case shared_mem_lib.MicUnmuted:
+			if m.MicMuted.Swap(false) {
+				fmt.Println("Mic unmuted, your voice is sent again")
+			}
+		}
+	}
 }
 
 // Polls shared memory for a Video + Outgoing encoding (the frontend registers one the first time you stream) and

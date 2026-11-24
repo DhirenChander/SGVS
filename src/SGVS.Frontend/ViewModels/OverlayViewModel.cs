@@ -58,6 +58,11 @@ public partial class OverlayViewModel : ViewModelBase
         _leave = leave;
         ShowViewerControls = showViewerControls;
         SelectedStreamSource = SourceLabels[0];
+        if (self is not null)
+            self.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(Participant.IsMuted)) RaiseMuteChanged();
+            };
     }
 
     // resolution / volume / stop watching / fullscreen / "show members" only mean something
@@ -66,16 +71,29 @@ public partial class OverlayViewModel : ViewModelBase
 
     // ---- shared by both pages ----
 
-    // your mic. also written to your Participant so the tile can show it
+    // your mic. kept on your Participant, so the Meeting and Watch bars always agree and the
+    // meeting service can tell networking to stop sending it. the previewer has no Participant
     public bool IsMuted
     {
-        get;
+        get => _self?.IsMuted ?? _previewMuted;
         set
         {
-            if (!SetProperty(ref field, value)) return;
-            if (_self is not null) _self.IsMuted = value;
-            OnPropertyChanged(nameof(MuteLabel));
+            if (IsMuted == value) return;
+            if (_self is not null) _self.IsMuted = value; // the handler in the constructor raises the change
+            else
+            {
+                _previewMuted = value;
+                RaiseMuteChanged();
+            }
         }
+    }
+
+    private bool _previewMuted;
+
+    private void RaiseMuteChanged()
+    {
+        OnPropertyChanged(nameof(IsMuted));
+        OnPropertyChanged(nameof(MuteLabel));
     }
 
     public string MuteLabel => IsMuted ? "Unmute" : "Mute";

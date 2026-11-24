@@ -33,6 +33,8 @@ JOIN_CALL,
 PARTICIPANT_JOINED,
 PARTICIPANT_LEFT,
 LEAVE_CALL,
+MIC_MUTED,
+MIC_UNMUTED,
 */
 type Operation int
 
@@ -46,6 +48,8 @@ const (
 	ParticipantJoined
 	ParticipantLeft
 	LeaveCall
+	MicMuted
+	MicUnmuted
 )
 
 type Module int

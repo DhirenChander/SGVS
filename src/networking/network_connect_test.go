@@ -22,6 +22,7 @@ type mockFrameBuffer struct {
 	pushedBytes  [][]byte                      //a copy of every pushed frame's bytes
 	totalPushed  int
 	totalPopped  int
+	messages     chan shared_mem_lib.Message //messages "sent by the frontend", nil means none ever arrive
 }
 
 func (mfb *mockFrameBuffer) pushed() int {
@@ -76,11 +77,11 @@ func TestAudioTransfer(t *testing.T) {
 	}
 
 	goAndPrintIfError(func() error {
-		return relayAudioOnceConnected(hostMedia.VoiceTrack, hostMedia.RemoteVoice, fbMockHost)
+		return relayAudioOnceConnected(hostMedia.VoiceTrack, hostMedia.RemoteVoice, fbMockHost, &hostMedia.MicMuted)
 	})
 
 	goAndPrintIfError(func() error {
-		return relayAudioOnceConnected(otherMedia.VoiceTrack, otherMedia.RemoteVoice, fbMockOther)
+		return relayAudioOnceConnected(otherMedia.VoiceTrack, otherMedia.RemoteVoice, fbMockOther, &otherMedia.MicMuted)
 	})
 
 	var dummyPayload [63]byte
@@ -120,6 +121,78 @@ func TestAudioTransfer(t *testing.T) {
 
 	if receiver.pushed() < numFrameSets*2*8/10 {
 		t.Fatalf("expected at least %d frames, got %d", numFrameSets*2*8/10, receiver.pushed())
+	}
+}
+
+// The mic mute button: while muted, mic frames are still taken out of shared memory (so the processing module never
+// backs up and no stale audio goes out on unmute) but none reach the other side. Unmuting sends them again
+func TestMutedMicIsNotSent(t *testing.T) {
+	enc := shared_mem_lib.NewAudioEncoding(true)
+	enc.SetOutgoing()
+	sender := &mockFrameBuffer{
+		framesToPop: make(chan []shared_mem_lib.GCFrame, 100),
+		encodings:   []shared_mem_lib.Encoding{enc},
+		messages:    make(chan shared_mem_lib.Message, 4),
+	}
+	receiver := &mockFrameBuffer{framesToPop: make(chan []shared_mem_lib.GCFrame, 100)}
+
+	hostPc, _, _, _, hostMedia, err := generateOffer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hostPc.Close()
+	otherPc, _, _, _, otherMedia, err := generateAnswer(getSDPStr(hostPc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer otherPc.Close()
+	if err = applyAnswer(hostPc, getSDPStr(otherPc)); err != nil {
+		t.Fatal(err)
+	}
+
+	relayMediaOnceConnected(hostMedia, sender)
+	relayMediaOnceConnected(otherMedia, receiver)
+	waitConnected(t, hostPc, otherPc)
+
+	setMic := func(op shared_mem_lib.Operation, muted bool) {
+		msg, err := shared_mem_lib.NewMessage(shared_mem_lib.Application, shared_mem_lib.Network, op)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sender.messages <- msg
+		deadline := time.Now().Add(2 * time.Second)
+		for hostMedia.MicMuted.Load() != muted {
+			if time.Now().After(deadline) {
+				t.Fatalf("mic muted is still %v", !muted)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	sendFrames := func(n int) {
+		payload := bytes.Repeat([]byte{42}, 63)
+		for range n {
+			frame := shared_mem_lib.NewGCFrame(enc)
+			frame.Bytes = payload
+			sender.AppendFrames([]shared_mem_lib.GCFrame{frame})
+			time.Sleep(20 * time.Millisecond)
+		}
+		time.Sleep(time.Second)
+	}
+
+	setMic(shared_mem_lib.MicMuted, true)
+	sendFrames(10)
+	if sender.popped() != 10 {
+		t.Fatalf("muted mic frames should still be taken from shared memory, popped %d of 10", sender.popped())
+	}
+	if receiver.pushed() != 0 {
+		t.Fatalf("muted mic reached the other side: %d frames", receiver.pushed())
+	}
+
+	// the receiver's jitter buffer keeps the last few packets back, so not all 20 come out
+	setMic(shared_mem_lib.MicUnmuted, false)
+	sendFrames(20)
+	if receiver.pushed() < 12 {
+		t.Fatalf("unmuted mic should reach the other side, got %d of 20 frames", receiver.pushed())
 	}
 }
 
@@ -231,10 +304,25 @@ func (mfb *mockFrameBuffer) PushMessage(msg *shared_mem_lib.Message) bool {
 	return true
 }
 
-// nothing is ever waiting in the mock's message queue
+// pops what the test put in messages. with no messages channel nothing is ever waiting
 func (mfb *mockFrameBuffer) BlockingPopMessage(src, dst shared_mem_lib.Module, maxTimeout uint32) (shared_mem_lib.Message, bool) {
-	time.Sleep(time.Duration(min(maxTimeout, 50)) * time.Millisecond)
-	return shared_mem_lib.Message{}, false
+	timeout := time.Duration(min(maxTimeout, 50)) * time.Millisecond
+	if mfb.messages == nil {
+		time.Sleep(timeout)
+		return shared_mem_lib.Message{}, false
+	}
+	select {
+	case msg := <-mfb.messages:
+		return msg, true
+	case <-time.After(timeout):
+		return shared_mem_lib.Message{}, false
+	}
+}
+
+func (mfb *mockFrameBuffer) popped() int {
+	mfb.mu.Lock()
+	defer mfb.mu.Unlock()
+	return mfb.totalPopped
 }
 
 func (mfb *mockFrameBuffer) BlockingPopFrames(

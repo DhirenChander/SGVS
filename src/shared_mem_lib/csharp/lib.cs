@@ -52,6 +52,8 @@ public enum Operation : int
     ParticipantJoined = 6,
     ParticipantLeft = 7,
     LeaveCall = 8,
+    MicMuted = 9,
+    MicUnmuted = 10,
 }
 
 [StructLayout(LayoutKind.Sequential)]

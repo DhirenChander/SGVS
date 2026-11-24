@@ -1,3 +1,4 @@
+using SGVS.Frontend.Models;
 using SGVS.Frontend.Services;
 using SGVS.Frontend.Tests.Support;
 using SGVS.Frontend.ViewModels;
@@ -328,5 +329,21 @@ public class ViewModelTests
 
         var meeting = Assert.IsType<MeetingViewModel>(main.CurrentView);
         Assert.Equal(6, meeting.Members.Count);
+    }
+
+    [Fact]
+    public void Mic_mute_is_the_same_on_the_meeting_and_watch_bars()
+    {
+        var self = new Participant { Name = "Hazel", IsSelf = true };
+        var meetingBar = new OverlayViewModel(self, false, null, null, () => Task.CompletedTask, null);
+        meetingBar.IsMuted = true;
+
+        var watchBar = new OverlayViewModel(self, true, null, null, () => Task.CompletedTask, null);
+        Assert.True(watchBar.IsMuted);
+
+        watchBar.IsMuted = false;
+        Assert.False(self.IsMuted);
+        Assert.False(meetingBar.IsMuted);
+        Assert.Equal("Mute", meetingBar.MuteLabel);
     }
 }
