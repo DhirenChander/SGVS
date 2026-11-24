@@ -73,6 +73,15 @@ public sealed class FakeMeetingService : ObservableObject, IMeetingService
     {
     }
 
+    // the pretend call has no stream coming in
+    public void AttachRemoteVideo(SGVS.Frontend.Services.Video.IEncodedVideoSource source)
+    {
+    }
+
+    public void Dispose()
+    {
+    }
+
     public Task LeaveAsync()
     {
         State = CallState.Ended;

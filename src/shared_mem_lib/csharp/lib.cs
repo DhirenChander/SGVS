@@ -213,6 +213,8 @@ bool blocking_pop_message(FrameBuffer *fb, Module src, Module dst, Message *out_
 public interface IFrameBuffer
 {
     bool PushFrames(Frame[] f);
+    // copies data into one slot of the encoding's ring. false if it is empty, bigger than a slot, or the ring is full
+    bool PushBytes(Encoding encoding, ReadOnlySpan<byte> data);
     (GCFrame[] frames, bool success) TryPopFrames(Encoding encoding, uint max_frame_count);
     (GCFrame[] frames, bool success) BlockingPopFrames(Encoding encoding, uint max_frame_count, uint max_timeout);
     bool RequestEncoding(Encoding encoding);
@@ -221,7 +223,7 @@ public interface IFrameBuffer
     bool AlignRingsToConfig();
     (Encoding[] encodings, bool success) ReadEncodings(uint max_len);
     bool PushMessage(Message msg);
-    (Message msg, bool success) BlockingPopMessage(Module src, Module dst);
+    (Message msg, bool success) BlockingPopMessage(Module src, Module dst, uint max_timeout);
 }
 
 public unsafe class GCFrameBuffer : IFrameBuffer, IDisposable
@@ -230,6 +232,10 @@ public unsafe class GCFrameBuffer : IFrameBuffer, IDisposable
     // never copied, which matters because it contains a CRITICAL_SECTION and ring pointers.
     private FrameBuffer* fbp;
     private bool disposed;
+
+    // slot sizes in framebuff.c add_ring
+    public const int MaxVideoFrameBytes = 500_000;
+    public const int MaxAudioFrameBytes = 1275;
 
     public GCFrameBuffer()
     {
@@ -253,6 +259,19 @@ public unsafe class GCFrameBuffer : IFrameBuffer, IDisposable
         fixed (Frame* ptr = f)
         {
             return SharedMemLib.PushFrames(fbp, ptr, (uint)f.Length);
+        }
+    }
+
+    public bool PushBytes(Encoding encoding, ReadOnlySpan<byte> data)
+    {
+        ThrowIfDisposed();
+        var max = encoding.type == EncodingType.Video ? MaxVideoFrameBytes : MaxAudioFrameBytes;
+        if (data.IsEmpty || data.Length > max) return false;
+
+        fixed (byte* p = data)
+        {
+            var frame = new Frame { encoding = encoding, size = (nuint)data.Length, data = p };
+            return SharedMemLib.PushFrames(fbp, &frame, 1);
         }
     }
 
@@ -284,7 +303,7 @@ public unsafe class GCFrameBuffer : IFrameBuffer, IDisposable
                 raws[i] = gcFrames[i].raw;
                 fixed (Frame* pf = &raws[i])
                 {
-                    SharedMemLib.SetFrameData(pf, (byte*)handles[i].AddrOfPinnedObject());
+                    SharedMemLib.SetFrameData(pf, (byte*)handles[i].AddrOfPinnedObject(), (nuint)gcFrames[i].Data.Length);
                 }
             }
 
@@ -380,11 +399,11 @@ public unsafe class GCFrameBuffer : IFrameBuffer, IDisposable
         return SharedMemLib.PushMessage(fbp, &msg); // Message is passed by value, matching the C signature
     }
 
-    public (Message msg, bool success) BlockingPopMessage(Module src, Module dst)
+    public (Message msg, bool success) BlockingPopMessage(Module src, Module dst, uint max_timeout)
     {
         ThrowIfDisposed();
         Message outMsg = default;
-        bool ok = SharedMemLib.BlockingPopMessage(fbp, src, dst, &outMsg);
+        bool ok = SharedMemLib.BlockingPopMessage(fbp, src, dst, &outMsg, max_timeout);
         return (outMsg, ok);
     }
 
@@ -463,7 +482,7 @@ public static unsafe class SharedMemLib
     internal static extern Frame FrameSizedByEncoding(Encoding enc, ulong* out_size);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "set_frame_data")]
-    internal static extern void SetFrameData(Frame* f, byte* data);
+    internal static extern void SetFrameData(Frame* f, byte* data, nuint size);
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "get_frame_size")]
     internal static extern ulong GetFrameSize(Frame* f);
@@ -515,7 +534,7 @@ public static unsafe class SharedMemLib
 
     [DllImport(Lib, CallingConvention = CC, EntryPoint = "blocking_pop_message")]
     [return: MarshalAs(UnmanagedType.U1)]
-    internal static extern bool BlockingPopMessage(FrameBuffer* fb, Module src, Module dst, Message* out_msg);
+    internal static extern bool BlockingPopMessage(FrameBuffer* fb, Module src, Module dst, Message* out_msg, uint maxTimeout);
 
     // ---- Encoding functions ----
 

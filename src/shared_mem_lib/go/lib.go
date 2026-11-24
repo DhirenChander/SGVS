@@ -200,6 +200,18 @@ func NewGCFrame(enc Encoding) GCFrame {
 	return g
 }
 
+// NewGCFrameWithData wraps data in a frame without allocating a whole slot for it. data must not be empty.
+func NewGCFrameWithData(enc Encoding, data []byte) GCFrame {
+	g := GCFrame{}
+
+	f, _ := FrameSizedByEncoding(enc)
+	g.Raw = &f
+
+	g.SetData(data)
+
+	return g
+}
+
 func (gc *GCFrame) SetData(buff []byte) {
 	var newPinner runtime.Pinner
 	gc.Bytes = buff

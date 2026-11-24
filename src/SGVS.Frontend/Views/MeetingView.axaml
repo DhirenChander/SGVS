@@ -52,8 +52,8 @@
                                     <!-- drawn on top of the frame like Figma's inside stroke -->
                                     <Border BorderBrush="{DynamicResource SgvsLiveStrokeBrush}" BorderThickness="1.5"
                                             CornerRadius="{DynamicResource SgvsRadiusControl}" />
-                                    <!-- your own stream has no Watch button -->
-                                    <Button Classes="flat accent" IsVisible="{Binding !IsSelf}"
+                                    <!-- your own stream can be watched too, so it can be checked on one PC -->
+                                    <Button Classes="flat accent"
                                             HorizontalAlignment="Center" VerticalAlignment="Center"
                                             Command="{Binding $parent[ItemsControl].((vm:MeetingViewModel)DataContext).WatchCommand}"
                                             CommandParameter="{Binding}"

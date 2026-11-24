@@ -7,6 +7,8 @@ namespace SGVS.Frontend.ViewModels;
 
 public class WatchViewModel : ViewModelBase
 {
+    private readonly Participant _member;
+
     // for the XAML previewer only, watches whoever is streaming in the fake call
     public WatchViewModel() : this(Watched(new FakeMeetingService()), new FakeMeetingService(), () => { }, () => { })
     {
@@ -16,8 +18,14 @@ public class WatchViewModel : ViewModelBase
     // list the same people. stopWatching: what the Stop watching button does (back to Meeting). goToStart: what Leave does
     public WatchViewModel(Participant member, IMeetingService meeting, Action stopWatching, Action goToStart)
     {
+        _member = member;
         Participants = meeting.Members;
-        StreamFrame = member.StreamPreview;
+
+        // the stream is live: its frames keep replacing the preview, and it goes null when they stop
+        member.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Participant.StreamPreview)) OnPropertyChanged(nameof(StreamFrame));
+        };
         JoinCode = new JoinCodeViewModel(meeting.Code);
 
         // control bar + gear. Start stream is null since there's nothing to start from here
@@ -40,7 +48,7 @@ public class WatchViewModel : ViewModelBase
     public OverlayViewModel Overlay { get; }
 
     // the streamer's latest frame, the same one their Meeting tile shows
-    public Bitmap? StreamFrame { get; }
+    public Bitmap? StreamFrame => _member.StreamPreview;
 
     public ReadOnlyObservableCollection<Participant> Participants { get; }
 

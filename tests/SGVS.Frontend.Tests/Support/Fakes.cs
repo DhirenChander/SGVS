@@ -97,6 +97,14 @@ public sealed class ScriptedMeetingService : ObservableObject, IMeetingService
         Self.StreamPreview = null;
     }
 
+    public void OnParticipantJoined(string name) => AddPeer(name);
+
+    public void AttachRemoteVideo(SGVS.Frontend.Services.Video.IEncodedVideoSource source) => Calls.Add("remote-video");
+
+    public bool Disposed { get; private set; }
+
+    public void Dispose() => Disposed = true;
+
     public void AddPeer(string name) => _members.Add(new Participant { Name = name, Tone = AvatarTone.Amber });
 
     private bool Fail()

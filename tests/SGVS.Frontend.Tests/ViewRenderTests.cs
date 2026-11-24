@@ -69,15 +69,14 @@ public class ViewRenderTests
     }
 
     [AvaloniaFact]
-    public void Joining_shows_the_reply_to_copy_and_cancel()
+    public void Joining_opens_the_meeting_page()
     {
         var window = Show(new MainViewModel(() => _service));
         ((StartViewModel)((MainViewModel)window.DataContext!).CurrentView).JoinText = "host-code";
 
         Click(window, "→");
 
-        Assert.Contains("Copy reply", window.GetVisualDescendants().OfType<Button>().Select(b => b.Content as string));
-        Assert.Contains(window.GetVisualDescendants().OfType<TextBox>(), t => t.IsReadOnly && t.Text == "ANSWER-CODE");
+        Assert.NotEmpty(window.GetVisualDescendants().OfType<MeetingView>());
         Assert.DoesNotContain("New meeting", window.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible).Select(b => b.Content as string));
     }
 

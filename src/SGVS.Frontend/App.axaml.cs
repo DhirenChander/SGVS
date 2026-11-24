@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using SGVS.Frontend.ViewModels;
 using SGVS.Frontend.Views;
 using SGVS.Frontend.Services.Audio;
+using SGVS.Frontend.Services.Video;
 using System.Threading.Channels;
 using SharedMemLibrary;
 
@@ -117,6 +118,14 @@ public partial class App : Application
 
     private void StartReceiver(Encoding _enc, CancellationToken _appToken)
     {
+        // someone's screen stream. the field is read directly, IsVideo() would call into the native library
+        if (_enc.type == EncodingType.Video)
+        {
+            var source = new SharedMemoryVideoSource(_sharedMemory!, _enc);
+            Dispatcher.UIThread.Post(() => _main?.AttachRemoteVideo(source));
+            return;
+        }
+
         SharedMemoryAudioSource audioSource = new SharedMemoryAudioSource(_sharedMemory!);
         IncomingAudioPump audioPump = new IncomingAudioPump(audioSource, _pcmSink!);
         audioPump.Start();

@@ -256,6 +256,33 @@ int ringbuff_by_encoding(FrameBuffer *fb, Encoding enc)
     return ind;
 }
 
+// Copies the ring's handle under the lock so a blocking pop or push can run without holding it.
+// The copy only holds pointers and handles into the shared mapping, and nothing removes rings while frames move.
+static bool copy_ring_by_encoding(FrameBuffer *fb, Encoding enc, RingBuffer *out)
+{
+    bool found = false;
+
+#ifdef _WIN32
+    EnterCriticalSection(&fb->cs);
+#endif
+
+    for (int i = 0; i < fb->ring_count; i++)
+    {
+        if (uint256_eq(fb->rings[i].id, enc.id))
+        {
+            *out = fb->rings[i];
+            found = true;
+            break;
+        }
+    }
+
+#ifdef _WIN32
+    LeaveCriticalSection(&fb->cs);
+#endif
+
+    return found;
+}
+
 bool try_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *out_count, uint32_t max_frame_count)
 {
     return blocking_pop_frames(fb, enc, out, out_count, max_frame_count, 0x0);
@@ -263,9 +290,9 @@ bool try_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *out_cou
 
 bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *out_count, uint32_t max_frame_count, uint32_t max_timeout)
 {
-    int rb_ind = ringbuff_by_encoding(fb, enc);
+    RingBuffer rb;
 
-    if (rb_ind == -1)
+    if (!copy_ring_by_encoding(fb, enc, &rb))
     {
         char id_str[80];
         write_uint256(id_str, enc.id);
@@ -282,16 +309,8 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *ou
         raw_out[i].len = out[i].size;
     }
 
-#ifdef _WIN32
-    // TODO: Change this to SRW Shared
-    EnterCriticalSection(&fb->cs);
-#endif
-
-    bool res = blocking_pop(&fb->rings[rb_ind], raw_out, out_count, max_frame_count, max_timeout);
-
-#ifdef _WIN32
-    LeaveCriticalSection(&fb->cs);
-#endif
+    // The lock is not held here: a long wait on one ring must not stall pushes and pops on the others
+    bool res = blocking_pop(&rb, raw_out, out_count, max_frame_count, max_timeout);
 
     if (!res)
     {
@@ -312,9 +331,9 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *ou
 
 bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count)
 {
-    int rb_ind = ringbuff_by_encoding(fb, f->encoding);
+    RingBuffer rb;
 
-    if (rb_ind == -1)
+    if (!copy_ring_by_encoding(fb, f->encoding, &rb))
     {
         char id_str[80];
         write_uint256(id_str, f->encoding.id);
@@ -330,16 +349,7 @@ bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count)
         data[i].len = f[i].size;
     }
 
-#ifdef _WIN32
-    // TODO: Change this to SRW Shared
-    EnterCriticalSection(&fb->cs);
-#endif
-
-    bool res = push(&fb->rings[rb_ind], data, frame_count);
-
-#ifdef _WIN32
-    LeaveCriticalSection(&fb->cs);
-#endif
+    bool res = push(&rb, data, frame_count);
 
     free(data);
 

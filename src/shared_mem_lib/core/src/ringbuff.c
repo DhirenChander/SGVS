@@ -19,11 +19,7 @@ bool try_pop(RingBuffer *rb, Slot *out, uint32_t *out_count, uint32_t max_slots_
 
 bool blocking_pop(RingBuffer *rb, Slot *out, uint32_t *out_count, uint32_t max_slots_out, uint32_t max_timeout)
 {
-<<<<<<< HEAD
     // printf("Popping %d...\n", max_slots_out);
-    == == == =
-                 printf("Popping %d...\n", max_slots_out);
->>>>>>> develop
 
     if (rb == nullptr || out == nullptr || max_slots_out == 0)
     {

@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"shared_mem_lib"
 	"time"
 
@@ -45,11 +47,14 @@ func main() {
 	if err != nil {
 		fmt.Println("Error starting call: " + err.Error())
 		//Retry?
+		return
 	}
 
-	//Temp to keep pc open during testing
+	// Keep the call open until the process is told to stop (Ctrl+C)
 	//TODO: change to wait on message from application to end call
-	<-time.After(5 * time.Minute)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	<-ctx.Done()
 	_ = pc.Close()
 }
 
@@ -116,9 +121,7 @@ func setupPcAsHost(fb frameBuffer) (
 
 	fmt.Println("Setting up host")
 
-	offerPc, dataChan, dataChanOpen, messages,
-		selfVoiceTrack, _, remoteVoiceTrackChan, _, //Use receivers later to judge network conditions
-		err := generateOffer()
+	offerPc, dataChan, dataChanOpen, messages, media, err := generateOffer()
 
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("Error generating offer: %s\n", err)
@@ -172,8 +175,8 @@ func setupPcAsHost(fb frameBuffer) (
 		return nil, nil, nil, nil, fmt.Errorf("Error applying answer: %s\n", err)
 	}
 
-	//Send voice audio
-	goAndPrintIfError(func() error { return relayAudioOnceConnected(selfVoiceTrack, remoteVoiceTrackChan, fb) })
+	//Relay voice audio and the screen stream
+	relayMediaOnceConnected(media, fb)
 
 	keepConnection = true
 	return offerPc, dataChan, dataChanOpen, messages, nil
@@ -188,9 +191,11 @@ func setupPcAsAttendee(fb frameBuffer, SDPStr string) (
 
 	fmt.Println("Setting up attendee")
 
-	answerPc, dcReady, dataChanOpen, messages,
-		selfVoiceTrack, _, remoteVoiceTrackChan, _,
-		err := generateAnswer(SDPStr)
+	// generateAnswer closes the connection itself if it fails
+	answerPc, dcReady, dataChanOpen, messages, media, err := generateAnswer(SDPStr)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("Error generating answer: %s\n", err)
+	}
 
 	keepConnection := false
 	defer func() {
@@ -200,20 +205,13 @@ func setupPcAsAttendee(fb frameBuffer, SDPStr string) (
 		}
 	}()
 
-	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("Error generating answer: %s\n", err)
-	}
-
 	fmt.Println("Answer SDP:")
 	fmt.Println(getSDPStr(answerPc))
 
 	//TODO: Send SDP to application for message from application
 
-	//Send voice audio
-	goAndPrintIfError(func() error { return relayAudioOnceConnected(selfVoiceTrack, remoteVoiceTrackChan, fb) })
-
-	//Send voice audio
-	goAndPrintIfError(func() error { return relayAudioOnceConnected(selfVoiceTrack, remoteVoiceTrackChan, fb) })
+	//Relay voice audio and the screen stream, once. A second relay would add a second reader to the outgoing ring
+	relayMediaOnceConnected(media, fb)
 
 	keepConnection = true
 	return answerPc, dcReady, dataChanOpen, messages, nil
@@ -242,7 +240,7 @@ func waitForAudioEncodingFromProcessing(fb frameBuffer) (shared_mem_lib.Encoding
 		time.Sleep(interval)
 	}
 
-	return shared_mem_lib.Encoding{}, fmt.Errorf("Did not find audio encoding after %s", string(timeOut))
+	return shared_mem_lib.Encoding{}, fmt.Errorf("Did not find audio encoding after %s", timeOut.String())
 }
 
 func goAndPrintIfError(f func() error) {

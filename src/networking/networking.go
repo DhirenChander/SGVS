@@ -6,18 +6,33 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"shared_mem_lib"
 
 	"github.com/pion/interceptor/pkg/jitterbuffer"
+	"github.com/pion/rtp/codecs"
 	"github.com/pion/webrtc/v4/pkg/media"
+	"github.com/pion/webrtc/v4/pkg/media/samplebuilder"
 
 	"github.com/pion/webrtc/v4"
 )
 
 const managementChannelName = "transceiver_management"
 const voiceAudioChannelName = "voice_audio"
+
+// The screen stream. Its track must be in the first offer/answer: connection strings are swapped by hand once
+// and there is no renegotiation afterwards.
+const screenVideoTrackID = "screen_video"
+const videoFrameDuration = time.Second / 30
+const videoBitrateKbps = 3000                                                                    // matches VideoFormat.BitrateKbps in the frontend
+const maxVideoFrameBytes = 500000                                                                // one video slot in shared memory, bigger access units are dropped
+const screenVideoFmtp = "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f" // pion's default H.264 line
+
+// audBytes is put in front of every received access unit. The frontend's decoder only emits a frame once it
+// sees the next delimiter, so this makes each one come out at once instead of one frame late.
+var audBytes = []byte{0, 0, 0, 1, 9, 0xF0}
 
 var StunServers = []string{
 	"stun:stun.l.google.com:19302",
@@ -33,12 +48,9 @@ var ICEConfiguration = webrtc.Configuration{
 	}},
 }
 
-<<<<<<< HEAD
 // Where connection logging goes. Stdout normally; stderr in ipc mode so stdout stays a clean protocol stream.
 var logOut io.Writer = os.Stdout
 
-=======
->>>>>>> develop
 // Webrtc API with adjusted timeouts
 var peerAPI = func() *webrtc.API {
 	settings := webrtc.SettingEngine{}
@@ -51,26 +63,65 @@ var peerAPI = func() *webrtc.API {
 	return webrtc.NewAPI(webrtc.WithSettingEngine(settings))
 }()
 
+// Everything media-related that belongs to one peer connection
+type peerMedia struct {
+	VoiceTrack  *webrtc.TrackLocalStaticSample // our voice
+	VideoTrack  *webrtc.TrackLocalStaticSample // our screen stream
+	RemoteVoice chan *webrtc.TrackRemote       // their voice, once it starts arriving
+	RemoteVideo chan *webrtc.TrackRemote       // their screen stream, once it starts arriving
+	Closed      chan struct{}                  // closed when the connection is closed or failed
+
+	closeOnce sync.Once
+}
+
+func newPeerMedia() *peerMedia {
+	return &peerMedia{
+		RemoteVoice: make(chan *webrtc.TrackRemote, 1),
+		RemoteVideo: make(chan *webrtc.TrackRemote, 1),
+		Closed:      make(chan struct{}),
+	}
+}
+
+func (m *peerMedia) markClosed() {
+	m.closeOnce.Do(func() { close(m.Closed) })
+}
+
+// Adds our tracks. For the host this goes before the offer is created, for the guest after the host's offer is applied.
+func (m *peerMedia) addTracks(pc *webrtc.PeerConnection) error {
+	var err error
+	if m.VoiceTrack, _, err = AddVoiceTrack(pc); err != nil {
+		return err
+	}
+	m.VideoTrack, err = AddScreenVideoTrack(pc)
+	return err
+}
+
+// When the remote adds a track, hand it to whoever relays that kind of media
+func (m *peerMedia) onTrack(remoteTrack *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
+	switch remoteTrack.ID() {
+	case voiceAudioChannelName:
+		m.RemoteVoice <- remoteTrack
+	case screenVideoTrackID:
+		m.RemoteVideo <- remoteTrack
+	}
+}
+
 // Setting up connections
-// Switch to named return?
-// Or wrap objects together in a struct?
 func generateOffer() (
 	*webrtc.PeerConnection,
 	*webrtc.DataChannel,
 	chan bool, //Signals when dataChannel is open
 	chan webrtc.DataChannelMessage, //Messages are sent to here (should this be an input instead of output?)
-	*webrtc.TrackLocalStaticSample, //Voice audio track
-	*webrtc.RTPSender, //Voice audio sender
-	chan *webrtc.TrackRemote, //Voice audio channel
-	chan *webrtc.RTPReceiver, //Voice audio receiver
+	*peerMedia,
 	error) {
 
 	// create a peer connection
 	pc, err := peerAPI.NewPeerConnection(ICEConfiguration)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
-	logPeerConnectionState(pc, "host")
+	pm := newPeerMedia()
+	logPeerConnectionState(pc, "host", pm)
 
 	keepConnection := false
 	defer func() {
@@ -84,24 +135,13 @@ func generateOffer() (
 	//This will let us add appropriate transcievers after the connection is established
 	dataChannel, err := pc.CreateDataChannel(managementChannelName, nil)
 	if err != nil {
-		_ = pc.Close()
-		return nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
-	voiceTrack, voiceSender, err := AddVoiceTrack(pc)
-
-	remoteAudioChan := make(chan *webrtc.TrackRemote, 1)
-	remoteAudioReceiverChan := make(chan *webrtc.RTPReceiver, 1)
-
-	//When the remote adds their audio track
-	pc.OnTrack(func(remoteTrack *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		if remoteTrack.ID() != voiceAudioChannelName {
-			return
-		}
-
-		remoteAudioChan <- remoteTrack
-		remoteAudioReceiverChan <- receiver
-	})
+	if err := pm.addTracks(pc); err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	pc.OnTrack(pm.onTrack)
 
 	dataChanOpen := make(chan bool, 1)
 	dcMessages := make(chan webrtc.DataChannelMessage, 1)
@@ -118,7 +158,7 @@ func generateOffer() (
 	// create a first offer that does not contain any local candidates
 	offer, err := pc.CreateOffer(nil)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
 	// gatherComplete is a channel that will be closed when
@@ -128,7 +168,7 @@ func generateOffer() (
 	// apply the offer
 	err = pc.SetLocalDescription(offer)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
 	// wait for gathering of local candidates to complete
@@ -143,13 +183,11 @@ func generateOffer() (
 	// Check that it contains at least one candidate
 	// Potentially move this check outside of this function if we need to differentiate it or act differently
 	if !strings.Contains(offer2.SDP, "\na=candidate:") {
-		return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("No SDP candidates found, offer is not usable")
+		return nil, nil, nil, nil, nil, fmt.Errorf("No SDP candidates found, offer is not usable")
 	}
 
 	keepConnection = true
-	return pc, dataChannel, dataChanOpen, dcMessages,
-		voiceTrack, voiceSender, remoteAudioChan, remoteAudioReceiverChan,
-		nil
+	return pc, dataChannel, dataChanOpen, dcMessages, pm, nil
 }
 
 func generateAnswer(offerSDP string) (
@@ -159,18 +197,15 @@ func generateAnswer(offerSDP string) (
 
 	chan bool, //Signals when dataChannel is open
 	chan webrtc.DataChannelMessage, //Messages are sent to here (should this be an input instead of output?)
-	*webrtc.TrackLocalStaticSample, //Voice audio track
-	*webrtc.RTPSender, //Voice audio sender
-	chan *webrtc.TrackRemote, //Voice audio channel
-	chan *webrtc.RTPReceiver, //Voice audio receiver
-
+	*peerMedia,
 	error) {
 
 	pc, err := peerAPI.NewPeerConnection(ICEConfiguration)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
-	logPeerConnectionState(pc, "attendee")
+	pm := newPeerMedia()
+	logPeerConnectionState(pc, "attendee", pm)
 
 	// Close the connection if setup fails
 	// Calling this as a deferred function lets us avoid calling it before every return
@@ -211,36 +246,25 @@ func generateAnswer(offerSDP string) (
 		dcReady <- dc
 	})
 
-	remoteAudioChan := make(chan *webrtc.TrackRemote, 1)
-	remoteAudioReceiverChan := make(chan *webrtc.RTPReceiver, 1)
-
-	//When the remote (host for now) adds their audio track
-	pc.OnTrack(func(remoteTrack *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		if remoteTrack.ID() != voiceAudioChannelName {
-			return
-		}
-
-		remoteAudioChan <- remoteTrack
-		remoteAudioReceiverChan <- receiver
-	})
+	//When the remote (host for now) adds their audio or video track
+	pc.OnTrack(pm.onTrack)
 
 	if err := pc.SetRemoteDescription(remoteOffer); err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
-	voiceTrack, voiceSender, err := AddVoiceTrack(pc)
-	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, err
+	if err := pm.addTracks(pc); err != nil {
+		return nil, nil, nil, nil, nil, err
 	}
 
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
 	gatherComplete := webrtc.GatheringCompletePromise(pc)
 	if err := pc.SetLocalDescription(answer); err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
 	// wait for gathering of candidates to complete
@@ -248,14 +272,12 @@ func generateAnswer(offerSDP string) (
 
 	localAnswer := pc.LocalDescription()
 	if localAnswer == nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("Local answer could not be generated")
+		return nil, nil, nil, nil, nil, fmt.Errorf("Local answer could not be generated")
 	}
 
 	keepConnection = true
 
-	return pc, dcReady, dataChanOpen, dcMessages,
-		voiceTrack, voiceSender, remoteAudioChan, remoteAudioReceiverChan,
-		nil
+	return pc, dcReady, dataChanOpen, dcMessages, pm, nil
 }
 
 func applyAnswer(pc *webrtc.PeerConnection, SDP string) error {
@@ -313,6 +335,40 @@ func AddVoiceTrack(pc *webrtc.PeerConnection) (
 
 	return track, sender, nil
 
+}
+
+// The screen stream track: H.264 at 90 kHz. Frames are written as whole access units (WriteSample) and pion
+// splits them into RTP packets.
+func AddScreenVideoTrack(pc *webrtc.PeerConnection) (*webrtc.TrackLocalStaticSample, error) {
+	track, err := webrtc.NewTrackLocalStaticSample(
+		webrtc.RTPCodecCapability{
+			MimeType:    webrtc.MimeTypeH264,
+			ClockRate:   90000,
+			SDPFmtpLine: screenVideoFmtp,
+		},
+		screenVideoTrackID,
+		screenVideoTrackID+"_stream",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	sender, err := pc.AddTrack(track)
+	if err != nil {
+		return nil, err
+	}
+
+	// Drain RTCP the same way the voice track does, so receiver reports and NACKs don't back up
+	go func() {
+		buf := make([]byte, 1500)
+		for {
+			if _, _, err := sender.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	return track, nil
 }
 
 func relayIncomingAudioToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error {
@@ -509,8 +565,138 @@ func relayAudioOnceConnected(localTrack *webrtc.TrackLocalStaticSample, remoteTr
 	return nil
 }
 
+// Starts every relay between this peer connection and shared memory: voice and screen video, both directions.
+// Doesn't block, the relays run on their own goroutines
+func relayMediaOnceConnected(m *peerMedia, fb frameBuffer) {
+	goAndPrintIfError(func() error { return relayAudioOnceConnected(m.VoiceTrack, m.RemoteVoice, fb) })
+
+	go watchOutgoingVideo(m, fb)
+
+	goAndPrintIfError(func() error {
+		select {
+		case remoteTrack := <-m.RemoteVideo:
+			return relayIncomingVideoToBuffer(remoteTrack, fb)
+		case <-m.Closed:
+			return nil
+		}
+	})
+}
+
+// Polls shared memory for a Video + Outgoing encoding (the frontend registers one the first time you stream) and
+// starts a relay for each new one. Runs until the connection closes
+func watchOutgoingVideo(m *peerMedia, fb frameBuffer) {
+	var relaying []shared_mem_lib.Encoding
+
+	for {
+		if encs, ok := fb.ReadEncodings(10); ok {
+			for _, enc := range encs {
+				if !enc.IsVideo() || !enc.IsOutgoing() || containsEncoding(relaying, enc) {
+					continue
+				}
+				relaying = append(relaying, enc)
+				fb.AlignRingsToConfig()
+				go func() {
+					if err := relayOutgoingVideoToRemote(m, fb, enc); err != nil {
+						fmt.Fprintln(logOut, "Error relaying outgoing video: "+err.Error())
+					}
+				}()
+			}
+		}
+
+		select {
+		case <-m.Closed:
+			return
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+}
+
+func containsEncoding(encs []shared_mem_lib.Encoding, enc shared_mem_lib.Encoding) bool {
+	for _, e := range encs {
+		if shared_mem_lib.EncodingEq(e, enc) {
+			return true
+		}
+	}
+	return false
+}
+
+// Pops one access unit at a time off the encoding's ring and sends it. One at a time because the wrapper pins a
+// whole 500 KB buffer for every frame it is asked for
+func relayOutgoingVideoToRemote(m *peerMedia, fb frameBuffer, enc shared_mem_lib.Encoding) error {
+	for {
+		select {
+		case <-m.Closed:
+			return nil
+		default:
+		}
+
+		ok, frames := fb.BlockingPopFrames(enc, 1, 500)
+		if !ok {
+			// The real pop waits out its timeout, but it fails at once if the ring isn't there yet
+			time.Sleep(5 * time.Millisecond)
+			continue
+		}
+
+		for i := range frames {
+			data := make([]byte, len(frames[i].Bytes))
+			copy(data, frames[i].Bytes)
+			frames[i].Close()
+
+			err := m.VideoTrack.WriteSample(media.Sample{Data: data, Duration: videoFrameDuration})
+			if err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// Rebuilds access units from the remote's RTP packets and pushes each into a Video + Incoming ring, with a
+// delimiter in front (see audBytes). Access units over one shared memory slot are dropped
+func relayIncomingVideoToBuffer(track *webrtc.TrackRemote, fb frameBuffer) error {
+	enc := shared_mem_lib.NewVideoEncoding(videoBitrateKbps, videoBitrateKbps, 720, 1280, 30)
+	enc.SetIncoming()
+
+	if !fb.RequestEncoding(enc) {
+		return fmt.Errorf("Failed to request video encoding")
+	}
+
+	if !fb.AlignRingsToConfig() {
+		return fmt.Errorf("Failed to align rings to config")
+	}
+
+	sb := samplebuilder.New(256, &codecs.H264Packet{}, 90000)
+
+	for {
+		packet, _, err := track.ReadRTP()
+		if err != nil {
+			return fmt.Errorf("Error reading incoming video: %w", err)
+		}
+
+		sb.Push(packet)
+
+		for sample := sb.Pop(); sample != nil; sample = sb.Pop() {
+			frame := make([]byte, 0, len(audBytes)+len(sample.Data))
+			frame = append(frame, audBytes...)
+			frame = append(frame, sample.Data...)
+
+			if len(frame) > maxVideoFrameBytes {
+				fmt.Fprintf(logOut, "Dropped a %d byte video frame, a slot holds %d\n", len(frame), maxVideoFrameBytes)
+				continue
+			}
+
+			gcFrame := shared_mem_lib.NewGCFrameWithData(enc, frame)
+			pushed := fb.PushFrames([]shared_mem_lib.GCFrame{gcFrame})
+			gcFrame.Close()
+			if !pushed {
+				// Ring full: the frontend fell behind. Dropping is fine, the next keyframe catches it up
+				fmt.Fprintln(logOut, "Video ring full, dropped a frame")
+			}
+		}
+	}
+}
+
 // Generated with AI
-func logPeerConnectionState(pc *webrtc.PeerConnection, role string) {
+func logPeerConnectionState(pc *webrtc.PeerConnection, role string, m *peerMedia) {
 	pc.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 		if candidate == nil {
 			fmt.Fprintf(logOut, "[%s] ICE candidate gathering complete\n", role)
@@ -525,6 +711,9 @@ func logPeerConnectionState(pc *webrtc.PeerConnection, role string) {
 
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		fmt.Fprintf(logOut, "[%s] Peer connection state: %s\n", role, state.String())
+		if state == webrtc.PeerConnectionStateClosed || state == webrtc.PeerConnectionStateFailed {
+			m.markClosed()
+		}
 	})
 
 	pc.OnSignalingStateChange(func(state webrtc.SignalingState) {
