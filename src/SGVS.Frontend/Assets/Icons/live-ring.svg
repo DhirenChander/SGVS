@@ -1,0 +1,12 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="50" height="50" viewBox="0 0 50 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Live ring">
+<circle id="Ring" cx="25" cy="25" r="24.25" stroke-width="1.5" stroke="url(#paint0_linear_0_132)"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_132" x1="0" y1="25" x2="50" y2="25" gradientUnits="userSpaceOnUse">
+<stop stop-color="#53C9C9"/>
+<stop offset="0.5" stop-color="#EDB25A"/>
+<stop offset="1" stop-color="#F3DAB2"/>
+</linearGradient>
+</defs>
+</svg>

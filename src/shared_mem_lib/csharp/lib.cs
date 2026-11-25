@@ -196,19 +196,6 @@ public unsafe struct FrameBuffer
     public byte ring_count;
 }
 
-// Compare these against sizeof(...) printed from the C side. They must match exactly.
-public static class LayoutCheck
-{
-    public static void Print()
-    {
-        Console.WriteLine($"Message:     {Unsafe.SizeOf<Message>()}");
-        Console.WriteLine($"Encoding:    {Unsafe.SizeOf<Encoding>()}");
-        Console.WriteLine($"Frame:       {Unsafe.SizeOf<Frame>()}");
-        Console.WriteLine($"RingBuffer:  {Unsafe.SizeOf<RingBuffer>()}");
-        Console.WriteLine($"FrameBuffer: {Unsafe.SizeOf<FrameBuffer>()}");
-    }
-}
-
 /*
 bool new_framebuffer(FrameBuffer *out);
 void free_framebuffer(FrameBuffer *fb);
