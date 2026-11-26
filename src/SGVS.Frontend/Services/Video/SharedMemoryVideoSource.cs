@@ -41,6 +41,7 @@ public sealed class SharedMemoryVideoSource(IFrameBuffer frameBuffer, Encoding e
         var size = frame.raw.size;
         if (size == 0 || size > (nuint)frame.Data.Length) return false;
 
+        //TODO: Keep all frames if multiple exist
         accessUnit = frame.Data.AsMemory(0, (int)size);
         return true;
     }

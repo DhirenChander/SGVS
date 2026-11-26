@@ -77,15 +77,15 @@ func TestAudioTransfer(t *testing.T) {
 	}
 
 	goAndPrintIfError(func() error {
-		return relayAudioOnceConnected(hostMedia.VoiceTrack, hostMedia.RemoteVoice, fbMockHost, &hostMedia.MicMuted)
+		return relayAudioOnceConnected(hostMedia.VoiceTrack, hostMedia.RemoteVoice, fbMockHost)
 	})
 
 	goAndPrintIfError(func() error {
-		return relayAudioOnceConnected(otherMedia.VoiceTrack, otherMedia.RemoteVoice, fbMockOther, &otherMedia.MicMuted)
+		return relayAudioOnceConnected(otherMedia.VoiceTrack, otherMedia.RemoteVoice, fbMockOther)
 	})
 
 	var dummyPayload [63]byte
-	for i := 0; i < len(dummyPayload); i++ {
+	for i := range len(dummyPayload) {
 		dummyPayload[i] = byte(42)
 	}
 
@@ -109,7 +109,7 @@ func TestAudioTransfer(t *testing.T) {
 	}
 
 	//verify that other side recieves them
-	<-time.After(1 * time.Second)
+	<-time.After(500 * time.Millisecond)
 
 	fmt.Printf("Total received frames: %d\n", receiver.pushed())
 
@@ -121,78 +121,6 @@ func TestAudioTransfer(t *testing.T) {
 
 	if receiver.pushed() < numFrameSets*2*8/10 {
 		t.Fatalf("expected at least %d frames, got %d", numFrameSets*2*8/10, receiver.pushed())
-	}
-}
-
-// The mic mute button: while muted, mic frames are still taken out of shared memory (so the processing module never
-// backs up and no stale audio goes out on unmute) but none reach the other side. Unmuting sends them again
-func TestMutedMicIsNotSent(t *testing.T) {
-	enc := shared_mem_lib.NewAudioEncoding(true)
-	enc.SetOutgoing()
-	sender := &mockFrameBuffer{
-		framesToPop: make(chan []shared_mem_lib.GCFrame, 100),
-		encodings:   []shared_mem_lib.Encoding{enc},
-		messages:    make(chan shared_mem_lib.Message, 4),
-	}
-	receiver := &mockFrameBuffer{framesToPop: make(chan []shared_mem_lib.GCFrame, 100)}
-
-	hostPc, _, _, _, hostMedia, err := generateOffer()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer hostPc.Close()
-	otherPc, _, _, _, otherMedia, err := generateAnswer(getSDPStr(hostPc))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer otherPc.Close()
-	if err = applyAnswer(hostPc, getSDPStr(otherPc)); err != nil {
-		t.Fatal(err)
-	}
-
-	relayMediaOnceConnected(hostMedia, sender)
-	relayMediaOnceConnected(otherMedia, receiver)
-	waitConnected(t, hostPc, otherPc)
-
-	setMic := func(op shared_mem_lib.Operation, muted bool) {
-		msg, err := shared_mem_lib.NewMessage(shared_mem_lib.Application, shared_mem_lib.Network, op)
-		if err != nil {
-			t.Fatal(err)
-		}
-		sender.messages <- msg
-		deadline := time.Now().Add(2 * time.Second)
-		for hostMedia.MicMuted.Load() != muted {
-			if time.Now().After(deadline) {
-				t.Fatalf("mic muted is still %v", !muted)
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
-	sendFrames := func(n int) {
-		payload := bytes.Repeat([]byte{42}, 63)
-		for range n {
-			frame := shared_mem_lib.NewGCFrame(enc)
-			frame.Bytes = payload
-			sender.AppendFrames([]shared_mem_lib.GCFrame{frame})
-			time.Sleep(20 * time.Millisecond)
-		}
-		time.Sleep(time.Second)
-	}
-
-	setMic(shared_mem_lib.MicMuted, true)
-	sendFrames(10)
-	if sender.popped() != 10 {
-		t.Fatalf("muted mic frames should still be taken from shared memory, popped %d of 10", sender.popped())
-	}
-	if receiver.pushed() != 0 {
-		t.Fatalf("muted mic reached the other side: %d frames", receiver.pushed())
-	}
-
-	// the receiver's jitter buffer keeps the last few packets back, so not all 20 come out
-	setMic(shared_mem_lib.MicUnmuted, false)
-	sendFrames(20)
-	if receiver.pushed() < 12 {
-		t.Fatalf("unmuted mic should reach the other side, got %d of 20 frames", receiver.pushed())
 	}
 }
 
@@ -240,7 +168,7 @@ func TestVideoTransfer(t *testing.T) {
 	waitConnected(t, hostPc, otherPc)
 
 	const sent = 10
-	for i := 0; i < sent; i++ {
+	for i := range sent {
 		// no zero bytes in the fill, so it can't look like a start code
 		frame := shared_mem_lib.NewGCFrameWithData(videoEnc, fakeAccessUnit(byte(i+10)))
 		fbMockHost.AppendVideo([]shared_mem_lib.GCFrame{frame})
@@ -283,14 +211,14 @@ func bytesToHexStr(bytes []byte) string {
 	return hex.EncodeToString(bytes)
 }
 
-func (mfb *mockFrameBuffer) PushFrames(frames []shared_mem_lib.GCFrame) bool {
+func (mfb *mockFrameBuffer) PushFrames(fs []shared_mem_lib.GCFrame) bool {
 	mfb.mu.Lock()
 	defer mfb.mu.Unlock()
-	mfb.pushedFrames = append(mfb.pushedFrames, frames...)
-	for _, f := range frames {
+	mfb.pushedFrames = append(mfb.pushedFrames, fs...)
+	for _, f := range fs {
 		mfb.pushedBytes = append(mfb.pushedBytes, bytes.Clone(f.Bytes))
 	}
-	mfb.totalPushed += len(frames)
+	mfb.totalPushed += len(fs)
 
 	return true
 }
@@ -308,8 +236,8 @@ func (mfb *mockFrameBuffer) PushMessage(msg *shared_mem_lib.Message) bool {
 }
 
 // pops what the test put in messages. with no messages channel nothing is ever waiting
-func (mfb *mockFrameBuffer) BlockingPopMessage(src, dst shared_mem_lib.Module, maxTimeout uint32) (shared_mem_lib.Message, bool) {
-	timeout := time.Duration(min(maxTimeout, 50)) * time.Millisecond
+func (mfb *mockFrameBuffer) BlockingPopMessage(src, dst shared_mem_lib.Module, max_timeout uint32) (shared_mem_lib.Message, bool) {
+	timeout := time.Duration(min(max_timeout, 50)) * time.Millisecond
 	if mfb.messages == nil {
 		time.Sleep(timeout)
 		return shared_mem_lib.Message{}, false
@@ -322,16 +250,10 @@ func (mfb *mockFrameBuffer) BlockingPopMessage(src, dst shared_mem_lib.Module, m
 	}
 }
 
-func (mfb *mockFrameBuffer) popped() int {
-	mfb.mu.Lock()
-	defer mfb.mu.Unlock()
-	return mfb.totalPopped
-}
-
 func (mfb *mockFrameBuffer) BlockingPopFrames(
 	enc shared_mem_lib.Encoding,
-	_ uint32,
-	timeout uint32,
+	maxFrames uint32,
+	maxTimeout uint32,
 ) (bool, []shared_mem_lib.GCFrame) {
 	if enc.IsIncoming() {
 		return false, []shared_mem_lib.GCFrame{}
@@ -341,7 +263,7 @@ func (mfb *mockFrameBuffer) BlockingPopFrames(
 		select {
 		case frames := <-mfb.videoToPop:
 			return true, frames
-		case <-time.After(time.Duration(timeout) * time.Millisecond):
+		case <-time.After(time.Duration(maxTimeout) * time.Millisecond):
 			return false, nil
 		}
 	}
@@ -364,67 +286,3 @@ func (mfb *mockFrameBuffer) AppendFrames(frames []shared_mem_lib.GCFrame) {
 func (fb *mockFrameBuffer) ReadEncodings(maxLen uint8) ([]shared_mem_lib.Encoding, bool) {
 	return fb.encodings, true
 }
-
-// func testCallAndResponse(host bool, fb *shared_mem_lib.FrameBuffer) *webrtc.PeerConnection {
-// 	if host /* We are the host */ {
-
-// 		peerConnection, dataChan, dataChanOpen, messages, err := setupPcAsHost(fb)
-
-// 		if err != nil {
-// 			fmt.Printf("Error setting up connection: %s\n", err)
-// 			return nil
-// 		}
-
-// 		//Wait for data channel to open
-// 		fmt.Println("Waiting for datachannel to open")
-// 		<-dataChanOpen
-
-// 		fmt.Println("Sending message from host")
-// 		dataChan.SendText("Hello from host :)")
-
-// 		//Wait for response
-// 		fmt.Println("Waiting for response")
-// 		response := <-messages
-
-// 		if !response.IsString {
-// 			fmt.Printf("Message was not a string")
-// 			return nil
-// 		}
-
-// 		fmt.Printf("Recieved Message: %s\n", string(response.Data))
-
-// 		return peerConnection
-
-// 	} else /* We are not the host */ {
-
-// 		peerConnection, dcReady, dataChanOpen, messages, err := setupPcAsAttendee(fb)
-
-// 		if err != nil {
-// 			fmt.Printf("Error setting up connection: %s\n", err)
-// 			return nil
-// 		}
-
-// 		fmt.Println("Waiting for datachannel to be created")
-// 		dataChan := <-dcReady
-
-// 		fmt.Println("Waiting for datachannel to open")
-// 		<-dataChanOpen
-
-// 		fmt.Println("Waiting for message from host")
-// 		firstMessage := <-messages
-
-// 		if !firstMessage.IsString {
-// 			fmt.Printf("Message was not a string")
-// 			return nil
-// 		}
-
-// 		fmt.Printf("Recieved Message: %s\n", string(firstMessage.Data))
-
-// 		fmt.Println("Sending reponse")
-
-// 		dataChan.SendText("Hello from the other side")
-
-// 		return peerConnection
-// 	}
-
-// }
