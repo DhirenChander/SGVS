@@ -155,7 +155,7 @@ Start stream plays a dummy clip (a Rocket League tournament highlight) as a live
 Going live later:
 - Receiving a live stream needs no change.
 - Sending: if the frontend encodes the capture, replace `FfmpegStreamPublisher.CreateDummy` in
-  `MainViewModel.CreateMeeting` with a publisher that raises real access units, and nothing else changes.
+  `App.CreateMeeting` with a publisher that raises real access units, and nothing else changes.
 - If `src/processing` does the encoding (more likely), processing pushes straight into the Video + Outgoing ring and Go is
   that ring's only reader, so the frontend gets no access units for its own preview. The preview then needs its own
   source, such as a second ring or decoding locally in processing.
@@ -168,7 +168,7 @@ Going live later:
 - `SGVS.Frontend.csproj` has a `BuildNetworking` target that runs `go build` into `bin/<config>/net10.0/backend/`
   after every build. Without Go on PATH the build still succeeds with a warning, and hosting or joining then
   reports that the networking module is missing. `-p:SkipNetworkingBuild=true` skips it.
-- Display names aren't decided yet, so `MainViewModel` uses the signed-in OS username.
+- Display names aren't decided yet, so `App.CreateMeeting` uses the signed-in OS username.
 
 ## Running it
 
@@ -177,6 +177,11 @@ dotnet run --project src/SGVS.Frontend
 ```
 
 Start two copies to try a call on one machine. `SGVS_FAKE=1` runs the pretend call instead.
+
+To run everything together (frontend, networking and processing), use `powershell -File scripts\run-app.ps1`.
+It builds all three and starts each in its own console window ("SGVS frontend", "SGVS networking",
+"SGVS processing"). Hosting prints the offer in the networking window and asks for the answer SDP there. Closing
+the app stops the other two and closes all three windows. Add `-Instance B` to give a second copy on the same PC its own shared memory.
 
 ## Tests
 
