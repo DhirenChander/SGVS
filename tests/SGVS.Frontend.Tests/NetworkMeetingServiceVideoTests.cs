@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Threading.Channels;
 using Avalonia.Headless.XUnit;
 using SGVS.Frontend.Services;
@@ -32,12 +33,6 @@ public class NetworkMeetingServiceVideoTests
         new("Hazel", () => new FakeNetworkingProcess(), post ?? (action => action()), _fb,
             video: new VideoServices(publisherFactory ?? NewPublisher, decoderFactory ?? NewDecoder, stallTimeout));
 
-    private static void WaitUntil(Func<bool> condition)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(2);
-        while (!condition() && DateTime.UtcNow < deadline) Thread.Sleep(10);
-    }
-
     [Fact]
     public void Start_stream_starts_the_publisher_and_marks_you_streaming()
     {
@@ -62,7 +57,7 @@ public class NetworkMeetingServiceVideoTests
         Assert.Equal(SharedMemLibrary.EncodingType.Video, enc.type);
         Assert.Equal(SharedMemLibrary.EncodingDir.Outgoing, enc.dir);
         Assert.Equal([0, 0, 0, 1, 9, 0xF0, 7], data);
-        WaitUntil(() => _decoders.Count == 1 && _decoders[0].Received.Length == 1);
+        Wait.Until(() => _decoders.Count == 1 && _decoders[0].Received.Length == 1);
         Assert.Equal([0, 0, 0, 1, 9, 0xF0, 7], Assert.Single(_decoders[0].Received));
     }
 
@@ -74,7 +69,7 @@ public class NetworkMeetingServiceVideoTests
         service.StartStream(ShareSource.Screen);
 
         _decoders[0].Raise(new byte[VideoFormat.FrameBytes]);
-        WaitUntil(() => _decoders[0].Disposed);
+        Wait.Until(() => _decoders[0].Disposed);
 
         Assert.True(_decoders[0].Disposed);
         Assert.NotNull(service.Self.StreamPreview);
@@ -122,7 +117,7 @@ public class NetworkMeetingServiceVideoTests
         while (queued.Count > 0) queued.Dequeue()(); // the old stream's freeze runs now
 
         _publishers[1].Emit([0, 0, 0, 1, 9, 0xF0, 7]);
-        WaitUntil(() => _decoders[1].Received.Length == 1);
+        Wait.Until(() => _decoders[1].Received.Length == 1);
         Assert.False(_decoders[1].Disposed);
         Assert.Single(_decoders[1].Received);
     }
@@ -190,7 +185,7 @@ public class NetworkMeetingServiceVideoTests
         service.StartStream(ShareSource.Screen);
         _publishers[0].Emit([0, 0, 0, 1, 9, 0xF0, 7]);
 
-        WaitUntil(() => !service.Self.IsStreamer);
+        Wait.Until(() => !service.Self.IsStreamer);
 
         Assert.False(service.Self.IsStreamer);
         Assert.Contains("stopped sending video", service.Error);
@@ -226,7 +221,7 @@ public class NetworkMeetingServiceVideoTests
         Assert.True(_decoders[0].Disposed);
         Assert.Null(service.Error);
         channel.Writer.TryWrite([1, 2, 3]);
-        WaitUntil(() => _decoders[1].Received.Length == 1);
+        Wait.Until(() => _decoders[1].Received.Length == 1);
         Assert.Equal([1, 2, 3], Assert.Single(_decoders[1].Received));
     }
 
@@ -272,7 +267,7 @@ public class NetworkMeetingServiceVideoTests
         channel.Writer.TryWrite([1, 2, 3]);
 
         Assert.Equal(2, service.Members.Count);
-        WaitUntil(() => _decoders.Count == 1 && _decoders[0].Received.Length == 1);
+        Wait.Until(() => _decoders.Count == 1 && _decoders[0].Received.Length == 1);
         Assert.Equal([1, 2, 3], Assert.Single(_decoders[0].Received));
     }
 
@@ -281,7 +276,7 @@ public class NetworkMeetingServiceVideoTests
     {
         var service = Create(() =>
         {
-            var publisher = new FakeStreamPublisher { StartError = new System.ComponentModel.Win32Exception("not a valid application") };
+            var publisher = new FakeStreamPublisher { StartError = new Win32Exception("not a valid application") };
             _publishers.Add(publisher);
             return publisher;
         });
@@ -297,7 +292,7 @@ public class NetworkMeetingServiceVideoTests
     [Fact]
     public void Start_stream_reports_a_decoder_that_cannot_start()
     {
-        var service = Create(decoderFactory: () => throw new System.ComponentModel.Win32Exception("not a valid application"));
+        var service = Create(decoderFactory: () => throw new Win32Exception("not a valid application"));
 
         service.StartStream(ShareSource.Screen);
 
@@ -309,7 +304,7 @@ public class NetworkMeetingServiceVideoTests
     [Fact]
     public void Remote_video_with_a_decoder_that_cannot_start_reports_an_error()
     {
-        var service = Create(decoderFactory: () => throw new System.ComponentModel.Win32Exception("not a valid application"));
+        var service = Create(decoderFactory: () => throw new Win32Exception("not a valid application"));
 
         service.AttachRemoteVideo(new ChannelVideoSource(Channel.CreateUnbounded<byte[]>().Reader));
 

@@ -1,10 +1,15 @@
 using NAudio.Wave;
-using SGVS.Frontend.Services.Audio;
 
-namespace SGVS.Frontend.ViewModels;
+namespace SGVS.Frontend.Services.Audio;
 
 public sealed class PcmPlayer : IPcmSink, IDisposable
 {
+    // IPcmSink chunks are 16-bit
+    private const int BitsPerSample = 16;
+
+    // how much decoded audio may wait to play. past this, new samples are dropped (DiscardOnBufferOverflow)
+    private static readonly TimeSpan BufferLength = TimeSpan.FromMilliseconds(250);
+
     private readonly BufferedWaveProvider _buffer;
     private readonly WaveOut _output;
     private readonly object _disposeLock = new();
@@ -17,11 +22,11 @@ public sealed class PcmPlayer : IPcmSink, IDisposable
                 "PCM playback requires Windows.");
 
         var format = new WaveFormat(
-            rate: 48000,
-            bits: 16,
-            channels: 2);
+            rate: OpusPacketDecoder.SampleRate,
+            bits: BitsPerSample,
+            channels: OpusPacketDecoder.Channels);
 
-        _buffer = new BufferedWaveProvider(format, TimeSpan.FromMilliseconds(250));
+        _buffer = new BufferedWaveProvider(format, BufferLength);
         _buffer.DiscardOnBufferOverflow = true;
 
         _output = new WaveOut();

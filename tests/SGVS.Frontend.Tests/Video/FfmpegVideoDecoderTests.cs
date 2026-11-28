@@ -1,22 +1,16 @@
 using SGVS.Frontend.Services.Video;
+using SGVS.Frontend.Tests.Support;
 using Xunit;
 
 namespace SGVS.Frontend.Tests.Video;
 
 public class FfmpegVideoDecoderTests
 {
-    private static string RequireFfmpeg()
-    {
-        var path = Ffmpeg.Find();
-        Assert.SkipWhen(path is null, "ffmpeg is not installed");
-        return path!;
-    }
-
     // two seconds of test pattern encoded the way the app encodes: 60 access units, keyframes at 0 and 30
     private static readonly Lazy<List<byte[]>> TwoSeconds = new(() =>
     {
         // skips (rather than fails) every test that needs the clip when ffmpeg is not installed
-        using var publisher = new FfmpegStreamPublisher(RequireFfmpeg(),
+        using var publisher = new FfmpegStreamPublisher(TestFfmpeg.Require(),
             ["-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30", "-t", "2"]);
         var units = new List<byte[]>();
         using var ended = new ManualResetEventSlim();
@@ -46,7 +40,7 @@ public class FfmpegVideoDecoderTests
     {
         var units = TwoSeconds.Value;
         var frames = new FrameCounter();
-        var decoder = new FfmpegVideoDecoder(RequireFfmpeg());
+        using var decoder = new FfmpegVideoDecoder(TestFfmpeg.Require());
         frames.Attach(decoder);
 
         foreach (var au in units) decoder.Decode(au);
@@ -61,7 +55,7 @@ public class FfmpegVideoDecoderTests
     {
         var units = TwoSeconds.Value;
         var frames = new FrameCounter();
-        var decoder = new FfmpegVideoDecoder(RequireFfmpeg());
+        using var decoder = new FfmpegVideoDecoder(TestFfmpeg.Require());
         frames.Attach(decoder);
 
         foreach (var au in units.Skip(5)) decoder.Decode(au);
@@ -74,20 +68,20 @@ public class FfmpegVideoDecoderTests
     [Fact]
     public void A_decoder_whose_ffmpeg_dies_raises_Failed()
     {
-        var decoder = new FfmpegVideoDecoder(RequireFfmpeg());
+        using var decoder = new FfmpegVideoDecoder(TestFfmpeg.Require());
         using var failed = new ManualResetEventSlim();
         decoder.Failed += failed.Set;
 
         decoder.KillForTest();
 
-        Assert.True(failed.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(failed.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
         decoder.Dispose();
     }
 
     [Fact]
     public void Disposing_a_decoder_does_not_raise_Failed()
     {
-        var decoder = new FfmpegVideoDecoder(RequireFfmpeg());
+        using var decoder = new FfmpegVideoDecoder(TestFfmpeg.Require());
         var failures = 0;
         decoder.Failed += () => Interlocked.Increment(ref failures);
 
@@ -100,7 +94,7 @@ public class FfmpegVideoDecoderTests
     public void Decode_after_process_exit_does_not_throw()
     {
         var units = TwoSeconds.Value;
-        var decoder = new FfmpegVideoDecoder(RequireFfmpeg());
+        using var decoder = new FfmpegVideoDecoder(TestFfmpeg.Require());
         decoder.KillForTest();
 
         var error = Record.Exception(() =>
@@ -115,7 +109,7 @@ public class FfmpegVideoDecoderTests
     [Fact]
     public void The_dummy_clip_plays_through_the_encoder_and_decoder()
     {
-        RequireFfmpeg();
+        TestFfmpeg.Require();
         Assert.SkipUnless(File.Exists(Path.Combine(AppContext.BaseDirectory, "StreamVideo", "rocket-league.mp4")),
             "the dummy video has not been downloaded (scripts/get-dummy-video.ps1)");
         using var publisher = FfmpegStreamPublisher.CreateDummy();
@@ -125,8 +119,7 @@ public class FfmpegVideoDecoderTests
         publisher.AccessUnitEncoded += au => decoder.Decode(au);
 
         publisher.Start();
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (frames.Count < 45 && DateTime.UtcNow < deadline) Thread.Sleep(20);
+        Wait.Until(() => frames.Count >= 45, TimeSpan.FromSeconds(10));
 
         Assert.True(frames.Count >= 45, $"only {frames.Count} frames came out of the dummy clip");
         Assert.Equal(0, frames.WrongSize);
@@ -137,7 +130,7 @@ public class FfmpegVideoDecoderTests
     {
         var units = TwoSeconds.Value;
         var frames = new FrameCounter();
-        using var decoder = new FfmpegVideoDecoder(RequireFfmpeg());
+        using var decoder = new FfmpegVideoDecoder(TestFfmpeg.Require());
         frames.Attach(decoder);
 
         foreach (var au in units.Take(30))
@@ -147,8 +140,7 @@ public class FfmpegVideoDecoderTests
         }
 
         // a decoder that only flushes on close would have produced nothing yet
-        var deadline = DateTime.UtcNow.AddSeconds(3);
-        while (frames.Count < 25 && DateTime.UtcNow < deadline) Thread.Sleep(20);
+        Wait.Until(() => frames.Count >= 25, TimeSpan.FromSeconds(3));
         Assert.True(frames.Count >= 25, $"only {frames.Count} frames while the input was open");
     }
 }

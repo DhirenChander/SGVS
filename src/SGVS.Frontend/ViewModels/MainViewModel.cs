@@ -1,39 +1,21 @@
-using System.Diagnostics;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SGVS.Frontend.Services;
-using SGVS.Frontend.Services.Networking;
 using SGVS.Frontend.Services.Video;
-using SharedMemLibrary;
 
 namespace SGVS.Frontend.ViewModels;
 
 // the shell. MainWindow shows whatever page this points at, the ViewLocator picks the view
 public partial class MainViewModel : ViewModelBase
 {
-    private readonly Func<IFrameBuffer?, IMeetingService> _createMeeting;
+    private readonly Func<IMeetingService> _createMeeting;
     private IMeetingService? _meeting;
 
-    private readonly IFrameBuffer? _sharedMemory;
-
-    // the real app. SGVS_FAKE=1 swaps in the pretend call so the UI can be used without the networking module
-    public MainViewModel(IFrameBuffer sharedMemory) : this(CreateMeeting, sharedMemory)
-    {
-
-    }
-
-    // tests and the previewer: no native shared memory is opened
-    public MainViewModel(Func<IMeetingService> createMeeting) : this(_ => createMeeting(), null)
-    {
-    }
-
-    // createMeeting makes a fresh call for each trip through Start -> Meeting. pages navigate by
-    // handing the next page to the callback
-    public MainViewModel(Func<IFrameBuffer?, IMeetingService> createMeeting, IFrameBuffer? sharedMemory)
+    // createMeeting makes a fresh call for each trip through Start -> Meeting (App.CreateMeeting in the app,
+    // fakes in tests and the previewer). pages navigate by handing the next page to the callback
+    public MainViewModel(Func<IMeetingService> createMeeting)
     {
         _createMeeting = createMeeting;
-        _sharedMemory = sharedMemory;
         CurrentView = NewStartPage();
     }
 
@@ -72,7 +54,7 @@ public partial class MainViewModel : ViewModelBase
 
     private StartViewModel NewStartPage()
     {
-        var meeting = _createMeeting(_sharedMemory);
+        var meeting = _createMeeting();
         _meeting = meeting;
         return new StartViewModel(meeting, () => GoToMeetingPage(meeting), () => GoToStartPage());
     }
@@ -80,35 +62,5 @@ public partial class MainViewModel : ViewModelBase
     private void GoToMeetingPage(IMeetingService meeting)
     {
         CurrentView = new MeetingViewModel(meeting, page => CurrentView = page, () => GoToStartPage());
-    }
-
-    private static IMeetingService CreateMeeting(IFrameBuffer? sharedMemory)
-    {
-        if (Environment.GetEnvironmentVariable("SGVS_FAKE") == "1") return new FakeMeetingService();
-        if (sharedMemory is null) throw new InvalidOperationException("shared memory is not open");
-
-        // display names aren't decided yet, so for now it's whoever is signed in to the PC
-        return new NetworkMeetingService(Environment.UserName, StartNetworking,
-            action => Dispatcher.UIThread.Post(action), sharedMemory,
-            video: new VideoServices(
-                FfmpegStreamPublisher.CreateDummy,
-                () => new FfmpegVideoDecoder(Ffmpeg.Find() ?? throw new InvalidOperationException(Ffmpeg.NotFoundMessage))));
-    }
-
-    private static INetworkingProcess StartNetworking()
-    {
-        try
-        {
-            var path = NetworkingProcess.FindExecutable()
-                       ?? throw new FileNotFoundException("The networking module (backend/sgvs-networking) was not found next to the app.");
-
-            Trace.WriteLine("[networking] starting " + path);
-            return new NetworkingProcess(path);
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine(e);
-            throw;
-        }
     }
 }

@@ -53,6 +53,20 @@ public class WatchStreamTests
         Assert.Equal(1, wentBack);
     }
 
+    // pressing Stop watching leaves for good: their stream ending later must not navigate from whatever page you are on
+    [AvaloniaFact]
+    public void Stopping_watching_by_hand_unhooks_the_page_from_the_streamer()
+    {
+        var member = new Participant { Name = "Pat", IsStreamer = true };
+        var wentBack = 0;
+        var watch = new WatchViewModel(member, new ScriptedMeetingService(), () => wentBack++, () => { });
+
+        watch.Overlay.OpenStopWatchingCommand.Execute(null);
+        member.IsStreamer = false;
+
+        Assert.Equal(1, wentBack);
+    }
+
     [AvaloniaFact]
     public void Your_own_tile_shows_a_streaming_badge_and_no_watch_button()
     {
@@ -68,7 +82,6 @@ public class WatchStreamTests
             .Where(b => b.IsEffectivelyVisible && AutomationProperties.GetName(b) == "Watch Hazel");
 
         Assert.Empty(watchButtons);
-        Assert.Single(window.GetVisualDescendants().OfType<TextBlock>()
-            .Where(t => t.IsEffectivelyVisible && t.Text == "Streaming"));
+        Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), t => t.IsEffectivelyVisible && t.Text == "Streaming");
     }
 }

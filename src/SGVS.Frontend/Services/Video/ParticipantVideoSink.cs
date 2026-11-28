@@ -16,6 +16,10 @@ namespace SGVS.Frontend.Services.Video;
 public sealed class ParticipantVideoSink : IVideoFrameSink
 {
     private static readonly PixelSize Size = new(VideoFormat.Width, VideoFormat.Height);
+    private static readonly Vector Dpi = new(96, 96);
+
+    // how often a remote stream is checked for going quiet
+    private static readonly TimeSpan IdleCheckPeriod = TimeSpan.FromMilliseconds(500);
 
     private readonly Participant _participant;
     private readonly Action<Action> _post;
@@ -53,7 +57,7 @@ public sealed class ParticipantVideoSink : IVideoFrameSink
             // the idle clock starts now, not at the first frame: a sink that replaced one whose decoder died may
             // never get a frame, and the old picture must not stay up forever
             _lastFrameAt = _clock();
-            _idleTimer = new Timer(_ => CheckIdle(), null, TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(500));
+            _idleTimer = new Timer(_ => CheckIdle(), null, IdleCheckPeriod, IdleCheckPeriod);
         }
     }
 
@@ -108,7 +112,7 @@ public sealed class ParticipantVideoSink : IVideoFrameSink
             if (_disposed || !_hasPending) return;
         }
 
-        var bitmap = _bitmaps[_next] ??= new WriteableBitmap(Size, new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
+        var bitmap = _bitmaps[_next] ??= new WriteableBitmap(Size, Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
         _next = 1 - _next;
 
         using (var locked = bitmap.Lock())

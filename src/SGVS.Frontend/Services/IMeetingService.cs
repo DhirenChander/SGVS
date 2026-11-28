@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using SGVS.Frontend.Models;
+using SGVS.Frontend.Services.Video;
 
 namespace SGVS.Frontend.Services;
 
@@ -70,7 +71,7 @@ public interface IMeetingService : INotifyPropertyChanged, IDisposable
     void OnParticipantJoined(string name);
 
     // someone else's encoded stream started arriving. shows it on their tile and the Watch page. UI thread
-    void AttachRemoteVideo(SGVS.Frontend.Services.Video.IEncodedVideoSource source);
+    void AttachRemoteVideo(IEncodedVideoSource source);
 
     // Task LeaveAsync();
 }

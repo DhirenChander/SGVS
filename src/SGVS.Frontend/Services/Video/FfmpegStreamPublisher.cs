@@ -20,6 +20,9 @@ public sealed class FfmpegStreamPublisher(string ffmpegPath, IReadOnlyList<strin
         "-f", "h264", "pipe:1",
     ];
 
+    private const int ReadChunkBytes = 64 * 1024;
+    private static readonly TimeSpan ExitWait = TimeSpan.FromSeconds(2);
+
     private readonly object _lock = new();
     private Process? _process;
     private Thread? _reader;
@@ -33,7 +36,7 @@ public sealed class FfmpegStreamPublisher(string ffmpegPath, IReadOnlyList<strin
     // message fit for the screen when ffmpeg or the clip is missing
     public static IStreamPublisher CreateDummy()
     {
-        var ffmpeg = Ffmpeg.Find() ?? throw new InvalidOperationException(Ffmpeg.NotFoundMessage);
+        var ffmpeg = Ffmpeg.Require();
 
         var video = Path.Combine(AppContext.BaseDirectory, "StreamVideo", "rocket-league.mp4");
         if (!File.Exists(video))
@@ -77,7 +80,7 @@ public sealed class FfmpegStreamPublisher(string ffmpegPath, IReadOnlyList<strin
     private void ReadLoop(Process process, Stream stdout)
     {
         var splitter = new AnnexBAccessUnitSplitter();
-        var chunk = new byte[64 * 1024];
+        var chunk = new byte[ReadChunkBytes];
         try
         {
             int read;
@@ -107,7 +110,7 @@ public sealed class FfmpegStreamPublisher(string ffmpegPath, IReadOnlyList<strin
     {
         try
         {
-            if (process.WaitForExit(TimeSpan.FromSeconds(2))) process.WaitForExit();
+            if (process.WaitForExit(ExitWait)) process.WaitForExit();
         }
         catch (InvalidOperationException)
         {
@@ -131,7 +134,7 @@ public sealed class FfmpegStreamPublisher(string ffmpegPath, IReadOnlyList<strin
         if (process is null) return;
         try { process.Kill(entireProcessTree: true); }
         catch (InvalidOperationException) { } // already exited
-        if (reader is not null && reader != Thread.CurrentThread) reader.Join(TimeSpan.FromSeconds(2));
+        if (reader is not null && reader != Thread.CurrentThread) reader.Join(ExitWait);
         process.Dispose();
     }
 

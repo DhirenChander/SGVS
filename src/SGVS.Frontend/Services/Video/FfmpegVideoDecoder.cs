@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 
 namespace SGVS.Frontend.Services.Video;
@@ -16,6 +17,10 @@ public sealed class FfmpegVideoDecoder : IVideoDecoder
         "-vf", $"scale={VideoFormat.Width}:{VideoFormat.Height}",
         "-pix_fmt", "bgra", "-f", "rawvideo", "pipe:1",
     ];
+
+    // how long Dispose waits for a stuck Decode before killing ffmpeg
+    private static readonly TimeSpan WriteLockWait = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan ExitWait = TimeSpan.FromSeconds(2);
 
     private readonly Process _process;
     private readonly Stream _stdin;
@@ -83,7 +88,7 @@ public sealed class FfmpegVideoDecoder : IVideoDecoder
     {
         try { _process.Kill(entireProcessTree: true); }
         catch (InvalidOperationException) { }
-        _process.WaitForExit(2000);
+        _process.WaitForExit(ExitWait);
     }
 
     // a Decode still writing after a short wait is stuck on an ffmpeg that stopped reading its input. waiting for it
@@ -92,7 +97,7 @@ public sealed class FfmpegVideoDecoder : IVideoDecoder
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
 
-        var gotLock = Monitor.TryEnter(_writeLock, TimeSpan.FromMilliseconds(500));
+        var gotLock = Monitor.TryEnter(_writeLock, WriteLockWait);
         if (!gotLock) Kill();
         try
         {
@@ -104,10 +109,10 @@ public sealed class FfmpegVideoDecoder : IVideoDecoder
             if (gotLock) Monitor.Exit(_writeLock);
         }
 
-        if (_reader != Thread.CurrentThread && !_reader.Join(TimeSpan.FromSeconds(2)))
+        if (_reader != Thread.CurrentThread && !_reader.Join(ExitWait))
         {
             Kill();
-            _reader.Join(TimeSpan.FromSeconds(2));
+            _reader.Join(ExitWait);
         }
 
         _process.Dispose();
@@ -116,6 +121,6 @@ public sealed class FfmpegVideoDecoder : IVideoDecoder
     private void Kill()
     {
         try { _process.Kill(entireProcessTree: true); }
-        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { } // already exited
+        catch (Exception e) when (e is InvalidOperationException or Win32Exception) { } // already exited
     }
 }

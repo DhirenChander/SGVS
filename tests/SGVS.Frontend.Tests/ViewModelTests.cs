@@ -180,7 +180,7 @@ public class ViewModelTests
         var meeting = new MeetingViewModel(_service, _ => { }, () => { });
 
         meeting.Overlay.ConfirmDialogCommand.Execute(null); // dialog closed: no-op
-        Assert.Empty(_service.Calls.Where(c => c.StartsWith("start")));
+        Assert.DoesNotContain(_service.Calls, c => c.StartsWith("start"));
 
         meeting.Overlay.OpenStartStreamCommand.Execute(null);
         meeting.Overlay.ConfirmDialogCommand.Execute(null);

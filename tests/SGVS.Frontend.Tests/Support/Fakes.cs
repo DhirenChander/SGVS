@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using SGVS.Frontend.Models;
 using SGVS.Frontend.Services;
 using SGVS.Frontend.Services.Networking;
+using SGVS.Frontend.Services.Video;
 
 namespace SGVS.Frontend.Tests.Support;
 
@@ -11,12 +12,10 @@ public sealed class FakeNetworkingProcess : INetworkingProcess
 {
     public List<NetworkingCommand> Sent { get; } = [];
 
-    public event Action<NetworkingEvent>? EventReceived;
-    public event Action? Exited;
+    public event Action<NetworkingEvent>? EventReceived { add { } remove { } }
+    public event Action? Exited { add { } remove { } }
 
     public void Send(NetworkingCommand command) => Sent.Add(command);
-
-    public void Crash() => Exited?.Invoke();
 
     public void Dispose()
     {
@@ -99,7 +98,7 @@ public sealed class ScriptedMeetingService : ObservableObject, IMeetingService
 
     public void OnParticipantJoined(string name) => AddPeer(name);
 
-    public void AttachRemoteVideo(SGVS.Frontend.Services.Video.IEncodedVideoSource source) => Calls.Add("remote-video");
+    public void AttachRemoteVideo(IEncodedVideoSource source) => Calls.Add("remote-video");
 
     public bool Disposed { get; private set; }
 

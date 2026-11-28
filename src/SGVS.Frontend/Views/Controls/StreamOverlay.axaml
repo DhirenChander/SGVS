@@ -50,7 +50,7 @@
                 <!-- mic: checked = muted. figma's bar doesn't have this at all (viewer mic
                      control isn't part of this screen in the mockup) but it was asked for
                      on top of the design, so it's squeezed in as just another segment -->
-                <ToggleButton Classes="micseg" IsChecked="{Binding IsMuted}" Command="{Binding MicrophoneClickedCommand}"
+                <ToggleButton Classes="micseg" IsChecked="{Binding IsMuted}"
                               ToolTip.Tip="{Binding MuteLabel}" AutomationProperties.Name="Mute microphone">
                     <Panel Width="20" Height="20">
                         <Path Data="{StaticResource SgvsMicIcon}" Classes="icon" />

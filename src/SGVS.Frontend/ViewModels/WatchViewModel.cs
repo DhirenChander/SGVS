@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using Avalonia.Media.Imaging;
 using SGVS.Frontend.Models;
 using SGVS.Frontend.Services;
@@ -22,17 +23,21 @@ public class WatchViewModel : ViewModelBase
         Participants = meeting.Members;
 
         // the stream is live: its frames keep replacing the preview, and it goes null when they stop.
-        // once they stop streaming (or their stream can't be shown) there is nothing left to watch, so go back
-        var leftWatch = false;
-        member.PropertyChanged += (_, e) =>
+        // once they stop streaming (or their stream can't be shown) there is nothing left to watch, so go back.
+        // leaving unhooks from the member first, so a page you already left never navigates again
+        void OnMemberChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(Participant.StreamPreview)) OnPropertyChanged(nameof(StreamFrame));
-            if (e.PropertyName == nameof(Participant.IsStreamer) && !member.IsStreamer && !leftWatch)
-            {
-                leftWatch = true;
-                stopWatching();
-            }
-        };
+            if (e.PropertyName == nameof(Participant.IsStreamer) && !member.IsStreamer) Leave();
+        }
+
+        void Leave()
+        {
+            member.PropertyChanged -= OnMemberChanged;
+            stopWatching();
+        }
+
+        member.PropertyChanged += OnMemberChanged;
         JoinCode = new JoinCodeViewModel(meeting.Code);
 
         // control bar + gear. Start stream is null since there's nothing to start from here
@@ -45,7 +50,7 @@ public class WatchViewModel : ViewModelBase
                 goToStart();
                 return Task.CompletedTask;
             },
-            stopWatching: stopWatching);
+            stopWatching: Leave);
     }
 
     // first person sharing, only used to feed the previewer constructor

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Avalonia.Media.Imaging;
 using SGVS.Frontend.Models;
+using SGVS.Frontend.Services.Video;
 
 namespace SGVS.Frontend.Services;
 
@@ -74,18 +75,12 @@ public sealed class FakeMeetingService : ObservableObject, IMeetingService
     }
 
     // the pretend call has no stream coming in
-    public void AttachRemoteVideo(SGVS.Frontend.Services.Video.IEncodedVideoSource source)
+    public void AttachRemoteVideo(IEncodedVideoSource source)
     {
     }
 
     public void Dispose()
     {
-    }
-
-    public Task LeaveAsync()
-    {
-        State = CallState.Ended;
-        return Task.CompletedTask;
     }
 
     // images live in folders next to the exe, null if missing or unreadable

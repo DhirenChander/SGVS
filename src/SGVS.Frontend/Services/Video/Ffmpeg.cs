@@ -30,6 +30,9 @@ public static class Ffmpeg
         return null;
     }
 
+    // Find, or an InvalidOperationException with a message fit for the screen
+    public static string Require() => Find() ?? throw new InvalidOperationException(NotFoundMessage);
+
     // args go through ArgumentList so paths with spaces survive. stderr lines go to the trace output, and to onStderr
     public static Process Start(string ffmpegPath, IReadOnlyList<string> args, bool writesStdin, Action<string>? onStderr = null)
     {
@@ -50,7 +53,17 @@ public static class Ffmpeg
             Trace.WriteLine("[ffmpeg] " + e.Data);
             onStderr?.Invoke(e.Data);
         };
-        process.Start();
+        try
+        {
+            process.Start();
+        }
+        catch
+        {
+            // not runnable (missing, wrong architecture): don't leak the handle
+            process.Dispose();
+            throw;
+        }
+
         // an undrained stderr pipe blocks ffmpeg once it fills
         process.BeginErrorReadLine();
         return process;

@@ -59,7 +59,6 @@ public sealed class FakeStreamPublisher : IStreamPublisher
 
     public bool Started { get; private set; }
     public bool Disposed { get; private set; }
-    public bool IsRunning => Started && !Disposed;
 
     // makes Start fail the way Process.Start does when ffmpeg is not a runnable program
     public Exception? StartError { get; set; }

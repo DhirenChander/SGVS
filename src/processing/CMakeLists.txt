@@ -51,7 +51,6 @@ add_library(processing_module
   video_processor.cpp
   screen_capture.cpp
 )
-target_include_directories(processing_module PUBLIC src)
 target_link_libraries(processing_module PUBLIC Opus::opus)
 
 if(MSVC)  # true for both cl.exe and clang-cl

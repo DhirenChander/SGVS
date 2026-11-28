@@ -13,6 +13,4 @@ public interface IStreamPublisher : IDisposable
     void Start();
 
     void Stop();
-
-    bool IsRunning { get; }
 }

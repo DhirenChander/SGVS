@@ -16,7 +16,6 @@ struct CbCall
 class ProcessAudioReaderTest : public ::testing::Test
 {
 protected:
-    static constexpr size_t kBuf = 64;
     std::vector<CbCall> calls;
     ProcessAudioReader all_reader{};
 
@@ -60,17 +59,15 @@ TEST_F(ProcessAudioReaderTest, CopiesDataAndInvokesCallbackOnce)
     EXPECT_EQ(calls[0].snapshot, in);
 }
 
+#ifdef _WIN32
 TEST_F(ProcessAudioReaderTest, SilentFlagWritesZeros)
 {
-#ifdef _WIN32
-    const uint32_t SILENT_FLAG = 2;
-#endif
-
     std::vector<uint8_t> in(16, 0xFF);
-    handle(all_reader, in.data(), 4, 4, SILENT_FLAG);
+    handle(all_reader, in.data(), 4, 4, AUDCLNT_BUFFERFLAGS_SILENT);
     ASSERT_EQ(calls.size(), 1u);
     EXPECT_EQ(calls[0].snapshot, std::vector<uint8_t>(16, 0));
 }
+#endif
 
 TEST_F(ProcessAudioReaderTest, NullDataWritesZeros)
 {
@@ -96,11 +93,46 @@ TEST_F(ProcessAudioReaderTest, WrapsAround)
     const size_t slotSize = 441;
     const size_t slots = expectedBuffSize / slotSize;
     std::vector<uint8_t> in(slotSize, 0xCD);
-    for (int i = 0; i < slots; ++i)
+    for (size_t i = 0; i < slots; ++i)
         handle(all_reader, in.data(), slotSize, 1, 0);
     handle(all_reader, in.data(), slotSize, 1, 0);
 
     EXPECT_EQ(calls.back().head, 0u);
+}
+
+// mono 16-bit at 4 Hz: a 32 byte ring
+static const AudioFormat kTinyRing{false, 4, 16};
+
+TEST_F(ProcessAudioReaderTest, PacketThatDoesNotFitAtTheEndStartsAtZero)
+{
+    setupBuffer(all_reader, kTinyRing);
+    ASSERT_EQ(bufferSize(all_reader), 32u);
+    std::vector<uint8_t> in(12);
+    std::iota(in.begin(), in.end(), 1);
+
+    handle(all_reader, in.data(), 3, 4, 0); // 0..12
+    handle(all_reader, in.data(), 3, 4, 0); // 12..24
+    handle(all_reader, in.data(), 3, 4, 0); // 24..36 runs past 32, so 0..12
+    handle(all_reader, in.data(), 3, 4, 0);
+
+    ASSERT_EQ(calls.size(), 4u);
+    EXPECT_EQ(calls[2].head, 0u);
+    EXPECT_EQ(calls[2].snapshot, in);
+    EXPECT_EQ(calls[3].head, 12u);
+}
+
+TEST_F(ProcessAudioReaderTest, PacketBiggerThanTheRingIsDropped)
+{
+    setupBuffer(all_reader, kTinyRing);
+    std::vector<uint8_t> little(4, 0xAB);
+    std::vector<uint8_t> huge(36, 0xCD);
+
+    handle(all_reader, little.data(), 1, 4, 0);
+    handle(all_reader, huge.data(), 9, 4, 0);
+    handle(all_reader, little.data(), 1, 4, 0);
+
+    ASSERT_EQ(calls.size(), 2u);
+    EXPECT_EQ(calls[1].head, 4u);
 }
 
 TEST_F(ProcessAudioReaderTest, BufferSizeIsCorrect)
@@ -118,7 +150,7 @@ TEST_F(ProcessAudioReaderTest, BufferSizeIsCorrect)
     EXPECT_EQ(bufferSize(r3), 0);
 }
 
-#if _WIN32
+#ifdef _WIN32
 TEST_F(ProcessAudioReaderTest, WindowsWaveFormatTest)
 {
     WAVEFORMATEX win_format1 = windows_format(AudioFormat{true, 44100, 16});

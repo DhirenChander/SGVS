@@ -14,12 +14,6 @@ public class IncomingVideoPipelineTests
 
     private IncomingVideoPipeline Create() => new(new ChannelVideoSource(_channel.Reader), _decoder, _sink);
 
-    private static void WaitUntil(Func<bool> condition)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(2);
-        while (!condition() && DateTime.UtcNow < deadline) Thread.Sleep(10);
-    }
-
     [Fact]
     public void Feeds_access_units_from_source_to_decoder()
     {
@@ -29,7 +23,7 @@ public class IncomingVideoPipelineTests
         _channel.Writer.TryWrite([1]);
         _channel.Writer.TryWrite([2]);
         _channel.Writer.TryWrite([3]);
-        WaitUntil(() => _decoder.Received.Length == 3);
+        Wait.Until(() => _decoder.Received.Length == 3);
         pipeline.Stop();
 
         Assert.Equal([[1], [2], [3]], _decoder.Received);
@@ -39,17 +33,19 @@ public class IncomingVideoPipelineTests
     // ffmpeg that stops reading its input leaves Decode stuck writing. Stop must still return (it is called on
     // the UI thread when you leave or stop watching): disposing the decoder is what unblocks the write
     [Fact]
-    public void Stop_returns_even_while_the_decoder_is_stuck()
+    public async Task Stop_returns_even_while_the_decoder_is_stuck()
     {
+        var token = TestContext.Current.CancellationToken;
         var stuck = new StuckDecoder();
         var pipeline = new IncomingVideoPipeline(new ChannelVideoSource(_channel.Reader), stuck, _sink);
         pipeline.Start();
         _channel.Writer.TryWrite([1]);
-        Assert.True(stuck.Entered.Wait(TimeSpan.FromSeconds(2)));
+        Assert.True(stuck.Entered.Wait(TimeSpan.FromSeconds(2), token));
 
-        var stop = Task.Run(pipeline.Stop);
+        var stop = Task.Run(pipeline.Stop, token);
 
-        Assert.True(stop.Wait(TimeSpan.FromSeconds(3)), "Stop waited on a decoder that never returns");
+        var finished = await Task.WhenAny(stop, Task.Delay(TimeSpan.FromSeconds(3), token));
+        Assert.True(finished == stop, "Stop waited on a decoder that never returns");
         Assert.True(_sink.Disposed);
     }
 
@@ -132,9 +128,9 @@ public class IncomingVideoPipelineTests
         pipeline.Start();
 
         _channel.Writer.TryWrite([1]);
-        WaitUntil(() => pipeline.Errors >= 1);
+        Wait.Until(() => pipeline.Errors >= 1);
         _channel.Writer.TryWrite([2]);
-        WaitUntil(() => pipeline.Errors >= 2); // the loop is still alive after the first failure
+        Wait.Until(() => pipeline.Errors >= 2); // the loop is still alive after the first failure
         pipeline.Stop();
 
         Assert.True(pipeline.Errors >= 2);

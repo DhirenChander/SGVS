@@ -20,6 +20,9 @@ public sealed partial class NetworkMeetingService
     // a remote decoder that dies is replaced this many times in a row before giving up
     private const int MaxDecoderRestarts = 3;
 
+    // how many access units the loopback to your own tile holds
+    private const int LoopbackCapacity = 60;
+
     private IStreamPublisher? _publisher;
     private IncomingVideoPipeline? _selfVideo;
     private IncomingVideoPipeline? _remoteVideo;
@@ -47,58 +50,21 @@ public sealed partial class NetworkMeetingService
         }
 
         SharedMemLibrary.Encoding outgoing;
-        try
-        {
-            outgoing = _outgoingVideo ?? VideoEncodings.NewOutgoing();
-            if (_outgoingVideo is null)
-            {
-                if (!_sharedMemory.RequestEncoding(outgoing))
-                {
-                    publisher.Dispose();
-                    Error = "Could not start the stream: the shared memory video channel is unavailable.";
-                    return false;
-                }
-
-                _outgoingVideo = outgoing;
-            }
-        }
-        catch (Exception e) when (e is InvalidOperationException or DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
-        {
-            publisher.Dispose();
-            Error = "Could not start the stream: " + e.Message;
-            return false;
-        }
-
-        // a few frames of slack, and the oldest goes if the decoder falls behind
-        var loopback = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(60)
-        {
-            FullMode = BoundedChannelFullMode.DropOldest,
-            SingleReader = true,
-        });
-
         IVideoDecoder decoder;
         try
         {
+            outgoing = _outgoingVideo ??= RequestOutgoingVideo();
             decoder = video.CreateDecoder();
         }
-        catch (Exception e) when (e is InvalidOperationException or Win32Exception)
+        catch (Exception e) when (e is InvalidOperationException or Win32Exception or DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
             publisher.Dispose();
             Error = "Could not start the stream: " + e.Message;
             return false;
         }
 
-        // your own tile only shows the first decoded frame as a faded still, so decoding stops after it
-        IncomingVideoPipeline? selfPipeline = null;
-        ParticipantVideoSink? selfSink = null;
-        _selfVideoWriter = loopback.Writer;
-        selfSink = new ParticipantVideoSink(Self, _post, tracksActivity: false,
-            onFirstFrame: () => _post(() => FreezeSelfPreview(selfPipeline!, selfSink!)));
-        selfPipeline = new IncomingVideoPipeline(new ChannelVideoSource(loopback.Reader), decoder, selfSink);
-        _selfVideo = selfPipeline;
-        selfPipeline.Start();
-
-        publisher.AccessUnitEncoded += au => OnAccessUnitEncoded(outgoing, loopback.Writer, au);
+        var loopback = StartSelfPreview(decoder);
+        publisher.AccessUnitEncoded += au => OnAccessUnitEncoded(outgoing, loopback, au);
         publisher.Failed += message => _post(() => StopFailedStream(publisher, message));
 
         // set before Start so a failed start can be torn down with the rest
@@ -118,6 +84,37 @@ public sealed partial class NetworkMeetingService
         }
 
         return true;
+    }
+
+    // a full ring is reported like the native failures, so StartVideo shows one message for both
+    private SharedMemLibrary.Encoding RequestOutgoingVideo()
+    {
+        var outgoing = VideoEncodings.NewOutgoing();
+        if (!_sharedMemory.RequestEncoding(outgoing))
+            throw new InvalidOperationException("the shared memory video channel is unavailable.");
+        return outgoing;
+    }
+
+    // your own tile only shows the first decoded frame as a faded still, so decoding stops after it.
+    // returns where the publisher's access units go
+    private ChannelWriter<byte[]> StartSelfPreview(IVideoDecoder decoder)
+    {
+        // a few frames of slack, and the oldest goes if the decoder falls behind
+        var loopback = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(LoopbackCapacity)
+        {
+            FullMode = BoundedChannelFullMode.DropOldest,
+            SingleReader = true,
+        });
+
+        IncomingVideoPipeline? selfPipeline = null;
+        ParticipantVideoSink? selfSink = null;
+        _selfVideoWriter = loopback.Writer;
+        selfSink = new ParticipantVideoSink(Self, _post, tracksActivity: false,
+            onFirstFrame: () => _post(() => FreezeSelfPreview(selfPipeline!, selfSink!)));
+        selfPipeline = new IncomingVideoPipeline(new ChannelVideoSource(loopback.Reader), decoder, selfSink);
+        _selfVideo = selfPipeline;
+        selfPipeline.Start();
+        return loopback.Writer;
     }
 
     // UI thread. a failure posted by a publisher that has since been stopped or replaced is ignored

@@ -1,5 +1,7 @@
 using Avalonia;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using SGVS.Frontend.Models;
 using SGVS.Frontend.Services.Video;
 using Xunit;
@@ -50,8 +52,8 @@ public class ParticipantVideoSinkTests
     public void A_stream_that_never_sends_a_frame_is_cleared_after_two_seconds()
     {
         _participant.IsStreamer = true;
-        _participant.StreamPreview = new Avalonia.Media.Imaging.WriteableBitmap(new PixelSize(2, 2), new Vector(96, 96),
-            Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+        _participant.StreamPreview = new WriteableBitmap(new PixelSize(2, 2), new Vector(96, 96),
+            PixelFormat.Bgra8888, AlphaFormat.Premul);
         using var sink = Create(tracksActivity: true);
 
         _now = TimeSpan.FromSeconds(2.1);
@@ -104,7 +106,7 @@ public class ParticipantVideoSinkTests
     public void OnFirstFrame_runs_once_after_the_first_frame_is_on_the_tile()
     {
         var calls = 0;
-        var previewWhenCalled = (Avalonia.Media.Imaging.Bitmap?)null;
+        var previewWhenCalled = (Bitmap?)null;
         using var sink = new ParticipantVideoSink(_participant, action => action(), false, () => _now,
             onFirstFrame: () => { calls++; previewWhenCalled = _participant.StreamPreview; });
 

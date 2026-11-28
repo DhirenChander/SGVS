@@ -1,11 +1,4 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Reflection;
-using System.Text;
-
-
-//using System.Reflection;
-//using Avalonia.Platform.Surfaces;
 using CommunityToolkit.Mvvm.ComponentModel;
 using SGVS.Frontend.Models;
 using SGVS.Frontend.Services.Networking;
@@ -33,7 +26,7 @@ public sealed partial class NetworkMeetingService : ObservableObject, IMeetingSe
     private readonly ObservableCollection<Participant> _members = [];
 
     private INetworkingProcess? _process;
-    private IFrameBuffer _sharedMemory;
+    private readonly IFrameBuffer _sharedMemory;
     private readonly VideoServices? _video;
 
     // the host/join/accept the networking module still owes an answer to. completes true on success
@@ -46,8 +39,8 @@ public sealed partial class NetworkMeetingService : ObservableObject, IMeetingSe
     // set while a mute that could not be sent is put back, so putting it back sends nothing
     private bool _undoingMute;
 
-    // startProcess: launches the networking module. openSharedMemory: opens the shared frame buffer, called
-    // the first time you stream. post: runs something on the UI thread (tests pass a direct call).
+    // startProcess: launches the networking module. sharedMemory: the shared frame buffer App opened, every
+    // message to networking and the outgoing stream go through it. post: runs something on the UI thread (tests pass a direct call).
     // setupTimeout: how long host/join may take, 30 seconds if left out.
     // video: how to encode and decode the screen stream. null means Start stream only flips the flag
     public NetworkMeetingService(
@@ -58,16 +51,11 @@ public sealed partial class NetworkMeetingService : ObservableObject, IMeetingSe
         TimeSpan? setupTimeout = null,
         VideoServices? video = null)
     {
-        Console.WriteLine("Creating meeting service...");
         _setupTimeout = setupTimeout ?? DefaultSetupTimeout;
         _startProcess = startProcess;
         _post = post;
         _video = video;
-        Console.Write("Initializing shared memory...");
-
         _sharedMemory = sharedMemory;
-
-        Console.WriteLine("Done.");
 
         Self = new Participant { Name = selfName, IsSelf = true, Tone = AvatarTone.Teal };
         Self.PropertyChanged += (_, e) =>
