@@ -9,6 +9,7 @@ using SGVS.Frontend.Services;
 using SGVS.Frontend.Tests.Support;
 using SGVS.Frontend.ViewModels;
 using SGVS.Frontend.Views;
+using SGVS.Frontend.Views.Controls;
 using Xunit;
 
 [assembly: AvaloniaTestApplication(typeof(SGVS.Frontend.Tests.TestApp))]
@@ -69,15 +70,14 @@ public class ViewRenderTests
     }
 
     [AvaloniaFact]
-    public void Joining_shows_the_reply_to_copy_and_cancel()
+    public void Joining_opens_the_meeting_page()
     {
         var window = Show(new MainViewModel(() => _service));
         ((StartViewModel)((MainViewModel)window.DataContext!).CurrentView).JoinText = "host-code";
 
         Click(window, "→");
 
-        Assert.Contains("Copy reply", window.GetVisualDescendants().OfType<Button>().Select(b => b.Content as string));
-        Assert.Contains(window.GetVisualDescendants().OfType<TextBox>(), t => t.IsReadOnly && t.Text == "ANSWER-CODE");
+        Assert.NotEmpty(window.GetVisualDescendants().OfType<MeetingView>());
         Assert.DoesNotContain("New meeting", window.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible).Select(b => b.Content as string));
     }
 
@@ -138,5 +138,58 @@ public class ViewRenderTests
         meeting.WatchCommand.Execute(meeting.Members.First(m => m.IsStreamer));
         Dispatcher.UIThread.RunJobs();
         Assert.NotEmpty(window.GetVisualDescendants().OfType<WatchView>());
+    }
+
+    // the view model is set once the overlay is on screen: its menus are built from the app's resources
+    private static (Window, StreamOverlay) ShowOverlay(OverlayViewModel vm)
+    {
+        var overlay = new StreamOverlay();
+        var window = new Window { Content = overlay };
+        window.Show();
+        overlay.DataContext = vm;
+        Dispatcher.UIThread.RunJobs();
+        return (window, overlay);
+    }
+
+    // turning "keep controls visible" off shows the controls again, but only on an overlay still listening
+    private static void ToggleKeepVisible(StreamOverlay overlay, OverlayViewModel vm)
+    {
+        overlay.ControlsVisible = false;
+        vm.KeepControlsVisible = true;
+        vm.KeepControlsVisible = false;
+    }
+
+    // Meeting keeps its overlay view model across page changes, so an overlay that left the screen must let go of it
+    [AvaloniaFact]
+    public void Stream_overlay_stops_reacting_to_its_view_model_once_unloaded()
+    {
+        var vm = new OverlayViewModel();
+        var (window, overlay) = ShowOverlay(vm);
+
+        ToggleKeepVisible(overlay, vm);
+        Assert.True(overlay.ControlsVisible);
+
+        window.Content = null;
+        Dispatcher.UIThread.RunJobs();
+        ToggleKeepVisible(overlay, vm);
+        Assert.False(overlay.ControlsVisible);
+
+        // back on screen, it listens again
+        window.Content = overlay;
+        Dispatcher.UIThread.RunJobs();
+        ToggleKeepVisible(overlay, vm);
+        Assert.True(overlay.ControlsVisible);
+    }
+
+    [AvaloniaFact]
+    public void Stream_overlay_stops_reacting_to_its_old_view_model_when_the_data_context_changes()
+    {
+        var old = new OverlayViewModel();
+        var (_, overlay) = ShowOverlay(old);
+
+        overlay.DataContext = new OverlayViewModel();
+        Dispatcher.UIThread.RunJobs();
+        ToggleKeepVisible(overlay, old);
+        Assert.False(overlay.ControlsVisible);
     }
 }

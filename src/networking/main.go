@@ -2,10 +2,11 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"shared_mem_lib"
-	"time"
 
 	"github.com/pion/webrtc/v4"
 )
@@ -14,17 +15,18 @@ import (
 
 // Allows mocking of frameBuffer
 type frameBuffer interface {
-	PushFrames([]shared_mem_lib.GCFrame) bool
+	PushFrames(fs []shared_mem_lib.GCFrame) bool
+	// BlockingPopFrames reallocates each frame and the buffer as a whole, to minimize space
 	BlockingPopFrames(
-		shared_mem_lib.Encoding,
-		uint32,
-		uint32,
+		enc shared_mem_lib.Encoding,
+		maxFrames uint32,
+		maxTimeout uint32,
 	) (bool, []shared_mem_lib.GCFrame)
+	RequestEncoding(enc shared_mem_lib.Encoding) bool
+	AlignRingsToConfig() bool
 	PushMessage(msg *shared_mem_lib.Message) bool
 	BlockingPopMessage(src, dst shared_mem_lib.Module, max_timeout uint32) (shared_mem_lib.Message, bool)
 	ReadEncodings(maxLen uint8) ([]shared_mem_lib.Encoding, bool)
-	RequestEncoding(enc shared_mem_lib.Encoding) bool
-	AlignRingsToConfig() bool
 }
 
 func main() {
@@ -45,11 +47,14 @@ func main() {
 	if err != nil {
 		fmt.Println("Error starting call: " + err.Error())
 		//Retry?
+		return
 	}
 
-	//Temp to keep pc open during testing
+	// Keep the call open until the process is told to stop (Ctrl+C)
 	//TODO: change to wait on message from application to end call
-	<-time.After(5 * time.Minute)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	<-ctx.Done()
 	_ = pc.Close()
 }
 
@@ -116,9 +121,7 @@ func setupPcAsHost(fb frameBuffer) (
 
 	fmt.Println("Setting up host")
 
-	offerPc, dataChan, dataChanOpen, messages,
-		selfVoiceTrack, _, remoteVoiceTrackChan, _, //Use receivers later to judge network conditions
-		err := generateOffer()
+	offerPc, dataChan, dataChanOpen, messages, media, err := generateOffer()
 
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("Error generating offer: %s\n", err)
@@ -135,7 +138,7 @@ func setupPcAsHost(fb frameBuffer) (
 		}
 	}()
 
-	//TODO: Send SDP to application for message from application
+	//TODO: Send SDP to application and then wait for answer response string message from application
 	//sdpStr := getSDPStr(offerPc)
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Printf("\nEnter Answer SDP:\n")
@@ -172,8 +175,8 @@ func setupPcAsHost(fb frameBuffer) (
 		return nil, nil, nil, nil, fmt.Errorf("Error applying answer: %s\n", err)
 	}
 
-	//Send voice audio
-	goAndPrintIfError(func() error { return relayAudioOnceConnected(selfVoiceTrack, remoteVoiceTrackChan, fb) })
+	//Relay voice audio and the screen stream
+	relayMediaOnceConnected(media, fb)
 
 	keepConnection = true
 	return offerPc, dataChan, dataChanOpen, messages, nil
@@ -188,9 +191,11 @@ func setupPcAsAttendee(fb frameBuffer, SDPStr string) (
 
 	fmt.Println("Setting up attendee")
 
-	answerPc, dcReady, dataChanOpen, messages,
-		selfVoiceTrack, _, remoteVoiceTrackChan, _,
-		err := generateAnswer(SDPStr)
+	// generateAnswer closes the connection itself if it fails
+	answerPc, dcReady, dataChanOpen, messages, media, err := generateAnswer(SDPStr)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("Error generating answer: %s\n", err)
+	}
 
 	keepConnection := false
 	defer func() {
@@ -200,51 +205,19 @@ func setupPcAsAttendee(fb frameBuffer, SDPStr string) (
 		}
 	}()
 
-	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("Error generating answer: %s\n", err)
-	}
-
 	fmt.Println("Answer SDP:")
 	fmt.Println(getSDPStr(answerPc))
 
-	//TODO: Send SDP to application for message from application
+	//TODO: Send SDP to application
 
-	//Send voice audio
-	goAndPrintIfError(func() error { return relayAudioOnceConnected(selfVoiceTrack, remoteVoiceTrackChan, fb) })
-
-	//Send voice audio
-	goAndPrintIfError(func() error { return relayAudioOnceConnected(selfVoiceTrack, remoteVoiceTrackChan, fb) })
+	//Relay voice audio and the screen stream, once. A second relay would add a second reader to the outgoing ring
+	relayMediaOnceConnected(media, fb)
 
 	keepConnection = true
 	return answerPc, dcReady, dataChanOpen, messages, nil
 }
 
-func waitForAudioEncodingFromProcessing(fb frameBuffer) (shared_mem_lib.Encoding, error) {
-	const timeOut = 100 * time.Second
-	const interval = 500 * time.Millisecond
-	elapsed := 0 * time.Second
-
-	for elapsed < timeOut {
-		encs, succ := fb.ReadEncodings(10)
-		if succ {
-			fb.AlignRingsToConfig()
-			// fmt.Println("Got: ", len(encs), " Encodings")
-			for _, v := range encs {
-				if v.IsOutgoing() && v.IsAudio() {
-					return v, nil
-				}
-			}
-		} else {
-			fmt.Println("Failed to poll encodings")
-		}
-
-		elapsed += interval
-		time.Sleep(interval)
-	}
-
-	return shared_mem_lib.Encoding{}, fmt.Errorf("Did not find audio encoding after %s", string(timeOut))
-}
-
+// TODO: Move to helper file?
 func goAndPrintIfError(f func() error) {
 	go func() {
 		err := f()
@@ -252,19 +225,4 @@ func goAndPrintIfError(f func() error) {
 			fmt.Println("Error in concurrent func: " + err.Error())
 		}
 	}()
-}
-
-// Read SDP string from input stream (console for now)
-func readSDP(reader *bufio.Reader) (string, error) {
-	SDPStr := ""
-	for {
-		ln, err := reader.ReadString('\n')
-		if err != nil {
-			return SDPStr, err
-		}
-		if ln == "\r\n" || ln == "\n" {
-			return SDPStr, nil
-		}
-		SDPStr += ln
-	}
 }

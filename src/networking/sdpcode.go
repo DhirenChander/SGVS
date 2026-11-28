@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"compress/flate"
 	"encoding/base64"
@@ -8,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/pion/webrtc/v4"
 )
 
 // The raw SDP is a few KB of text. Deflate + URL-safe base64 turns it into a single-line
@@ -15,6 +18,25 @@ import (
 
 // Upper bound when decompressing, so a malicious string can't expand into gigabytes
 const maxSDPBytes = 64 * 1024
+
+func getSDPStr(pc *webrtc.PeerConnection) string {
+	return pc.LocalDescription().SDP
+}
+
+// Read SDP string from input stream (console for now)
+func readSDP(reader *bufio.Reader) (string, error) {
+	SDPStr := ""
+	for {
+		ln, err := reader.ReadString('\n')
+		if err != nil {
+			return SDPStr, err
+		}
+		if ln == "\r\n" || ln == "\n" {
+			return SDPStr, nil
+		}
+		SDPStr += ln
+	}
+}
 
 func encodeSDP(sdp string) (string, error) {
 	var buf bytes.Buffer

@@ -1,3 +1,4 @@
+using SGVS.Frontend.Models;
 using SGVS.Frontend.Services;
 using SGVS.Frontend.Tests.Support;
 using SGVS.Frontend.ViewModels;
@@ -40,17 +41,16 @@ public class ViewModelTests
     }
 
     [Fact]
-    public void Join_shows_the_reply_and_waits_for_the_host()
+    public void Join_opens_the_meeting_straight_away()
     {
         var opened = 0;
         var start = new StartViewModel(_service, () => opened++, () => { }) { JoinText = "host-code" };
 
         start.JoinCommand.Execute(null);
 
-        Assert.Equal(["join:host-code"], _service.Calls);
-        Assert.True(start.IsAwaitingHost);
-        Assert.Equal("ANSWER-CODE", start.ReplyCode);
-        Assert.Equal(0, opened); // not in the meeting until the host pastes the reply
+        // the connection strings are exchanged in the networking console for now, so Join sends no code
+        Assert.Equal(["join:"], _service.Calls);
+        Assert.Equal(1, opened);
     }
 
     [Fact]
@@ -180,7 +180,7 @@ public class ViewModelTests
         var meeting = new MeetingViewModel(_service, _ => { }, () => { });
 
         meeting.Overlay.ConfirmDialogCommand.Execute(null); // dialog closed: no-op
-        Assert.Empty(_service.Calls.Where(c => c.StartsWith("start")));
+        Assert.DoesNotContain(_service.Calls, c => c.StartsWith("start"));
 
         meeting.Overlay.OpenStartStreamCommand.Execute(null);
         meeting.Overlay.ConfirmDialogCommand.Execute(null);
@@ -258,16 +258,13 @@ public class ViewModelTests
     }
 
     [Fact]
-    public void Joining_from_start_lands_on_the_meeting_when_connected()
+    public void Joining_from_start_lands_on_the_meeting()
     {
         var main = new MainViewModel(() => _service);
         var start = (StartViewModel)main.CurrentView;
         start.JoinText = "host-code";
 
         start.JoinCommand.Execute(null);
-        Assert.IsType<StartViewModel>(main.CurrentView);
-
-        _service.State = CallState.Connected;
 
         var meeting = Assert.IsType<MeetingViewModel>(main.CurrentView);
         Assert.False(meeting.IsHost);
@@ -285,6 +282,28 @@ public class ViewModelTests
 
         Assert.NotSame(start, main.CurrentView);
         Assert.IsType<StartViewModel>(main.CurrentView);
+    }
+
+    [Fact]
+    public void Going_back_to_start_ends_the_old_call()
+    {
+        var service = new ScriptedMeetingService();
+        var main = new MainViewModel(() => service);
+
+        main.GoToStartPageCommand.Execute(null);
+
+        Assert.True(service.Disposed); // otherwise its ffmpeg processes keep streaming
+    }
+
+    [Fact]
+    public void Closing_the_app_ends_the_call()
+    {
+        var service = new ScriptedMeetingService();
+        var main = new MainViewModel(() => service);
+
+        main.Shutdown();
+
+        Assert.True(service.Disposed);
     }
 
     [Fact]
@@ -310,5 +329,21 @@ public class ViewModelTests
 
         var meeting = Assert.IsType<MeetingViewModel>(main.CurrentView);
         Assert.Equal(6, meeting.Members.Count);
+    }
+
+    [Fact]
+    public void Mic_mute_is_the_same_on_the_meeting_and_watch_bars()
+    {
+        var self = new Participant { Name = "Hazel", IsSelf = true };
+        var meetingBar = new OverlayViewModel(self, false, null, null, () => Task.CompletedTask, null);
+        meetingBar.IsMuted = true;
+
+        var watchBar = new OverlayViewModel(self, true, null, null, () => Task.CompletedTask, null);
+        Assert.True(watchBar.IsMuted);
+
+        watchBar.IsMuted = false;
+        Assert.False(self.IsMuted);
+        Assert.False(meetingBar.IsMuted);
+        Assert.Equal("Mute", meetingBar.MuteLabel);
     }
 }

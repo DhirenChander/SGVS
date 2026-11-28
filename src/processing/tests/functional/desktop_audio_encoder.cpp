@@ -63,7 +63,7 @@ int main()
     const size_t expectedFrameSize = config.inputChannels * sizeof(int16_t);
 
     // Callbacks run on the capture thread. Frames can wrap around the ring buffer, so feed them one at a time.
-    bool started = audioReader.start(200 * 10000, [&](uint32_t ind, uint16_t fCount, size_t fSize)
+    bool started = audioReader.start(DEFAULT_BUFFER_TIME, [&](uint32_t ind, uint16_t fCount, size_t fSize)
                                      {
                                          // A device delivering another format (24-bit, float, more channels)
                                          // would come out as noise, so skip it and report it instead

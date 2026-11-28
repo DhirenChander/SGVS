@@ -28,6 +28,9 @@ extern "C"
         PARTICIPANT_JOINED,
         PARTICIPANT_LEFT,
         LEAVE_CALL,
+        // application -> network: stop or resume sending your mic audio to the call
+        MIC_MUTED,
+        MIC_UNMUTED,
     } Operation;
 
     typedef struct

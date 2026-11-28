@@ -1,14 +1,8 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Reflection;
-using System.Text;
-
-
-//using System.Reflection;
-//using Avalonia.Platform.Surfaces;
 using CommunityToolkit.Mvvm.ComponentModel;
 using SGVS.Frontend.Models;
 using SGVS.Frontend.Services.Networking;
+using SGVS.Frontend.Services.Video;
 
 using SharedMemLibrary;
 
@@ -20,7 +14,7 @@ namespace SGVS.Frontend.Services;
 //   host:  HostAsync -> Code is the offer, hand it to the guest -> AcceptReplyAsync with what the guest sends back
 //   guest: JoinAsync(offer) -> Code is the reply, hand it to the host
 // networking has one peer connection, so a call is the host plus one guest.
-public sealed class NetworkMeetingService : ObservableObject, IMeetingService
+public sealed partial class NetworkMeetingService : ObservableObject, IMeetingService
 {
     // how long to wait for the networking module to answer a host/join before giving up
     private static readonly TimeSpan DefaultSetupTimeout = TimeSpan.FromSeconds(30);
@@ -32,33 +26,42 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
     private readonly ObservableCollection<Participant> _members = [];
 
     private INetworkingProcess? _process;
-    private IFrameBuffer _sharedMemory;
+    private readonly IFrameBuffer _sharedMemory;
+    private readonly VideoServices? _video;
 
     // the host/join/accept the networking module still owes an answer to. completes true on success
     private TaskCompletionSource<bool>? _pending;
     private string _pendingEvent = "";
 
-    // startProcess: launches the networking module. openSharedMemory: opens the shared frame buffer, called
-    // the first time you stream. post: runs something on the UI thread (tests pass a direct call).
-    // setupTimeout: how long host/join may take, 30 seconds if left out
+    // networking has been asked to host or join. before that nothing reads mute messages, so they wait
+    private bool _callStarted;
+
+    // set while a mute that could not be sent is put back, so putting it back sends nothing
+    private bool _undoingMute;
+
+    // startProcess: launches the networking module. sharedMemory: the shared frame buffer App opened, every
+    // message to networking and the outgoing stream go through it. post: runs something on the UI thread (tests pass a direct call).
+    // setupTimeout: how long host/join may take, 30 seconds if left out.
+    // video: how to encode and decode the screen stream. null means Start stream only flips the flag
     public NetworkMeetingService(
         string selfName,
         Func<INetworkingProcess> startProcess,
         Action<Action> post,
         IFrameBuffer sharedMemory,
-        TimeSpan? setupTimeout = null)
+        TimeSpan? setupTimeout = null,
+        VideoServices? video = null)
     {
-        Console.WriteLine("Creating meeting service...");
         _setupTimeout = setupTimeout ?? DefaultSetupTimeout;
         _startProcess = startProcess;
         _post = post;
-        Console.Write("Initializing shared memory...");
-
+        _video = video;
         _sharedMemory = sharedMemory;
 
-        Console.WriteLine("Done.");
-
         Self = new Participant { Name = selfName, IsSelf = true, Tone = AvatarTone.Teal };
+        Self.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Participant.IsMuted) && _callStarted && !_undoingMute) SendMicState();
+        };
         _members.Add(Self);
         Members = new ReadOnlyObservableCollection<Participant>(_members);
     }
@@ -85,22 +88,23 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
     public bool AcceptReply(string replyCode)
     {
         return TryPush(
-            new(System.Text.Encoding.UTF8.GetBytes(replyCode), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.AnswerCode),
+            () => new(System.Text.Encoding.UTF8.GetBytes(replyCode), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.AnswerCode),
             "Could not send the reply");
     }
 
     // pushes a message to the networking module. a missing/mismatched native library or a full
     // channel becomes an Error the UI can show instead of an unhandled exception
-    private bool TryPush(Message message, string failurePrefix)
+    // the message is built inside the try because a code longer than the 255-byte payload makes Message throw
+    private bool TryPush(Func<Message> buildMessage, string failurePrefix)
     {
         try
         {
             // PushMessage returns false when the ring is full, so treat that as a failure too
-            if (_sharedMemory.PushMessage(message)) return true;
+            if (_sharedMemory.PushMessage(buildMessage())) return true;
             Error = $"{failurePrefix}: the shared memory channel is full or unavailable.";
         }
         // these are what we get if the native dll is missing, the wrong bitness, or out of date with lib.cs
-        catch (Exception e) when (e is InvalidOperationException or DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException or DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
             Error = $"{failurePrefix}: {e.Message}";
         }
@@ -108,14 +112,39 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         return false;
     }
 
+    // tells networking to stop or resume sending your mic audio to the call. if the message can't go out (the
+    // channel is full) the button goes back to what networking is still doing, so it never shows muted while
+    // your voice is being sent. Error says why
+    private void SendMicState()
+    {
+        var op = Self.IsMuted ? Operation.MicMuted : Operation.MicUnmuted;
+        if (TryPush(() => new Message(Array.Empty<byte>(), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, op),
+                Self.IsMuted ? "Could not mute your mic" : "Could not unmute your mic"))
+            return;
+
+        _undoingMute = true;
+        try
+        {
+            Self.IsMuted = !Self.IsMuted;
+        }
+        finally
+        {
+            _undoingMute = false;
+        }
+    }
+
     public void StartStream(ShareSource source)
     {
+        if (Self.IsStreamer) return;
+        if (_video is not null && !StartVideo(_video)) return;
+
         try
         {
             _sharedMemory.PushMessage(new(null, SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, Operation.StartSharing));
         }
         catch (Exception e) when (e is InvalidOperationException or DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
+            StopVideo();
             Error = "Could not open the shared memory: " + e.Message;
             return;
         }
@@ -125,6 +154,7 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
 
     public void StopStream()
     {
+        StopVideo();
         Self.IsStreamer = false;
         Self.StreamPreview = null;
 
@@ -192,9 +222,9 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         //var finished = await Task.WhenAny(pending.Task, Task.Delay(_setupTimeout));
         // the host just asks the networking module for a host code (no payload), while a joiner
         // sends the code they were given across as an answer code
-        var message = isHost
-            ? new Message(Array.Empty<byte>(), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.StartHost)
-            : new Message(System.Text.Encoding.UTF8.GetBytes(hostCode), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.JoinCall);
+        Func<Message> message = isHost
+            ? () => new Message(Array.Empty<byte>(), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.StartHost)
+            : () => new Message(System.Text.Encoding.UTF8.GetBytes(hostCode), SharedMemLibrary.Module.Application, SharedMemLibrary.Module.Network, SharedMemLibrary.Operation.JoinCall);
 
         Console.WriteLine("Sending message...");
 
@@ -204,6 +234,10 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
             Console.WriteLine("Failed to send message...");
             return false;
         }
+
+        // networking starts every call unmuted, so a mute from before the call has to follow the start message
+        _callStarted = true;
+        if (Self.IsMuted) SendMicState();
 
         /*if (finished != pending.Task)
         {
@@ -318,18 +352,17 @@ public sealed class NetworkMeetingService : ObservableObject, IMeetingService
         pending?.TrySetResult(false);
     }*/
 
-    public void OnParticipantJoined(string name)
-    {
-        Participant member;
-        if (IsHost)
-        {
-            member = new Participant { Name = "Carter", IsSelf = false, Tone = AvatarTone.Amber };
-        }
-        else
-        {
-            member = new Participant { Name = "Austin", IsSelf = false, Tone = AvatarTone.Amber };
-        }
+    // the hardcoded names stand in for display names, which are not decided yet
+    public void OnParticipantJoined(string name) => EnsurePeer();
 
-        _members.Add(member);
+    // the one other person in the call: added the first time anything about them shows up, never twice
+    private Participant EnsurePeer()
+    {
+        var peer = _members.FirstOrDefault(m => !m.IsSelf);
+        if (peer is not null) return peer;
+
+        peer = new Participant { Name = IsHost ? "Carter" : "Austin", IsSelf = false, Tone = AvatarTone.Amber };
+        _members.Add(peer);
+        return peer;
     }
 }

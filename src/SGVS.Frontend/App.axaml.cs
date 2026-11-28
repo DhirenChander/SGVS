@@ -1,20 +1,25 @@
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using SGVS.Frontend.ViewModels;
 using SGVS.Frontend.Views;
+using SGVS.Frontend.Services;
 using SGVS.Frontend.Services.Audio;
-using System.Threading.Channels;
+using SGVS.Frontend.Services.Networking;
+using SGVS.Frontend.Services.Video;
 using SharedMemLibrary;
 
 namespace SGVS.Frontend;
 
 public partial class App : Application
 {
+    private const string FakeCallVariable = "SGVS_FAKE";
+
     private CancellationTokenSource? _appCts;
     private IFrameBuffer? _sharedMemory;
-    private IPcmSink? _pcmSink;
+    private PcmPlayer? _pcmSink;
     private MainViewModel? _main;
 
     public override void Initialize()
@@ -28,14 +33,12 @@ public partial class App : Application
         {
             _pcmSink = new PcmPlayer();
             _sharedMemory = new GCFrameBuffer();
-            var main = new MainViewModel(_sharedMemory);
+            var main = new MainViewModel(() => CreateMeeting(_sharedMemory));
             _main = main;
             desktop.MainWindow = new MainWindow
             {
                 DataContext = main,
             };
-
-            Channel<GCFrame> audioChan = Channel.CreateBounded<GCFrame>(200); // Holds 2 seconds of audio
 
             _appCts = new CancellationTokenSource();
             var appToken = _appCts.Token;
@@ -49,6 +52,7 @@ public partial class App : Application
                 _appCts?.Cancel();
                 _appCts?.Dispose();
                 main.Shutdown();
+                _pcmSink?.Dispose();
             };
         }
 
@@ -117,10 +121,41 @@ public partial class App : Application
 
     private void StartReceiver(Encoding _enc, CancellationToken _appToken)
     {
+        // someone's screen stream. the field is read directly, IsVideo() would call into the native library
+        if (_enc.type == EncodingType.Video)
+        {
+            var source = new SharedMemoryVideoSource(_sharedMemory!, _enc);
+            Dispatcher.UIThread.Post(() => _main?.AttachRemoteVideo(source));
+            return;
+        }
+
         SharedMemoryAudioSource audioSource = new SharedMemoryAudioSource(_sharedMemory!);
         IncomingAudioPump audioPump = new IncomingAudioPump(audioSource, _pcmSink!);
         audioPump.Start();
         var participantName = $"Participant-{_enc.id[0]:x8}";
         Dispatcher.UIThread.Post(() => _main?.NotifyParticipantJoined(participantName));
+    }
+
+    // the real app. SGVS_FAKE=1 swaps in the pretend call so the UI can be used without the networking module
+    private static IMeetingService CreateMeeting(IFrameBuffer? sharedMemory)
+    {
+        if (Environment.GetEnvironmentVariable(FakeCallVariable) == "1") return new FakeMeetingService();
+        if (sharedMemory is null) throw new InvalidOperationException("shared memory is not open");
+
+        // display names aren't decided yet, so for now it's whoever is signed in to the PC
+        return new NetworkMeetingService(Environment.UserName, StartNetworking,
+            action => Dispatcher.UIThread.Post(action), sharedMemory,
+            video: new VideoServices(
+                FfmpegStreamPublisher.CreateDummy,
+                () => new FfmpegVideoDecoder(Ffmpeg.Require())));
+    }
+
+    private static INetworkingProcess StartNetworking()
+    {
+        var path = NetworkingProcess.FindExecutable()
+                   ?? throw new FileNotFoundException("The networking module (backend/sgvs-networking) was not found next to the app.");
+
+        Trace.WriteLine("[networking] starting " + path);
+        return new NetworkingProcess(path);
     }
 }

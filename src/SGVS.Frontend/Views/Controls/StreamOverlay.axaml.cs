@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -24,6 +25,8 @@ public partial class StreamOverlay : UserControl
     // true while a flyout is open - the timer still ticks but this stops it hiding anything
     private bool _suppressAutoHide;
 
+    private OverlayViewModel? _subscribed;
+
     public StreamOverlay()
     {
         InitializeComponent();
@@ -37,19 +40,19 @@ public partial class StreamOverlay : UserControl
             ControlsVisible = false;
             _hideTimer.Stop();
         };
-        Loaded += (_, _) => NotifyActivity();
-        Unloaded += (_, _) => _hideTimer.Stop();
+        Loaded += (_, _) => { Subscribe(DataContext as OverlayViewModel); NotifyActivity(); };
+        Unloaded += (_, _) => { _hideTimer.Stop(); Subscribe(null); };
 
         // the resolution menu and the stream-source list are both built here rather than
         // from an ItemsControl - see the comment above ResolutionMenuItems in the axaml
         // for why
         DataContextChanged += (_, _) =>
         {
-            if (DataContext is not OverlayViewModel vm) return;
+            if (DataContext is not OverlayViewModel vm) { Subscribe(null); return; }
             RebuildResolutionRows(vm);
             RebuildStreamSourceOptions(vm);
             RebuildSettingsOptions(vm);
-            vm.PropertyChanged += OnViewModelPropertyChanged;
+            Subscribe(vm);
             NotifyActivity();
         };
 
@@ -90,9 +93,18 @@ public partial class StreamOverlay : UserControl
 
     private void OnFullscreenClick(object? sender, RoutedEventArgs e) => FullscreenRequested?.Invoke(this, EventArgs.Empty);
 
-    private void OnDialogScrimPressed(object? sender, Avalonia.Input.PointerPressedEventArgs e)
+    private void OnDialogScrimPressed(object? sender, PointerPressedEventArgs e)
     {
         if (DataContext is OverlayViewModel vm) vm.CloseDialogCommand.Execute(null);
+    }
+
+    // the view is rebuilt on every page change but Meeting keeps its overlay view model, so a view that left
+    // must let go of it or every old copy keeps reacting to it
+    private void Subscribe(OverlayViewModel? vm)
+    {
+        if (_subscribed is not null) _subscribed.PropertyChanged -= OnViewModelPropertyChanged;
+        _subscribed = vm;
+        if (vm is not null) vm.PropertyChanged += OnViewModelPropertyChanged;
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -144,7 +156,7 @@ public partial class StreamOverlay : UserControl
 
         foreach (var resolution in vm.Resolutions)
         {
-            var label = new TextBlock { Text = resolution, FontSize = 14, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+            var label = new TextBlock { Text = resolution, FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
             var check = new Path
             {
                 Data = (StreamGeometry)this.FindResource("SgvsCheckIcon")!,

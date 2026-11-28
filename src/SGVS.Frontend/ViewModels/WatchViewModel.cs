@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using Avalonia.Media.Imaging;
 using SGVS.Frontend.Models;
 using SGVS.Frontend.Services;
@@ -7,6 +8,8 @@ namespace SGVS.Frontend.ViewModels;
 
 public class WatchViewModel : ViewModelBase
 {
+    private readonly Participant _member;
+
     // for the XAML previewer only, watches whoever is streaming in the fake call
     public WatchViewModel() : this(Watched(new FakeMeetingService()), new FakeMeetingService(), () => { }, () => { })
     {
@@ -16,8 +19,25 @@ public class WatchViewModel : ViewModelBase
     // list the same people. stopWatching: what the Stop watching button does (back to Meeting). goToStart: what Leave does
     public WatchViewModel(Participant member, IMeetingService meeting, Action stopWatching, Action goToStart)
     {
+        _member = member;
         Participants = meeting.Members;
-        StreamFrame = member.StreamPreview;
+
+        // the stream is live: its frames keep replacing the preview, and it goes null when they stop.
+        // once they stop streaming (or their stream can't be shown) there is nothing left to watch, so go back.
+        // leaving unhooks from the member first, so a page you already left never navigates again
+        void OnMemberChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(Participant.StreamPreview)) OnPropertyChanged(nameof(StreamFrame));
+            if (e.PropertyName == nameof(Participant.IsStreamer) && !member.IsStreamer) Leave();
+        }
+
+        void Leave()
+        {
+            member.PropertyChanged -= OnMemberChanged;
+            stopWatching();
+        }
+
+        member.PropertyChanged += OnMemberChanged;
         JoinCode = new JoinCodeViewModel(meeting.Code);
 
         // control bar + gear. Start stream is null since there's nothing to start from here
@@ -30,7 +50,7 @@ public class WatchViewModel : ViewModelBase
                 goToStart();
                 return Task.CompletedTask;
             },
-            stopWatching: stopWatching);
+            stopWatching: Leave);
     }
 
     // first person sharing, only used to feed the previewer constructor
@@ -40,7 +60,7 @@ public class WatchViewModel : ViewModelBase
     public OverlayViewModel Overlay { get; }
 
     // the streamer's latest frame, the same one their Meeting tile shows
-    public Bitmap? StreamFrame { get; }
+    public Bitmap? StreamFrame => _member.StreamPreview;
 
     public ReadOnlyObservableCollection<Participant> Participants { get; }
 

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using SGVS.Frontend.Models;
+using SGVS.Frontend.Services.Video;
 
 namespace SGVS.Frontend.Services;
 
@@ -31,7 +32,8 @@ public enum CallState
 
 // the call as the UI sees it. FakeMeetingService is a pretend call, NetworkMeetingService talks to the
 // networking module. changes Members and the participants' properties on the UI thread
-public interface IMeetingService : INotifyPropertyChanged
+// Dispose ends the call on this side: stops your stream and anyone else's on screen
+public interface IMeetingService : INotifyPropertyChanged, IDisposable
 {
     // the connection string to hand to the other person: your offer while hosting, your reply once you joined.
     // empty until the call is set up
@@ -67,6 +69,9 @@ public interface IMeetingService : INotifyPropertyChanged
     void StopStream();
 
     void OnParticipantJoined(string name);
+
+    // someone else's encoded stream started arriving. shows it on their tile and the Watch page. UI thread
+    void AttachRemoteVideo(IEncodedVideoSource source);
 
     // Task LeaveAsync();
 }

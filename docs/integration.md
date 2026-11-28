@@ -129,6 +129,37 @@ Changes made to the wrapper:
 One thing to watch: the C struct holds `Config *config` while the C# `FrameBuffer` embeds `Config` inline. It works
 today because the struct is only ever passed by reference to native code, but the layouts do not match.
 
+## Video stream
+
+Start stream plays a dummy clip (a Rocket League tournament highlight) as a live H.264 stream.
+
+```
+ streamer                                                                watcher
+ ffmpeg (encode) -> access units --+-> loopback -> ffmpeg (decode) -> own tile
+                                   +-> Video+Outgoing ring -> Go: H.264 track ==WebRTC==> Go: Video+Incoming ring
+                                                                    -> SharedMemoryVideoSource -> ffmpeg (decode) -> their tile / Watch page
+```
+
+- 1280x720, 30 fps, 3000 kbps CBR, a keyframe every second, no B-frames. One access unit per shared memory slot
+  (a video slot is 500,000 bytes, bigger ones are dropped). Values live in `VideoFormat.cs` and `networking.go`.
+- Both sides need `ffmpeg.exe`: `winget install --id Gyan.FFmpeg -e`, or set `SGVS_FFMPEG` to its path.
+- The clip (`Assets/Placeholders/StreamVideo/rocket-league.mp4`, 19.7 MB) is committed and copied next to the app.
+  If it goes missing, `powershell -File scripts\get-dummy-video.ps1` downloads it again and checks its SHA-256.
+- Everything after the access unit is the same for your own stream and someone else's: an `IEncodedVideoSource`
+  feeds `IncomingVideoPipeline`. Yours comes from a channel the publisher writes, theirs from `SharedMemoryVideoSource`.
+  `App.StartReceiver` attaches it when a Video + Incoming encoding shows up.
+- A watcher shows someone as streaming from their first frame and clears them 2 s after the last one.
+- Testing needs two Windows PCs: the shared memory names are per Windows session, so two copies of the app on one PC
+  share the same rings. The Watch button also works on your own tile, to check the stream on one PC.
+
+Going live later:
+- Receiving a live stream needs no change.
+- Sending: if the frontend encodes the capture, replace `FfmpegStreamPublisher.CreateDummy` in
+  `App.CreateMeeting` with a publisher that raises real access units, and nothing else changes.
+- If `src/processing` does the encoding (more likely), processing pushes straight into the Video + Outgoing ring and Go is
+  that ring's only reader, so the frontend gets no access units for its own preview. The preview then needs its own
+  source, such as a second ring or decoding locally in processing.
+
 ## Startup, shutdown and where things live
 
 - `MainViewModel` makes a new `IMeetingService` each time the Start page is shown. Leaving a meeting, cancelling a
@@ -137,7 +168,7 @@ today because the struct is only ever passed by reference to native code, but th
 - `SGVS.Frontend.csproj` has a `BuildNetworking` target that runs `go build` into `bin/<config>/net10.0/backend/`
   after every build. Without Go on PATH the build still succeeds with a warning, and hosting or joining then
   reports that the networking module is missing. `-p:SkipNetworkingBuild=true` skips it.
-- Display names aren't decided yet, so `MainViewModel` uses the signed-in OS username.
+- Display names aren't decided yet, so `App.CreateMeeting` uses the signed-in OS username.
 
 ## Running it
 
@@ -146,6 +177,11 @@ dotnet run --project src/SGVS.Frontend
 ```
 
 Start two copies to try a call on one machine. `SGVS_FAKE=1` runs the pretend call instead.
+
+To run everything together (frontend, networking and processing), use `powershell -File scripts\run-app.ps1`.
+It builds all three and starts each in its own console window ("SGVS frontend", "SGVS networking",
+"SGVS processing"). Hosting prints the offer in the networking window and asks for the answer SDP there. Closing
+the app stops the other two and closes all three windows. Add `-Instance B` to give a second copy on the same PC its own shared memory.
 
 ## Tests
 
@@ -162,8 +198,8 @@ The real-process tests build `src/networking` into a temp folder and skip themse
 - Audio and video: `src/processing` is not started by the frontend and nothing plays incoming audio. The audio
   relay between networking and the shared buffer exists on `feat/054-integrate-processing-and-networking` and was
   not merged here.
-- Video: starting a stream only flips the shared flag and tells the peer. There is no capture and no frame display.
-  The screen/app choice in the Start stream dialog is not passed on yet.
+- Real screen or app capture. Start stream plays a dummy clip (see [Video stream](#video-stream)), and the
+  screen/app choice in the Start stream dialog is not passed on yet.
 - More than two people in a call.
 - The processing module does not compile on macOS (`audio_capture.cpp` uses a Windows-only member in
   `get_buffered_frame`, and `audio_capture_test.cpp` uses `SILENT_FLAG` outside its `#ifdef _WIN32`).

@@ -3,6 +3,7 @@
 #include "shared_mem_lib_core/ring.h"
 #include "shared_mem_lib_core/ringbuff.h"
 #include <stdio.h>
+#include <string.h>
 
 int ringbuff_by_encoding(FrameBuffer *fb, Encoding enc);
 static uint256_t message_channel_id(Module src, Module dst);
@@ -30,32 +31,58 @@ bool config_has_encoding(Config *conf, Encoding enc)
     return false;
 }
 
+// Opens the ring first, without the lock (mapping a video ring takes a while), then appends it under the lock.
+// Several threads can add the same encoding at once (each one aligning to the config): the first to append wins
+// and the others free their copy, so every ring is in the list once and every entry in it is fully opened.
 bool add_ring(FrameBuffer *fb, Encoding enc)
 {
+    RingBuffer rb;
+    memset(&rb, 0, sizeof(rb));
+    rb.id = enc.id;
+    // TODO: Make this dependent on the encoding
+    if (!open_ring(&rb, (enc.type == Audio) ? 1275 : 500000, (enc.type == Audio) ? 201 : 121))
+        return false;
+
+    bool present = false;
+    bool appended = false;
+
 #ifdef _WIN32
     // TODO: Change this to SRW Exclusive
     EnterCriticalSection(&fb->cs);
 #endif
 
-    // TODO: Use a more efficient allocating strategy when allocating rings
-    fb->ring_count += 1;
-    fb->rings = (RingBuffer *)realloc(fb->rings, fb->ring_count * sizeof(RingBuffer));
+    for (int i = 0; i < fb->ring_count && !present; i++)
+        present = uint256_eq(fb->rings[i].id, enc.id);
+
+    if (!present)
+    {
+        // TODO: Use a more efficient allocating strategy when allocating rings
+        // realloc into a temporary: on failure the old list is still valid
+        RingBuffer *grown = (RingBuffer *)realloc(fb->rings, (fb->ring_count + 1) * sizeof(RingBuffer));
+        if (grown != nullptr)
+        {
+            fb->rings = grown;
+            fb->rings[fb->ring_count] = rb;
+            fb->ring_count += 1;
+            appended = true;
+        }
+    }
 
 #ifdef _WIN32
     LeaveCriticalSection(&fb->cs);
 #endif
 
-    if (fb->rings == nullptr)
-    {
-        char id_str[80];
-        write_uint256(id_str, enc.id);
-        printf("Unable to allocate new ring for encoding: %s\n", id_str);
-        return false;
-    }
+    if (appended)
+        return true;
 
-    fb->rings[fb->ring_count - 1].id = enc.id;
-    // TODO: Make this dependent on the encoding
-    return open_ring(&fb->rings[fb->ring_count - 1], (enc.type == Audio) ? 1275 : 500000, (enc.type == Audio) ? 201 : 121);
+    free_ringbuffer(&rb);
+    if (present)
+        return true;
+
+    char id_str[80];
+    write_uint256(id_str, enc.id);
+    printf("Unable to allocate new ring for encoding: %s\n", id_str);
+    return false;
 }
 
 bool remove_ring(FrameBuffer *fb, Encoding enc)
@@ -256,6 +283,34 @@ int ringbuff_by_encoding(FrameBuffer *fb, Encoding enc)
     return ind;
 }
 
+// Copies the ring's handle under the lock so a blocking pop or push can run without holding it.
+// The copy only holds pointers and handles into the shared mapping, and nothing removes rings while frames move.
+// add_ring only appends rings that are already open, so a ring found here is always usable.
+static bool copy_ring_by_encoding(FrameBuffer *fb, Encoding enc, RingBuffer *out)
+{
+    bool found = false;
+
+#ifdef _WIN32
+    EnterCriticalSection(&fb->cs);
+#endif
+
+    for (int i = 0; i < fb->ring_count; i++)
+    {
+        if (uint256_eq(fb->rings[i].id, enc.id))
+        {
+            *out = fb->rings[i];
+            found = true;
+            break;
+        }
+    }
+
+#ifdef _WIN32
+    LeaveCriticalSection(&fb->cs);
+#endif
+
+    return found;
+}
+
 bool try_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *out_count, uint32_t max_frame_count)
 {
     return blocking_pop_frames(fb, enc, out, out_count, max_frame_count, 0x0);
@@ -263,9 +318,9 @@ bool try_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *out_cou
 
 bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *out_count, uint32_t max_frame_count, uint32_t max_timeout)
 {
-    int rb_ind = ringbuff_by_encoding(fb, enc);
+    RingBuffer rb;
 
-    if (rb_ind == -1)
+    if (!copy_ring_by_encoding(fb, enc, &rb))
     {
         char id_str[80];
         write_uint256(id_str, enc.id);
@@ -282,16 +337,8 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *ou
         raw_out[i].len = out[i].size;
     }
 
-#ifdef _WIN32
-    // TODO: Change this to SRW Shared
-    EnterCriticalSection(&fb->cs);
-#endif
-
-    bool res = blocking_pop(&fb->rings[rb_ind], raw_out, out_count, max_frame_count, max_timeout);
-
-#ifdef _WIN32
-    LeaveCriticalSection(&fb->cs);
-#endif
+    // The lock is not held here: a long wait on one ring must not stall pushes and pops on the others
+    bool res = blocking_pop(&rb, raw_out, out_count, max_frame_count, max_timeout);
 
     if (!res)
     {
@@ -312,9 +359,9 @@ bool blocking_pop_frames(FrameBuffer *fb, Encoding enc, Frame *out, uint32_t *ou
 
 bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count)
 {
-    int rb_ind = ringbuff_by_encoding(fb, f->encoding);
+    RingBuffer rb;
 
-    if (rb_ind == -1)
+    if (!copy_ring_by_encoding(fb, f->encoding, &rb))
     {
         char id_str[80];
         write_uint256(id_str, f->encoding.id);
@@ -330,16 +377,7 @@ bool push_frames(FrameBuffer *fb, Frame *f, uint32_t frame_count)
         data[i].len = f[i].size;
     }
 
-#ifdef _WIN32
-    // TODO: Change this to SRW Shared
-    EnterCriticalSection(&fb->cs);
-#endif
-
-    bool res = push(&fb->rings[rb_ind], data, frame_count);
-
-#ifdef _WIN32
-    LeaveCriticalSection(&fb->cs);
-#endif
+    bool res = push(&rb, data, frame_count);
 
     free(data);
 
@@ -369,8 +407,16 @@ bool new_framebuffer(FrameBuffer *out)
     }
 
 #ifdef _WIN32
+    // every named object gets the SGVS_SHM_INSTANCE suffix, so two instances can share a PC
+    wchar_t suffix[18];
+    shm_name_suffix(suffix);
+    wchar_t mu_name[64], conf_name[64], ev_name[64];
+    swprintf(mu_name, 64, L"Local\\svgs_mu%ls", suffix);
+    swprintf(conf_name, 64, L"Local\\sgvs_conf%ls", suffix);
+    swprintf(ev_name, 64, L"Local\\sgvs_conf_encs_ev%ls", suffix);
+
     // Create mutex that is immediately owned
-    out->conf_mu = CreateMutexA(NULL, TRUE, "Local\\svgs_mu");
+    out->conf_mu = CreateMutexW(NULL, TRUE, mu_name);
 
     if (out->conf_mu == nullptr)
     {
@@ -385,7 +431,7 @@ bool new_framebuffer(FrameBuffer *out)
 
     out->conf_map = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
                                        (DWORD)(conf_size >> 32), (DWORD)(conf_size & 0xFFFFFFFF),
-                                       L"Local\\sgvs_conf");
+                                       conf_name);
     if (out->conf_map == nullptr)
     {
         free_framebuffer(out);
@@ -408,7 +454,7 @@ bool new_framebuffer(FrameBuffer *out)
     }
 
     // TODO: Change this to an event that is suitable to multiple waiters
-    out->encs_ev = CreateEventW(nullptr, FALSE, FALSE, L"Local\\sgvs_conf_encs_ev");
+    out->encs_ev = CreateEventW(nullptr, FALSE, FALSE, ev_name);
     if (out->encs_ev == nullptr)
     {
         free_framebuffer(out);

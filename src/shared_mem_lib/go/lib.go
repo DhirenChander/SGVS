@@ -33,6 +33,8 @@ JOIN_CALL,
 PARTICIPANT_JOINED,
 PARTICIPANT_LEFT,
 LEAVE_CALL,
+MIC_MUTED,
+MIC_UNMUTED,
 */
 type Operation int
 
@@ -46,6 +48,8 @@ const (
 	ParticipantJoined
 	ParticipantLeft
 	LeaveCall
+	MicMuted
+	MicUnmuted
 )
 
 type Module int
@@ -196,6 +200,18 @@ func NewGCFrame(enc Encoding) GCFrame {
 	g.Raw = &f
 
 	g.SetData(make([]byte, size))
+
+	return g
+}
+
+// NewGCFrameWithData wraps data in a frame without allocating a whole slot for it. data must not be empty.
+func NewGCFrameWithData(enc Encoding, data []byte) GCFrame {
+	g := GCFrame{}
+
+	f, _ := FrameSizedByEncoding(enc)
+	g.Raw = &f
+
+	g.SetData(data)
 
 	return g
 }

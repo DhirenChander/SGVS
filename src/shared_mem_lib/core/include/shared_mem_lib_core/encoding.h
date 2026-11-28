@@ -17,7 +17,7 @@ extern "C"
 
     typedef struct
     {
-        // Separate values for min and max bit rates to allow for selection of capped VBR (max > min) or CBR (max == min)
+        // Separate values for min and max bit rates to allow for selection of capped VBR (max > min) or CBR (max == min) (kbps)
         uint16_t max_bit_rate;
         uint16_t min_bit_rate;
         uint16_t frame_height;

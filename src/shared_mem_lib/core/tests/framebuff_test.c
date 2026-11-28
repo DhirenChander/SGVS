@@ -1,16 +1,37 @@
 #include <unity.h>
 #include <string.h>
+#include <wchar.h>
 #include "shared_mem_lib_core/framebuff.h"
 
 void setUp(void) {}
 void tearDown(void) {}
 
 void test_push_and_pop_message_between_framebuffers(void);
+#ifdef _WIN32
+void test_blocking_pop_on_one_ring_does_not_block_push_on_another(void);
+void test_instances_with_different_names_do_not_share_memory(void);
+void test_instance_suffix_accepts_only_short_alphanumeric_names(void);
+void test_threads_aligning_at_once_add_each_ring_once(void);
+
+// the tests get their own shared memory names, so a running app (or networking module) never sees what they
+// leave in the config, and they never see the app's
+#define TEST_INSTANCE "sgvsunittest"
+static void use_test_instance(void) { SetEnvironmentVariableA("SGVS_SHM_INSTANCE", TEST_INSTANCE); }
+#endif
 
 int main(void)
 {
+#ifdef _WIN32
+    use_test_instance();
+#endif
     UNITY_BEGIN();
     RUN_TEST(test_push_and_pop_message_between_framebuffers);
+#ifdef _WIN32
+    RUN_TEST(test_blocking_pop_on_one_ring_does_not_block_push_on_another);
+    RUN_TEST(test_instances_with_different_names_do_not_share_memory);
+    RUN_TEST(test_instance_suffix_accepts_only_short_alphanumeric_names);
+    RUN_TEST(test_threads_aligning_at_once_add_each_ring_once);
+#endif
     return UNITY_END();
 }
 
@@ -47,3 +68,179 @@ void test_push_and_pop_message_between_framebuffers(void)
     free_framebuffer(&receiver);
     free_framebuffer(&sender);
 }
+
+#ifdef _WIN32
+typedef struct
+{
+    FrameBuffer *fb;
+    Encoding enc;
+} PopArgs;
+
+static DWORD WINAPI blocking_pop_thread(LPVOID param)
+{
+    PopArgs *args = (PopArgs *)param;
+    uint8_t buf[1275];
+    Frame frame = {0};
+    frame.data = buf;
+    frame.size = sizeof(buf);
+    uint32_t count = 0;
+
+    // Ring is empty, so this waits out the whole timeout
+    blocking_pop_frames(args->fb, args->enc, &frame, &count, 1, 2000);
+    return 0;
+}
+
+void test_blocking_pop_on_one_ring_does_not_block_push_on_another(void)
+{
+    FrameBuffer fb;
+    TEST_ASSERT_TRUE(new_framebuffer(&fb));
+
+    Encoding popped = new_audio_encoding(true);
+    set_encoding_incoming(&popped);
+    Encoding pushed = new_audio_encoding(true);
+    set_encoding_outgoing(&pushed);
+    TEST_ASSERT_TRUE(request_encoding(&fb, popped));
+    TEST_ASSERT_TRUE(request_encoding(&fb, pushed));
+
+    PopArgs args = {&fb, popped};
+    HANDLE thread = CreateThread(NULL, 0, blocking_pop_thread, &args, 0, NULL);
+    TEST_ASSERT_NOT_NULL(thread);
+    Sleep(100); // let the thread start waiting
+
+    uint8_t data[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    Frame frame = {0};
+    frame.encoding = pushed;
+    frame.data = data;
+    frame.size = sizeof(data);
+
+    ULONGLONG start = GetTickCount64();
+    bool ok = push_frames(&fb, &frame, 1);
+    ULONGLONG elapsed = GetTickCount64() - start;
+
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_LESS_THAN_UINT64(200, elapsed);
+
+    WaitForSingleObject(thread, 5000);
+    CloseHandle(thread);
+    free_framebuffer(&fb);
+}
+
+// SGVS_SHM_INSTANCE gives each instance its own set of shared memory objects, so two copies of the app
+// can run on one PC. a message pushed in one instance must not show up in the other
+void test_instances_with_different_names_do_not_share_memory(void)
+{
+    FrameBuffer a;
+    FrameBuffer b;
+    Message out = {0};
+
+    SetEnvironmentVariableA("SGVS_SHM_INSTANCE", "isoa");
+    TEST_ASSERT_TRUE(new_framebuffer(&a));
+    SetEnvironmentVariableA("SGVS_SHM_INSTANCE", "isob");
+    TEST_ASSERT_TRUE(new_framebuffer(&b));
+    use_test_instance();
+
+    Message msg = {0};
+    msg.src = Application;
+    msg.dest = Network;
+    msg.opcode = START_HOST;
+
+    TEST_ASSERT_TRUE(push_message(&a, &msg));
+    TEST_ASSERT_FALSE(blocking_pop_message(&b, Application, Network, &out, 200));
+    TEST_ASSERT_TRUE(blocking_pop_message(&a, Application, Network, &out, 1000));
+
+    free_framebuffer(&b);
+    free_framebuffer(&a);
+}
+
+static void assert_suffix(const char *value, const wchar_t *expected)
+{
+    wchar_t suffix[18];
+    SetEnvironmentVariableA("SGVS_SHM_INSTANCE", value);
+    shm_name_suffix(suffix);
+    use_test_instance();
+    TEST_ASSERT_EQUAL_INT(0, wcscmp(expected, suffix));
+}
+
+// a rejected value falls back to the default names (and warns once on stderr)
+void test_instance_suffix_accepts_only_short_alphanumeric_names(void)
+{
+    assert_suffix(NULL, L"");
+    assert_suffix("a", L"_a");
+    assert_suffix("Pc2", L"_Pc2");
+    assert_suffix("abcdefghijklmnop", L"_abcdefghijklmnop"); // 16, the longest allowed
+    assert_suffix("abcdefghijklmnopq", L"");                 // 17
+    assert_suffix("pc-2", L"");
+    assert_suffix("a\\b", L""); // a backslash
+}
+
+typedef struct
+{
+    FrameBuffer *fb;
+    HANDLE go;
+    bool ok;
+} AlignArgs;
+
+static DWORD WINAPI align_thread(LPVOID param)
+{
+    AlignArgs *args = (AlignArgs *)param;
+    WaitForSingleObject(args->go, INFINITE);
+    args->ok = align_rings_to_config(args->fb);
+    return 0;
+}
+
+// several threads in one process (the networking module's relays, the app's watchers) align at the same moment
+// once a new encoding shows up. opening a ring maps up to 60 MB and takes a while, so they overlap: each ring
+// must still end up in the list exactly once, and work
+void test_threads_aligning_at_once_add_each_ring_once(void)
+{
+    enum { THREADS = 8 };
+    FrameBuffer owner;
+    FrameBuffer fb;
+    TEST_ASSERT_TRUE(new_framebuffer(&owner));
+    TEST_ASSERT_TRUE(new_framebuffer(&fb));
+
+    Encoding enc = new_video_encoding(3000, 3000, 720, 1280, 30);
+    set_encoding_outgoing(&enc);
+    TEST_ASSERT_TRUE(request_encoding(&owner, enc));
+    uint32_t rings_before = fb.ring_count;
+
+    HANDLE go = CreateEventW(NULL, TRUE, FALSE, NULL);
+    AlignArgs args[THREADS];
+    HANDLE threads[THREADS];
+    for (int i = 0; i < THREADS; i++)
+    {
+        args[i] = (AlignArgs){&fb, go, false};
+        threads[i] = CreateThread(NULL, 0, align_thread, &args[i], 0, NULL);
+        TEST_ASSERT_NOT_NULL(threads[i]);
+    }
+    SetEvent(go);
+    WaitForMultipleObjects(THREADS, threads, TRUE, 10000);
+
+    for (int i = 0; i < THREADS; i++)
+    {
+        TEST_ASSERT_TRUE(args[i].ok);
+        CloseHandle(threads[i]);
+    }
+    CloseHandle(go);
+    TEST_ASSERT_EQUAL_UINT32(rings_before + 1, fb.ring_count);
+
+    uint8_t data[4] = {9, 8, 7, 6};
+    Frame frame = {0};
+    frame.encoding = enc;
+    frame.data = data;
+    frame.size = sizeof(data);
+    TEST_ASSERT_TRUE(push_frames(&owner, &frame, 1));
+
+    static uint8_t buf[500000]; // one video slot, too big for the stack
+    Frame out = {0};
+    out.data = buf;
+    out.size = sizeof(buf);
+    uint32_t count = 0;
+    TEST_ASSERT_TRUE(blocking_pop_frames(&fb, enc, &out, &count, 1, 1000));
+    TEST_ASSERT_EQUAL_UINT32(1, count);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(data, buf, sizeof(data));
+
+    free_framebuffer(&fb);
+    free_framebuffer(&owner);
+}
+#endif

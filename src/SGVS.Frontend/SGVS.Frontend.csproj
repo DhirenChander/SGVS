@@ -15,6 +15,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="SGVS.Frontend.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- the stand-in stream frame is a loose file, not an embedded resource -->
     <AvaloniaResource Include="Assets\**" Exclude="Assets\Placeholders\**" />
   </ItemGroup>
@@ -26,6 +30,8 @@
     <Content Include="Assets\Placeholders\StreamPreview\**" Link="StreamPreview\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\PCM_Sounds\**" CopyToOutputDirectory="PreserveNewest" />
     <!-- video file for playback - needs to be copied to output directory, not embedded -->
+    <!-- the dummy stream clip, downloaded by scripts/get-dummy-video.ps1. FfmpegStreamPublisher looks for StreamVideo/rocket-league.mp4 next to the exe -->
+    <Content Include="Assets\Placeholders\StreamVideo\rocket-league.mp4" Link="StreamVideo\rocket-league.mp4" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Assets\Placeholders\StreamVideo\rocket-league.mp4')" />
   </ItemGroup>
 
   <ItemGroup>

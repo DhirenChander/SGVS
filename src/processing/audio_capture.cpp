@@ -1,6 +1,7 @@
 #include "audio_capture.hpp"
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
-#include <iostream>
 
 #ifdef _WIN32
 #include <avrt.h>
@@ -8,7 +9,38 @@
 #include <audioclientactivationparams.h>
 #include <mmdeviceapi.h>
 #include <audioclient.h>
+#include <wrl/client.h>
 #include <wrl/implements.h>
+#endif
+
+#ifdef _WIN32
+using namespace Microsoft::WRL;
+
+// Generated with Claude
+// Boiler plate needed to initialize the audio client
+class ActivationHandler : public RuntimeClass<RuntimeClassFlags<ClassicCom>,
+                                              FtmBase, // makes it agile
+                                              IActivateAudioInterfaceCompletionHandler>
+{
+public:
+    HANDLE doneEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    HRESULT activateResult = E_FAIL;
+    ComPtr<IAudioClient> client;
+
+    ~ActivationHandler() { CloseHandle(doneEvent); }
+
+    STDMETHOD(ActivateCompleted)(IActivateAudioInterfaceAsyncOperation *op) override
+    {
+        HRESULT hrActivate = E_FAIL;
+        ComPtr<IUnknown> unk;
+        HRESULT hr = op->GetActivateResult(&hrActivate, &unk);
+        if (SUCCEEDED(hr) && SUCCEEDED(hrActivate))
+            unk.As(&client);
+        activateResult = SUCCEEDED(hr) ? hrActivate : hr;
+        SetEvent(doneEvent);
+        return S_OK;
+    }
+};
 #endif
 
 #define BUFFER_SECONDS 4
@@ -27,7 +59,7 @@ WAVEFORMATEX windows_format(AudioFormat format)
     return fmt;
 }
 
-AudioFormat from_windows_format(WAVEFORMATEX wformat)
+static AudioFormat from_windows_format(WAVEFORMATEX wformat)
 {
     AudioFormat fmt;
     fmt.bitsPerSamp = wformat.wBitsPerSample;
@@ -38,7 +70,7 @@ AudioFormat from_windows_format(WAVEFORMATEX wformat)
 
 // Generated with Claude
 // Creates the audio client
-IAudioClient *ActivateProcessLoopback(DWORD pid)
+static IAudioClient *ActivateProcessLoopback(DWORD pid)
 {
     AUDIOCLIENT_ACTIVATION_PARAMS params = {};
     params.ActivationType = AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK;
@@ -85,18 +117,20 @@ IAudioClient *ActivateProcessLoopback(DWORD pid)
     return client;
 }
 
-IAudioClient *ActivateDeviceLoopback(LPWSTR device_id)
+static IAudioClient *ActivateDeviceLoopback(LPWSTR device_id)
 {
     // TODO: Implement device selection beyond default device
-    IMMDeviceEnumerator *pEnumerator = nullptr;
-    IMMDevice *pDevice = nullptr;
-    CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void **)&pEnumerator);
-    pEnumerator->GetDefaultAudioEndpoint(eCapture, eConsole, &pDevice);
-
-    IAudioClient *pAudioClient = nullptr;
-    pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void **)&pAudioClient);
-
-    return pAudioClient;
+    ComPtr<IMMDeviceEnumerator> enumerator;
+    ComPtr<IMMDevice> device;
+    IAudioClient *client = nullptr;
+    if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&enumerator))) ||
+        FAILED(enumerator->GetDefaultAudioEndpoint(eCapture, eConsole, &device)) ||
+        FAILED(device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void **)&client)))
+    {
+        fprintf(stderr, "Could not open the default microphone\n");
+        return nullptr;
+    }
+    return client; // caller owns it
 }
 #endif
 
@@ -111,12 +145,14 @@ ProcessAudioReader::ProcessAudioReader(uint32_t pid, AudioFormat format)
 #endif
 }
 
-ProcessAudioReader::ProcessAudioReader(wchar_t *device_id)
+ProcessAudioReader::ProcessAudioReader(const wchar_t *device_id)
 {
 #ifdef _WIN32
     // Need to initialize before creating the audio client
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    m_client = ActivateDeviceLoopback((LPWSTR)device_id);
+    m_client = ActivateDeviceLoopback(const_cast<LPWSTR>(device_id));
+    if (m_client == nullptr)
+        return;
     m_stream_flags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
 
     // Get default device format instead of taking format as input
@@ -124,8 +160,9 @@ ProcessAudioReader::ProcessAudioReader(wchar_t *device_id)
     HRESULT hr = m_client->GetMixFormat(&temp_fmt);
     if (FAILED(hr))
     {
-        std::cout << "Failed to get mix format" << std::endl;
-        free(m_client);
+        fprintf(stderr, "Failed to get mix format: 0x%08lX\n", (unsigned long)hr);
+        m_client->Release();
+        m_client = nullptr;
         CoUninitialize();
         return;
     }
@@ -138,8 +175,15 @@ ProcessAudioReader::ProcessAudioReader(wchar_t *device_id)
 #endif
 }
 
+ProcessAudioReader::~ProcessAudioReader()
+{
+    stop();
+    free(m_buffer);
+}
+
 void ProcessAudioReader::setup_buffer(AudioFormat format)
 {
+    free(m_buffer);
     size_t buffSize = BUFFER_SECONDS * format.samplesPerSec * (format.multiChannel ? 2 : 1) * format.bitsPerSamp / 8;
     m_buffer = (uint8_t *)malloc(buffSize);
     m_buffHead = 0;
@@ -148,6 +192,9 @@ void ProcessAudioReader::setup_buffer(AudioFormat format)
 
 bool ProcessAudioReader::start(uint32_t buffer_time, Callback callback)
 {
+    // already capturing: setup_buffer would free the ring under the capture thread
+    if (m_thread.joinable())
+        return false;
     m_cb = std::move(callback);
 #ifdef _WIN32
     setup_buffer(from_windows_format(m_fmt));
@@ -167,15 +214,18 @@ void ProcessAudioReader::stop()
 #ifdef _WIN32
 
 // Generated with Claude
-bool ProcessAudioReader::start_capture_windows(uint32_t buffer_time_nanos)
+bool ProcessAudioReader::start_capture_windows(uint32_t buffer_time_100ns)
 {
+    if (m_client == nullptr)
+        return false; // activation failed in the constructor
+
     m_audioEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr); // auto-reset
     m_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);   // manual-reset
 
     HRESULT hr = m_client->Initialize(
         AUDCLNT_SHAREMODE_SHARED,
         m_stream_flags,
-        buffer_time_nanos,
+        buffer_time_100ns,
         0, &m_fmt, nullptr);
 
     if (FAILED(hr))
@@ -213,7 +263,6 @@ void ProcessAudioReader::stop_capture_windows()
 // Generated with Claude
 void ProcessAudioReader::capture_process_audio_windows()
 {
-    std::cout << "Separate capture thread started." << std::endl;
     // TODO: See if this is needed
     // Optional: raise thread priority for glitch-free audio
     DWORD taskIndex = 0;
@@ -222,7 +271,6 @@ void ProcessAudioReader::capture_process_audio_windows()
     m_client->Start();
     HANDLE handles[2] = {m_stopEvent, m_audioEvent};
     const size_t frameSize = size_t(m_fmt.nBlockAlign);
-    std::vector<uint8_t> frame_buff;
 
     DWORD w = WaitForMultipleObjects(2, handles, FALSE, AUDIO_WAIT_MS);
 
@@ -230,7 +278,6 @@ void ProcessAudioReader::capture_process_audio_windows()
     {
         if (w == WAIT_TIMEOUT)
         {
-            std::cout << "Still waiting for audio event..." << std::endl;
             w = WaitForMultipleObjects(2, handles, FALSE, AUDIO_WAIT_MS);
             continue;
         }
@@ -247,7 +294,7 @@ void ProcessAudioReader::capture_process_audio_windows()
             HRESULT hr = m_capture->GetBuffer(&data, &frames, &flags, nullptr, nullptr);
             if (FAILED(hr)) // e.g. AUDCLNT_E_DEVICE_INVALIDATED
             {
-                std::cout << "Failed to get buffer..." << std::endl;
+                fprintf(stderr, "Failed to get buffer: 0x%08lX\n", (unsigned long)hr);
                 failed = true;
                 break;
             }
@@ -259,10 +306,8 @@ void ProcessAudioReader::capture_process_audio_windows()
         if (failed)
             break;
 
-        w = WaitForMultipleObjects(2, handles, FALSE, 2000);
+        w = WaitForMultipleObjects(2, handles, FALSE, AUDIO_WAIT_MS);
     }
-
-    std::cout << "Finished capture loop" << std::endl;
 
     if (mmcss)
         AvRevertMmThreadCharacteristics(mmcss);
@@ -271,17 +316,27 @@ void ProcessAudioReader::capture_process_audio_windows()
 
 #endif
 
-bool flags_signal_empty(uint32_t flags)
+static bool flags_signal_empty(uint32_t flags)
 {
 #ifdef _WIN32
-    return flags & AUDCLNT_BUFFERFLAGS_SILENT; // Silent flag means buffer contents are empty
-#endif
+    return (flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0; // Silent flag means buffer contents are empty
+#else
+    (void)flags;
     return false;
+#endif
 }
 
 void ProcessAudioReader::handle_audio_buffer(uint8_t *data, uint32_t frames, const size_t frameSize, uint32_t flags)
 {
     size_t dataSize = size_t(frames) * frameSize;
+
+    // a packet bigger than the whole ring can't be kept
+    if (dataSize > m_buffSize)
+        return;
+    // a packet that would run past the end of the ring starts again at 0, so the callback always gets
+    // contiguous frames (main reads fCount frames from get_buffered_frame(ind, 0) in one go)
+    if (size_t(m_buffHead) + dataSize > m_buffSize)
+        m_buffHead = 0;
 
     if (flags_signal_empty(flags) || data == nullptr)
     {

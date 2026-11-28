@@ -21,6 +21,10 @@
         <Style Selector="TextBlock.tilename.overstream">
             <Setter Property="Effect" Value="{DynamicResource SgvsTileNameShadow}" />
         </Style>
+        <!-- your own stream is only fully visible to the people watching it: you get a faded still -->
+        <Style Selector="Image.selfstill">
+            <Setter Property="Opacity" Value="0.35" />
+        </Style>
     </UserControl.Styles>
 
     <Panel>
@@ -48,11 +52,20 @@
                                 BoxShadow="{DynamicResource SgvsLiveTileShadow}">
                             <Border CornerRadius="{DynamicResource SgvsRadiusControl}" ClipToBounds="True">
                                 <Panel>
-                                    <Image Source="{Binding StreamPreview}" Stretch="UniformToFill" />
+                                    <Image Classes.selfstill="{Binding IsSelf}" Source="{Binding StreamPreview}" Stretch="UniformToFill" />
                                     <!-- drawn on top of the frame like Figma's inside stroke -->
                                     <Border BorderBrush="{DynamicResource SgvsLiveStrokeBrush}" BorderThickness="1.5"
                                             CornerRadius="{DynamicResource SgvsRadiusControl}" />
-                                    <!-- your own stream has no Watch button -->
+                                    <!-- your own tile: nothing to watch, just a sign that you are live -->
+                                    <Border IsVisible="{Binding IsSelf}" IsHitTestVisible="False"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center" Padding="14,8"
+                                            Background="{DynamicResource SgvsGlassBrush}" BorderBrush="{DynamicResource SgvsGlassEdgeBrush}"
+                                            BorderThickness="1" CornerRadius="{DynamicResource SgvsRadiusControl}">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{DynamicResource SgvsAccentBrush}" />
+                                            <TextBlock Classes="label" Text="Streaming" />
+                                        </StackPanel>
+                                    </Border>
                                     <Button Classes="flat accent" IsVisible="{Binding !IsSelf}"
                                             HorizontalAlignment="Center" VerticalAlignment="Center"
                                             Command="{Binding $parent[ItemsControl].((vm:MeetingViewModel)DataContext).WatchCommand}"

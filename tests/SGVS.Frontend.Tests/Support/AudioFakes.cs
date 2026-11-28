@@ -84,6 +84,10 @@ public sealed class FakeFrameBuffer : IFrameBuffer
     public List<Encoding> DrainedWith { get; } = [];     // encoding passed to each TryPopFrames
     public List<uint> DrainCounts { get; } = [];         // max_frame_count passed to each TryPopFrames
     public bool FailNextPop { get; set; }
+    public List<Message> Messages { get; } = [];         // every PushMessage, in order
+    public List<Encoding> Requested { get; } = [];       // every RequestEncoding, in order
+    public List<(Encoding Enc, byte[] Data)> Pushed { get; } = []; // every successful PushBytes
+    public bool FullRings { get; set; }                  // makes PushBytes fail, like a full ring
 
     // An encoding the tests can tell apart by tag. Never touches Encoding.id, which is about to change type.
     public static Encoding Enc(EncodingType type, EncodingDir dir, byte tag = 0)
@@ -94,6 +98,14 @@ public sealed class FakeFrameBuffer : IFrameBuffer
     }
 
     public void Push(byte[] packet) => Frames.Enqueue(TestFrames.Packet(packet));
+
+    // a video access unit in a full-size video slot, like the real wrapper hands out
+    public void PushVideo(byte[] accessUnit)
+    {
+        var data = new byte[GCFrameBuffer.MaxVideoFrameBytes];
+        accessUnit.CopyTo(data, 0);
+        Frames.Enqueue(TestFrames.Frame(data, accessUnit.Length));
+    }
 
     public (Encoding[] encodings, bool success) ReadEncodings(uint max_len) =>
         ([.. Encodings.Take((int)max_len)], true);
@@ -127,12 +139,33 @@ public sealed class FakeFrameBuffer : IFrameBuffer
     }
 
     public bool PushFrames(Frame[] f) => throw new NotSupportedException();
-    public bool RequestEncoding(Encoding encoding) => throw new NotSupportedException();
+
+    public bool PushBytes(Encoding encoding, ReadOnlySpan<byte> data)
+    {
+        var max = encoding.type == EncodingType.Video ? GCFrameBuffer.MaxVideoFrameBytes : GCFrameBuffer.MaxAudioFrameBytes;
+        if (data.IsEmpty || data.Length > max || FullRings) return false;
+        Pushed.Add((encoding, data.ToArray()));
+        return true;
+    }
+    public bool RequestEncoding(Encoding encoding)
+    {
+        Requested.Add(encoding);
+        return true;
+    }
+
     public bool RemoveEncoding(Encoding encoding) => throw new NotSupportedException();
     public (Encoding[] encodings, bool success) BlockingReadEncodings(uint max_len, uint max_timeout) =>
         throw new NotSupportedException();
-    public bool PushMessage(Message msg) => throw new NotSupportedException();
-    public (Message msg, bool success) BlockingPopMessage(Module src, Module dst) => throw new NotSupportedException();
+    public bool FullMessages { get; set; }               // makes PushMessage fail, like a full message ring
+
+    public bool PushMessage(Message msg)
+    {
+        if (FullMessages) return false;
+        Messages.Add(msg);
+        return true;
+    }
+
+    public (Message msg, bool success) BlockingPopMessage(Module src, Module dst, uint max_timeout) => (default, false);
 }
 
 // Opus packets made the way the processing module makes them (#13): 48 kHz, stereo, 10 ms, CBR, 64 kbps.
